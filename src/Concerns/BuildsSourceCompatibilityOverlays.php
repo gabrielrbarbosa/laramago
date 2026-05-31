@@ -547,7 +547,7 @@ trait BuildsSourceCompatibilityOverlays
 
             if ($this->needsFalseReturningInternalFunctionPragma($line)) {
                 preg_match('/^\s*/', $line, $matches);
-                $translated .= ($matches[0] ?? '') . '// @mago-ignore possibly-false-argument invalid-argument nullable-return-statement invalid-return-statement falsable-return-statement' . $lineEnding;
+                $translated .= ($matches[0] ?? '') . '// @mago-ignore analysis:possibly-false-argument analysis:invalid-argument analysis:nullable-return-statement analysis:invalid-return-statement analysis:falsable-return-statement' . $lineEnding;
             }
 
             $translated .= $line . $lineEnding;
@@ -560,6 +560,10 @@ trait BuildsSourceCompatibilityOverlays
     {
         if (str_contains($line, '@mago-ignore')) {
             return false;
+        }
+
+        if (preg_match('/^\s*(?:(?:return\s+)|(?:.+?=\s*))?date\s*\(\s*$/', $line) === 1) {
+            return true;
         }
 
         if (str_contains($line, 'date(') && str_contains($line, 'strtotime(')) {
@@ -1717,7 +1721,7 @@ trait BuildsSourceCompatibilityOverlays
 
             if (str_contains($line, '??') && str_contains($line, '->') && ! str_contains($line, '@mago-ignore')) {
                 preg_match('/^\s*/', $line, $matches);
-                $translated .= ($matches[0] ?? '') . '// @mago-ignore invalid-property-access' . $lineEnding;
+                $translated .= ($matches[0] ?? '') . '// @mago-ignore analysis:invalid-property-access' . $lineEnding;
             }
 
             $translated .= $line . $lineEnding;
@@ -1746,7 +1750,7 @@ trait BuildsSourceCompatibilityOverlays
 
             if (preg_match('/->\s*(?:first|query)\s*\(/', $line) === 1 && ! str_contains($line, '@mago-ignore')) {
                 preg_match('/^\s*/', $line, $matches);
-                $translated .= ($matches[0] ?? '') . '// @mago-ignore dynamic-static-method-call' . $lineEnding;
+                $translated .= ($matches[0] ?? '') . '// @mago-ignore analysis:dynamic-static-method-call' . $lineEnding;
             }
 
             $translated .= $line . $lineEnding;

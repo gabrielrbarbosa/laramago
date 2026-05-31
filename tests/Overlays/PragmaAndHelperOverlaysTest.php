@@ -192,8 +192,15 @@ final class UsesInternalFunctions
         $body = json_decode($response->getBody());
         $id = uniqid(mt_rand(), true);
         $exif = exif_read_data($model->file);
+        $next = date(
+            'Y-m-d',
+            strtotime(
+                '+1 day',
+                strtotime($model->created_at),
+            )
+        );
 
-        return [$year, $decoded, $body, $id, $exif];
+        return [$year, $decoded, $body, $id, $exif, $next];
     }
 
     public function normalize(string $value): string
@@ -223,7 +230,8 @@ PHP);
             && str_contains($overlay, 'json_decode((string) $response->getBody())')
             && str_contains($overlay, 'uniqid((string) mt_rand(), true)')
             && str_contains($overlay, 'exif_read_data((string) $model->file)')
-            && substr_count($overlay, '@mago-ignore possibly-false-argument invalid-argument nullable-return-statement invalid-return-statement falsable-return-statement') === 3) {
+            && str_contains($overlay, 'strtotime((string) $model->created_at)')
+            && substr_count($overlay, '@mago-ignore analysis:possibly-false-argument analysis:invalid-argument analysis:nullable-return-statement analysis:invalid-return-statement analysis:falsable-return-statement') === 6) {
             $foundOverlay = true;
         }
     }
@@ -716,8 +724,8 @@ PHP);
         if (is_string($overlay)
             && str_contains($overlay, '/** @var int|float $subtotal */')
             && str_contains($overlay, '/** @var int|float $discount */')
-            && str_contains($overlay, '// @mago-ignore invalid-property-access' . PHP_EOL . '        $name = $row->profile->name ?? \'-\';')
-            && str_contains($overlay, '// @mago-ignore dynamic-static-method-call' . PHP_EOL . '        $config = $row->model->first();')) {
+            && str_contains($overlay, '// @mago-ignore analysis:invalid-property-access' . PHP_EOL . '        $name = $row->profile->name ?? \'-\';')
+            && str_contains($overlay, '// @mago-ignore analysis:dynamic-static-method-call' . PHP_EOL . '        $config = $row->model->first();')) {
             return;
         }
     }
