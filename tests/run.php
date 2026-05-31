@@ -113,6 +113,7 @@ testProjectClassDiscoveryUsesConfiguredSourcePaths($project, $root);
 testAnalysisIgnoresStaleRuntimeBaseline($project, $root);
 testAnalyzeFailsWhenConfiguredSourcesAreEmpty($project, $binary);
 testCompareCommandRunsPlainMagoThenLaramago($project, $binary);
+testSeparateMagoOptionValuesAreNotTreatedAsAnalysisTargets($project, $root);
 testCodesCommandDoesNotRequireConfiguredSources($project, $binary);
 testStdinInputDoesNotRequireConfiguredSources($project, $root);
 testStagedInputDoesNotRequireConfiguredSources($project, $root);

@@ -88,6 +88,55 @@ trait RunsMagoProcesses
         ));
     }
 
+    /**
+     * @param list<string> $arguments
+     * @return list<string>
+     */
+    private function magoAnalyzePathArguments(array $arguments): array
+    {
+        $arguments = $this->stripLaramagoOptions($arguments);
+        $paths = [];
+        $consumeNext = false;
+        $optionsWithValues = [
+            '--baseline' => true,
+            '--reporting-target' => true,
+            '--reporting-format' => true,
+            '--minimum-fail-level' => true,
+            '--minimum-report-level' => true,
+            '--retain-code' => true,
+            '--substitute' => true,
+            '-m' => true,
+        ];
+
+        foreach ($arguments as $argument) {
+            if ($consumeNext) {
+                $consumeNext = false;
+
+                continue;
+            }
+
+            if ($argument === '--') {
+                $consumeNext = false;
+
+                continue;
+            }
+
+            if (isset($optionsWithValues[$argument])) {
+                $consumeNext = true;
+
+                continue;
+            }
+
+            if (str_starts_with($argument, '-')) {
+                continue;
+            }
+
+            $paths[] = $argument;
+        }
+
+        return $paths;
+    }
+
     private function process(array $command, string $cwd): int
     {
         $stdoutPath = tempnam(sys_get_temp_dir(), 'laramago-stdout-');

@@ -965,6 +965,45 @@ PHP);
     }
 }
 
+function testSeparateMagoOptionValuesAreNotTreatedAsAnalysisTargets(string $project, string $root): void
+{
+    require_once $root . '/src/Application.php';
+
+    mkdir($project . '/json', 0777, true);
+    file_put_contents($project . '/json/ShouldNotBeTargeted.php', '<?php');
+    file_put_contents($project . '/app/Target.php', '<?php');
+
+    $application = new Laramago\Application();
+    $targetsMethod = new ReflectionMethod($application, 'explicitAnalysisTargets');
+    $targets = $targetsMethod->invoke($application, [
+        '--reporting-format',
+        'json',
+        '--minimum-report-level',
+        'error',
+        '--retain-code',
+        'invalid-argument',
+        'app/Target.php',
+    ]);
+
+    if ($targets !== ['app/Target.php']) {
+        fail('separate Mago option values should not be treated as explicit analysis targets');
+    }
+
+    $pathsMethod = new ReflectionMethod($application, 'sourceOverlayPaths');
+    $paths = $pathsMethod->invoke($application, $project, [
+        '--reporting-format',
+        'json',
+        '--minimum-report-level',
+        'error',
+    ], ['app']);
+
+    sort($paths);
+
+    if ($paths !== ['app']) {
+        fail('separate Mago option values should not be used as source overlay paths');
+    }
+}
+
 function testCodesCommandDoesNotRequireConfiguredSources(string $project, string $binary): void
 {
     $emptyProject = $project . '/empty-codes-project';

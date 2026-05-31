@@ -135,11 +135,7 @@ trait BuildsSourceCompatibilityOverlays
             $paths[$this->normalizeProjectPath($path)] = true;
         }
 
-        foreach ($this->stripLaramagoOptions($arguments) as $argument) {
-            if ($argument === '' || str_starts_with($argument, '-')) {
-                continue;
-            }
-
+        foreach ($this->magoAnalyzePathArguments($arguments) as $argument) {
             $path = $this->normalizeProjectPath($argument);
 
             if ($path === '' || str_starts_with($path, '/') || str_starts_with($path, '../')) {

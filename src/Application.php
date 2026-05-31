@@ -589,11 +589,7 @@ HELP);
     {
         $targets = [];
 
-        foreach ($this->stripLaramagoOptions($arguments) as $argument) {
-            if ($argument === '' || str_starts_with($argument, '-')) {
-                continue;
-            }
-
+        foreach ($this->magoAnalyzePathArguments($arguments) as $argument) {
             $targets[] = $argument;
         }
 
