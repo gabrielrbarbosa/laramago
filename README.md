@@ -2,7 +2,7 @@
 
 Laravel-aware static analysis for [Mago](https://github.com/carthage-software/mago).
 
-Laramago is a Composer package that gives Laravel applications a practical migration path from Larastan/PHPStan to Mago. It ships a Laravel preset, a stable `vendor/bin/laramago` command, generated Eloquent model metadata overlays, and a baseline workflow designed for existing applications with real legacy noise.
+Laramago is a Composer package that gives Laravel applications a practical migration path from Larastan/PHPStan to Mago. It ships a Laravel runtime preset, a stable `vendor/bin/laramago` command, generated Eloquent model metadata overlays, and a baseline workflow designed for existing applications with real legacy noise.
 
 The goal is simple: keep the developer workflow that teams already use for static analysis, but run it on Mago's fast analyzer.
 
@@ -10,7 +10,7 @@ The goal is simple: keep the developer workflow that teams already use for stati
 
 Mago 1.29 does not expose a Composer-loaded analyzer extension API equivalent to PHPStan's extension system. That means Laramago is not a direct port of every Larastan internal rule. Instead, it provides the production-safe replacement layer that can be built on top of Mago today:
 
-- a Laravel-oriented `mago.toml` preset;
+- a Laravel-oriented runtime Mago preset managed by Laramago;
 - generated Eloquent PHPDoc overlays from real application model metadata;
 - automatic baseline usage for existing projects;
 - path translation so diagnostics point back to application files instead of generated cache files;
@@ -27,7 +27,7 @@ Laramago requires PHP 8.2 or newer and installs `carthage-software/mago` as its 
 
 ## Quick Start
 
-Generate the default Laravel/Mago configuration:
+Generate the project source configuration:
 
 ```bash
 vendor/bin/laramago init
@@ -45,7 +45,7 @@ Run analysis:
 vendor/bin/laramago analyze
 ```
 
-When `laramago-analyzer-baseline.toml` exists, `laramago analyze` automatically passes it to Mago.
+When `laramago-analyzer-baseline.toml` exists, `laramago analyze` automatically passes it to Mago. Laramago also writes a generated runtime config to `.laramago/cache/mago.toml` and passes that file to Mago, so application repositories only need to keep project-specific source settings in `mago.toml`.
 
 ## Laravel Model Overlays
 
@@ -84,7 +84,7 @@ vendor/bin/laramago clear
 
 ### `init`
 
-Writes `mago.toml` with Laravel-friendly defaults. Existing configs are preserved unless `--force` is provided.
+Writes a minimal `mago.toml` with project source settings. Existing configs are preserved unless `--force` is provided.
 
 ### `prepare`
 
@@ -92,7 +92,7 @@ Builds Laravel model overlays without running analysis. This is useful when debu
 
 ### `analyze`
 
-Runs `mago analyze` with Laramago defaults, model overlays, and the project baseline when present.
+Runs `mago analyze` with Laramago's generated runtime config, model overlays, and the project baseline when present.
 
 ### `baseline`
 
@@ -160,13 +160,19 @@ Ignore generated cache files:
 
 ## Configuration
 
-The generated `mago.toml` starts with Laravel-friendly defaults:
+The committed `mago.toml` should stay small and project-specific:
 
 - source path: `app`;
 - vendor included for type discovery;
+- app-specific excluded paths, if needed.
+
+Laramago owns the compatibility policy. During `analyze`, `baseline`, and `verify-baseline`, it generates `.laramago/cache/mago.toml` with:
+
 - Laravel linter integration enabled;
-- noisy mixed-type analyzer codes ignored for existing Laravel applications;
-- baseline-driven analyzer workflow.
+- Pint-compatible formatter defaults;
+- analyzer settings suitable for legacy Laravel applications;
+- noisy mixed-type analyzer codes ignored for application code;
+- the project source settings copied from the committed `mago.toml`.
 
 You can pass additional Mago flags directly through `laramago analyze`.
 

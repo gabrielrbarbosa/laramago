@@ -30,6 +30,10 @@ if (! str_contains($config, 'paths = ["app"]')) {
     fail('init did not write the default Laravel app path');
 }
 
+if (str_contains($config, '[analyzer]') || str_contains($config, '[formatter]') || str_contains($config, '[linter]')) {
+    fail('init leaked Laramago runtime defaults into project mago.toml');
+}
+
 $secondExitCode = run([PHP_BINARY, $binary, 'init', '--project=' . $project]);
 
 if ($secondExitCode === 0) {
@@ -51,6 +55,7 @@ if ($doctorExitCode !== $expectedDoctorExitCode) {
 
 testBaselinePathTranslation($project, $root);
 testOutputPathTranslation($project, $root);
+testRuntimeConfigGeneration($project, $root);
 
 cleanup($project);
 echo "OK\n";
@@ -121,6 +126,29 @@ function testOutputPathTranslation(string $project, string $root): void
 
     if ($translated !== $expected) {
         fail('output path translation wrote unexpected content');
+    }
+}
+
+function testRuntimeConfigGeneration(string $project, string $root): void
+{
+    require_once $root . '/src/Application.php';
+
+    $application = new Laramago\Application();
+    $method = new ReflectionMethod($application, 'prepareRuntimeConfig');
+    $runtimeConfig = $method->invoke($application, $project);
+
+    if ($runtimeConfig !== '.laramago/cache/mago.toml') {
+        fail('runtime config used an unexpected path');
+    }
+
+    $config = file_get_contents($project . '/' . $runtimeConfig);
+
+    if (! is_string($config) || ! str_contains($config, '[analyzer]') || ! str_contains($config, '[linter]')) {
+        fail('runtime config did not include Laramago defaults');
+    }
+
+    if (! str_contains($config, 'paths = ["app"]') || ! str_contains($config, 'php-version = "8.5.0"')) {
+        fail('runtime config did not preserve project source settings');
     }
 }
 

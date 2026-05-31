@@ -6,6 +6,8 @@ namespace Laramago;
 
 final class Application
 {
+    private const VERSION = '0.1.2';
+
     private const CONFIG_FILE = 'mago.toml';
 
     private const BASELINE_FILE = 'laramago-analyzer-baseline.toml';
@@ -15,6 +17,8 @@ final class Application
     private const MODEL_OVERLAY_DIR = '.laramago/cache/model-overlays';
 
     private const MODEL_OVERLAY_MAP = '.laramago/cache/model-overlays.json';
+
+    private const RUNTIME_CONFIG_FILE = '.laramago/cache/mago.toml';
 
     private const RUNTIME_BASELINE_FILE = '.laramago/cache/analyzer-baseline.toml';
 
@@ -69,7 +73,7 @@ final class Application
         }
 
         $phpVersion = $this->detectPhpVersion($projectRoot);
-        $config = $this->renderConfig($phpVersion, $sourcePaths, $excludes);
+        $config = $this->renderProjectConfig($phpVersion, $sourcePaths, ['vendor'], $excludes);
 
         if (file_put_contents($configPath, $config) === false) {
             $this->line("Unable to write {$configPath}");
@@ -109,8 +113,9 @@ final class Application
             return 1;
         }
 
+        $runtimeConfig = $this->prepareRuntimeConfig($projectRoot);
         $substitutions = $this->laravelModelSubstitutions($projectRoot, $arguments);
-        $command = [$mago, 'analyze'];
+        $command = [$mago, '--config', $runtimeConfig, 'analyze'];
         $command = array_merge(
             $command,
             $this->defaultAnalyzeFlags($projectRoot, $arguments, $substitutions !== []),
@@ -136,8 +141,11 @@ final class Application
         }
 
         $baselinePath = self::BASELINE_FILE;
+        $runtimeConfig = $this->prepareRuntimeConfig($projectRoot);
         $command = [
             $mago,
+            '--config',
+            $runtimeConfig,
             'analyze',
             '--baseline',
             $baselinePath,
@@ -179,8 +187,12 @@ final class Application
 
         $substitutions = $this->laravelModelSubstitutions($projectRoot, $arguments);
 
+        $runtimeConfig = $this->prepareRuntimeConfig($projectRoot);
+
         return $this->process(array_merge([
             $mago,
+            '--config',
+            $runtimeConfig,
             'analyze',
         ], $this->defaultAnalyzeFlags($projectRoot, $arguments, $substitutions !== []), [
             '--verify-baseline',
@@ -249,7 +261,9 @@ final class Application
             return $failed ? 1 : 0;
         }
 
+        $runtimeConfig = $this->prepareRuntimeConfig($projectRoot);
         $substitutions = $this->laravelModelSubstitutions($projectRoot, $arguments);
+        $this->line('OK   Prepared Laramago runtime config: ' . $runtimeConfig);
         $this->line('OK   Prepared ' . (int) (count($substitutions) / 2) . ' Laravel model overlays.');
 
         return $failed ? 1 : 0;
@@ -279,7 +293,7 @@ HELP);
 
     private function version(): int
     {
-        $this->line('laramago 0.1.0');
+        $this->line('laramago ' . self::VERSION);
 
         return 0;
     }
@@ -367,11 +381,13 @@ HELP);
 
     /**
      * @param list<string> $sourcePaths
+     * @param list<string> $includes
      * @param list<string> $excludes
      */
-    private function renderConfig(string $phpVersion, array $sourcePaths, array $excludes): string
+    private function renderProjectConfig(string $phpVersion, array $sourcePaths, array $includes, array $excludes): string
     {
         $paths = $this->tomlArray($sourcePaths);
+        $includesValue = $this->tomlArray($includes);
         $excludesValue = $this->tomlArray($excludes);
 
         return <<<TOML
@@ -381,7 +397,90 @@ php-version = "{$phpVersion}"
 [source]
 workspace = "."
 paths = {$paths}
-includes = ["vendor"]
+includes = {$includesValue}
+excludes = {$excludesValue}
+
+[source.glob]
+literal-separator = true
+TOML;
+    }
+
+    private function prepareRuntimeConfig(string $projectRoot): string
+    {
+        $values = $this->projectConfigValues($projectRoot);
+        $runtimeConfigPath = $projectRoot . '/' . self::RUNTIME_CONFIG_FILE;
+
+        $this->ensureDirectory(dirname($runtimeConfigPath));
+        file_put_contents($runtimeConfigPath, $this->renderRuntimeConfig(
+            $values['phpVersion'],
+            $values['paths'],
+            $values['includes'],
+            $values['excludes'],
+        ));
+
+        return self::RUNTIME_CONFIG_FILE;
+    }
+
+    /**
+     * @return array{phpVersion: string, paths: list<string>, includes: list<string>, excludes: list<string>}
+     */
+    private function projectConfigValues(string $projectRoot): array
+    {
+        $values = [
+            'phpVersion' => $this->detectPhpVersion($projectRoot),
+            'paths' => ['app'],
+            'includes' => ['vendor'],
+            'excludes' => $this->defaultLaravelExcludes($projectRoot),
+        ];
+
+        $configPath = $projectRoot . '/' . self::CONFIG_FILE;
+
+        if (! is_file($configPath)) {
+            return $values;
+        }
+
+        $config = file_get_contents($configPath);
+
+        if (! is_string($config)) {
+            return $values;
+        }
+
+        $phpVersion = $this->tomlStringValue($config, 'php-version');
+
+        if ($phpVersion !== null) {
+            $values['phpVersion'] = $phpVersion;
+        }
+
+        foreach (['paths', 'includes', 'excludes'] as $key) {
+            $arrayValue = $this->tomlArrayValue($config, $key);
+
+            if ($arrayValue !== null) {
+                $values[$key] = $arrayValue;
+            }
+        }
+
+        return $values;
+    }
+
+    /**
+     * @param list<string> $sourcePaths
+     * @param list<string> $includes
+     * @param list<string> $excludes
+     */
+    private function renderRuntimeConfig(string $phpVersion, array $sourcePaths, array $includes, array $excludes): string
+    {
+        $paths = $this->tomlArray($sourcePaths);
+        $includesValue = $this->tomlArray($includes);
+        $excludesValue = $this->tomlArray($excludes);
+
+        return <<<TOML
+version = "1"
+php-version = "{$phpVersion}"
+
+[source]
+workspace = "."
+paths = {$paths}
+includes = {$includesValue}
 excludes = {$excludesValue}
 
 [source.glob]
@@ -452,6 +551,32 @@ no-boolean-literal-comparison = false
 check-missing-type-hints = false
 register-super-globals = true
 TOML;
+    }
+
+    private function tomlStringValue(string $config, string $key): ?string
+    {
+        if (preg_match('/^' . preg_quote($key, '/') . '\s*=\s*"([^"]*)"/m', $config, $matches) !== 1) {
+            return null;
+        }
+
+        return $matches[1];
+    }
+
+    /**
+     * @return list<string>|null
+     */
+    private function tomlArrayValue(string $config, string $key): ?array
+    {
+        if (preg_match('/^' . preg_quote($key, '/') . '\s*=\s*\[([^\]]*)\]/m', $config, $matches) !== 1) {
+            return null;
+        }
+
+        preg_match_all('/"((?:[^"\\\\]|\\\\.)*)"/', $matches[1], $stringMatches);
+
+        return array_map(
+            static fn (string $value): string => str_replace('\"', '"', $value),
+            $stringMatches[1],
+        );
     }
 
     /**
