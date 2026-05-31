@@ -513,6 +513,7 @@ TOML;
             'mixed-property-access',
             'mixed-method-access',
             'non-existent-method',
+            'missing-magic-method',
             'non-existent-class-constant',
             'invalid-type-cast',
             'redundant-cast',

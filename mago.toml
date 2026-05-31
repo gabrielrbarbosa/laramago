@@ -1,0 +1,11 @@
+version = "1"
+php-version = "8.3.0"
+
+[source]
+workspace = "."
+paths = ["bin", "src", "tests"]
+includes = ["vendor"]
+excludes = []
+
+[source.glob]
+literal-separator = true

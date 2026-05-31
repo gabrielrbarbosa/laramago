@@ -220,6 +220,7 @@ PHP);
         '"incompatible-parameter-name"',
         '"null-operand"',
         '"non-existent-method"',
+        '"missing-magic-method"',
         '"never-return"',
         '"non-existent-property"',
         '"possibly-null-array-access"',
@@ -425,7 +426,7 @@ NEON);
     $maxIgnores = $method->invoke($application, ['--phpstan-level=max']);
     $unsupportedIgnores = $method->invoke($application, ['--phpstan-level=custom']);
 
-    if (! is_array($levelIgnores) || ! in_array('mixed-argument', $levelIgnores, true)) {
+    if (! is_array($levelIgnores) || ! in_array('mixed-argument', $levelIgnores, true) || ! in_array('missing-magic-method', $levelIgnores, true)) {
         fail('PHPStan level 6 compatibility ignores were not enabled explicitly');
     }
 
@@ -615,6 +616,11 @@ PHP,
 
     if (! is_resource($process)) {
         fail('unable to start lock holder process');
+    }
+
+    if (! isset($pipes[1], $pipes[2])) {
+        proc_close($process);
+        fail('unable to open lock holder process pipes');
     }
 
     $ready = fgets($pipes[1]);

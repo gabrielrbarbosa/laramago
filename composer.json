@@ -32,10 +32,14 @@
         "ci": [
             "@check:composer",
             "@lint",
-            "@test"
+            "@test",
+            "@static"
         ],
         "test": [
             "@php tests/run.php"
+        ],
+        "static": [
+            "@php bin/laramago analyze --phpstan-level=6 --ignore-baseline --reporting-format=count"
         ],
         "check:composer": [
             "composer validate --strict"
@@ -53,6 +57,7 @@
             "@php -l tests/run.php",
             "@php -l tests/Support.php",
             "@php -l tests/CommandsTest.php",
+            "@php -l tests/Stubs/LaravelModelMetadataFunctions.php",
             "@php -l tests/Overlays/PragmaAndHelperOverlaysTest.php",
             "@php -l tests/Overlays/DynamicMemberOverlaysTest.php",
             "@php -l tests/Overlays/ClassResolutionOverlaysTest.php",

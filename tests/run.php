@@ -13,6 +13,28 @@ require_once __DIR__ . '/Overlays/DynamicMemberOverlaysTest.php';
 require_once __DIR__ . '/Overlays/ClassResolutionOverlaysTest.php';
 require_once __DIR__ . '/Overlays/LaravelMetadataAndFrameworkOverlaysTest.php';
 
+$testFiles = [
+    __DIR__ . '/CommandsTest.php',
+    __DIR__ . '/Overlays/PragmaAndHelperOverlaysTest.php',
+    __DIR__ . '/Overlays/DynamicMemberOverlaysTest.php',
+    __DIR__ . '/Overlays/ClassResolutionOverlaysTest.php',
+    __DIR__ . '/Overlays/LaravelMetadataAndFrameworkOverlaysTest.php',
+];
+$definedTests = [];
+
+foreach ($testFiles as $testFile) {
+    preg_match_all('/^function\s+(test[A-Za-z0-9_]+)\s*\(/m', (string) file_get_contents($testFile), $matches);
+    $definedTests = array_merge($definedTests, $matches[1]);
+}
+
+preg_match_all('/\b(test[A-Za-z0-9_]+)\s*\(/', (string) file_get_contents(__FILE__), $matches);
+$missingTests = array_values(array_diff(array_unique($definedTests), array_unique($matches[1])));
+sort($missingTests);
+
+if ($missingTests !== []) {
+    fail('tests/run.php does not execute: ' . implode(', ', $missingTests));
+}
+
 mkdir($project);
 file_put_contents($project . '/composer.json', json_encode([
     'require' => [
@@ -79,10 +101,12 @@ testAnalysisIgnoresStaleRuntimeBaseline($project, $root);
 testPhpStanLevelAnalyzeRunsEndToEnd($project, $binary);
 testPhpStanPragmaOverlayGeneration($project, $root);
 testLaravelDateHelperOverlayGeneration($project, $root);
+testInternalFunctionCompatibilityOverlayGeneration($project, $root);
 testLaravelCommandReturnOverlayGeneration($project, $root);
 testLaravelHttpClientWrapperReturnTypeOverlayGeneration($project, $root);
 testLaravelCollectionMacroOverlayGeneration($project, $root);
 testLaravelCollectionItemObjectOverlayGeneration($project, $root);
+testLaravelCollectionArrowCallbackOverlayGeneration($project, $root);
 testLaravelForeachObjectRowOverlayGeneration($project, $root);
 testDynamicMemberSelectorStringOverlayGeneration($project, $root);
 testEloquentModelArrayAccessAssignmentOverlayGeneration($project, $root);

@@ -620,6 +620,18 @@ trait BuildsSourceCompatibilityOverlays
         ) ?? $translated;
 
         $translated = preg_replace(
+            '/(preg_replace\([^;\r\n]*?,\s*[^,\r\n]+,\s*)(?!\(string\)\s*)iconv\(/',
+            '$1(string) iconv(',
+            $translated,
+        ) ?? $translated;
+
+        $translated = preg_replace(
+            '/(preg_replace\([^;\r\n]*?,\s*[^,\r\n]+,\s*)(?!\(string\)\s*)mb_convert_encoding\(/',
+            '$1(string) mb_convert_encoding(',
+            $translated,
+        ) ?? $translated;
+
+        $translated = preg_replace(
             '/(=\s*)(?!\()(preg_split\([^;\r\n]+\))\s*;/',
             '$1($2 ?: []);',
             $translated,

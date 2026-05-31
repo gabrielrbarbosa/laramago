@@ -194,6 +194,12 @@ trait RunsMagoProcesses
             return ['exitCode' => 1, 'stdout' => '', 'stderr' => 'Unable to start process.'];
         }
 
+        if (! isset($pipes[0], $pipes[1], $pipes[2])) {
+            proc_close($process);
+
+            return ['exitCode' => 1, 'stdout' => '', 'stderr' => 'Unable to open process pipes.'];
+        }
+
         fclose($pipes[0]);
         $stdout = stream_get_contents($pipes[1]);
         $stderr = stream_get_contents($pipes[2]);

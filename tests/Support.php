@@ -32,6 +32,12 @@ function captureRun(array $command): array
         return ['exitCode' => 1, 'output' => ''];
     }
 
+    if (! isset($pipes[1], $pipes[2])) {
+        proc_close($process);
+
+        return ['exitCode' => 1, 'output' => 'Unable to open process pipes.'];
+    }
+
     $stdout = stream_get_contents($pipes[1]);
     $stderr = stream_get_contents($pipes[2]);
     fclose($pipes[1]);
