@@ -119,6 +119,9 @@ Generated overlays currently add:
 - Laravel request input compatibility for dynamic `$request->field`, `$this->request->field`, trait-provided Request properties used by pagination/filtering helpers, and helper parameters that accept `mixed $request` but clearly use Laravel request APIs;
 - Laravel JSON resource delegated property and method metadata for normal `$this->field` / `$this->relation()` resource transformations;
 - Laravel resource collection compatibility for common paginated `ResourceCollection` transforms that map Eloquent models from `$this->resource->getCollection()`;
+- Laravel query builder callback compatibility for common nested `where`, `whereIn`, and `whereExists` closures;
+- Laravel Excel event callback compatibility for `BeforeExport`, `BeforeWriting`, `BeforeSheet`, and `AfterSheet` closures;
+- Eloquent static builder delegation for lock-based query chains such as `Model::lockForUpdate()->...`;
 - PHPStan suppression pragma compatibility for `@phpstan-ignore`, `@phpstan-ignore-next-line`, and `@phpstan-ignore-line` comments through generated temporary overlays;
 - path-scoped suppression of unused generated Mago pragmas inside overlays, so PHPStan compatibility comments do not create new analyzer noise after Laramago resolves the original issue;
 - baseline and output path translation so generated overlay paths do not leak into application diagnostics.

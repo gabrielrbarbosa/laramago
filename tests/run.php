@@ -71,6 +71,8 @@ testAnalysisIgnoresStaleRuntimeBaseline($project, $root);
 testPhpStanPragmaOverlayGeneration($project, $root);
 testLaravelDateHelperOverlayGeneration($project, $root);
 testLaravelCollectionMacroOverlayGeneration($project, $root);
+testLaravelExcelEventOverlayGeneration($project, $root);
+testLaravelQueryBuilderClosureOverlayGeneration($project, $root);
 testLaravelRequestPropertyReadOverlayGeneration($project, $root);
 testLaravelJsonResourceDynamicMemberOverlayGeneration($project, $root);
 testLaravelFormRequestDynamicPropertyOverlayGeneration($project, $root);
@@ -891,6 +893,105 @@ PHP);
     fail('Laravel collection macro overlay did not annotate closure $this safely');
 }
 
+function testLaravelExcelEventOverlayGeneration(string $project, string $root): void
+{
+    require_once $root . '/src/Application.php';
+
+    if (! is_dir($project . '/app/Exports')) {
+        mkdir($project . '/app/Exports', 0777, true);
+    }
+
+    file_put_contents($project . '/app/Exports/UsesExcelEvents.php', <<<'PHP'
+<?php
+
+namespace App\Exports;
+
+use Maatwebsite\Excel\Events\AfterSheet;
+
+final class UsesExcelEvents
+{
+    public function registerEvents(): array
+    {
+        return [
+            AfterSheet::class => function ($event): void {
+                $event->sheet->freezePane('A2');
+            },
+        ];
+    }
+}
+PHP);
+
+    $application = new Laramago\Application();
+    $method = new ReflectionMethod($application, 'phpStanPragmaSubstitutions');
+    $method->invoke($application, $project, [], []);
+
+    $map = json_decode((string) file_get_contents($project . '/.laramago/cache/phpstan-pragma-overlays.json'), true);
+
+    foreach (is_array($map) ? $map : [] as $entry) {
+        if (($entry['original'] ?? null) !== 'app/Exports/UsesExcelEvents.php' || ! is_string($entry['overlay'] ?? null)) {
+            continue;
+        }
+
+        $overlay = file_get_contents($project . '/' . $entry['overlay']);
+
+        if (is_string($overlay)
+            && str_contains($overlay, '/** @var \Maatwebsite\Excel\Events\AfterSheet $event */')
+            && str_contains($overlay, '$event->sheet->freezePane')) {
+            return;
+        }
+    }
+
+    fail('Laravel Excel event overlay did not annotate event callback variables');
+}
+
+function testLaravelQueryBuilderClosureOverlayGeneration(string $project, string $root): void
+{
+    require_once $root . '/src/Application.php';
+
+    file_put_contents($project . '/app/UsesQueryBuilderClosures.php', <<<'PHP'
+<?php
+
+namespace App;
+
+final class UsesQueryBuilderClosures
+{
+    public function apply(mixed $builder): mixed
+    {
+        return $builder->whereIn('user_id', function ($sub) {
+            $sub->from('users')->select('id');
+        })->where(function ($query): void {
+            $query->whereExists(function ($nested): void {
+                $nested->from('orders')->select('id');
+            });
+        });
+    }
+}
+PHP);
+
+    $application = new Laramago\Application();
+    $method = new ReflectionMethod($application, 'phpStanPragmaSubstitutions');
+    $method->invoke($application, $project, [], []);
+
+    $map = json_decode((string) file_get_contents($project . '/.laramago/cache/phpstan-pragma-overlays.json'), true);
+
+    foreach (is_array($map) ? $map : [] as $entry) {
+        if (($entry['original'] ?? null) !== 'app/UsesQueryBuilderClosures.php' || ! is_string($entry['overlay'] ?? null)) {
+            continue;
+        }
+
+        $overlay = file_get_contents($project . '/' . $entry['overlay']);
+
+        if (is_string($overlay)
+            && str_contains($overlay, '/** @var \Illuminate\Database\Query\Builder $sub */')
+            && str_contains($overlay, '/** @var \Illuminate\Database\Query\Builder $query */')
+            && str_contains($overlay, '/** @var \Illuminate\Database\Query\Builder $nested */')) {
+            return;
+        }
+    }
+
+    fail('Laravel query builder closure overlay did not annotate nested builder callbacks');
+}
+
 function testLaravelRequestPropertyReadOverlayGeneration(string $project, string $root): void
 {
     require_once $root . '/src/Application.php';
@@ -1449,6 +1550,7 @@ PHP;
         '@method static \\Illuminate\\Database\\Eloquent\\Builder<static> withCount(array|string $relations)',
         '@method static \\Illuminate\\Database\\Eloquent\\Builder<static> select(mixed ...$columns)',
         '@method static \\Illuminate\\Database\\Eloquent\\Builder<static> orderBy(mixed $column, mixed $direction = "asc")',
+        '@method static \\Illuminate\\Database\\Eloquent\\Builder<static> lockForUpdate()',
         '@method static self create(array $attributes = null)',
         '@method static static|null first(array|string $columns = ["*"])',
         '@method static self firstOrFail(array|string $columns = ["*"])',
@@ -1894,7 +1996,7 @@ PHP);
         fail('base Carbon immutable overlay did not expose lowercase Carbon method aliases');
     }
 
-    if (! is_string($notificationOverlay) || str_contains($notificationOverlay, '@property mixed $sendType') || ! str_contains($notificationOverlay, 'public function __get(string $key): mixed') || ! str_contains($notificationOverlay, 'public function towhatsapp(mixed ...$arguments): mixed {}') || str_contains($notificationOverlay, 'public mixed $sendType;')) {
+    if (! is_string($notificationOverlay) || str_contains($notificationOverlay, '@property mixed $sendType') || ! str_contains($notificationOverlay, 'public function __get(string $key): mixed') || ! str_contains($notificationOverlay, 'public function towhatsapp(mixed $notifiable): mixed {}') || str_contains($notificationOverlay, 'public mixed $sendType;')) {
         fail('notification overlay did not expose project custom channel members');
     }
 
@@ -1918,7 +2020,7 @@ PHP);
         fail('Eloquent builder overlay did not preserve source and add delegated chain methods');
     }
 
-    if (! is_string($eloquentModelOverlay) || ! str_contains($eloquentModelOverlay, 'public function loadMissing($relations, ...$additionalRelations)') || ! str_contains($eloquentModelOverlay, 'public function increment($column, $amount = 1, array $extra = [])') || ! str_contains($eloquentModelOverlay, 'public static function withoutGlobalScopes(?array $scopes = null)') || ! str_contains($eloquentModelOverlay, 'public static function where(mixed $column, mixed $operator = null, mixed $value = null, string $boolean = \'and\')') || ! str_contains($eloquentModelOverlay, 'public static function select(mixed ...$columns)')) {
+    if (! is_string($eloquentModelOverlay) || ! str_contains($eloquentModelOverlay, 'public function loadMissing($relations, ...$additionalRelations)') || ! str_contains($eloquentModelOverlay, 'public function increment($column, $amount = 1, array $extra = [])') || ! str_contains($eloquentModelOverlay, 'public static function withoutGlobalScopes(?array $scopes = null)') || ! str_contains($eloquentModelOverlay, 'public static function where(mixed $column, mixed $operator = null, mixed $value = null, string $boolean = \'and\')') || ! str_contains($eloquentModelOverlay, 'public static function select(mixed ...$columns)') || ! str_contains($eloquentModelOverlay, 'public static function lockForUpdate()')) {
         fail('Eloquent model overlay did not expose dynamic static builder delegation');
     }
 

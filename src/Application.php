@@ -6,7 +6,7 @@ namespace Laramago;
 
 final class Application
 {
-    private const VERSION = '0.1.46';
+    private const VERSION = '0.1.47';
 
     private const CONFIG_FILE = 'mago.toml';
 
@@ -1998,6 +1998,14 @@ PHP);
     /**
      * Laramago overlay for Laravel's dynamic static builder delegation.
      */
+    public static function lockForUpdate(): \Illuminate\Database\Eloquent\Builder
+    {
+        return static::query();
+    }
+
+    /**
+     * Laramago overlay for Laravel's dynamic static builder delegation.
+     */
     public static function find(mixed $id, array|string $columns = ['*']): mixed
     {
         return null;
@@ -2116,7 +2124,7 @@ PHP);
 
         foreach ($members['methods'] as $method) {
             if (! preg_match('/^\s*public\s+function\s+' . preg_quote($method, '/') . '\s*\(/im', $source)) {
-                $declarations[] = '    public function ' . $method . '(mixed ...$arguments): mixed {}';
+                $declarations[] = '    public function ' . $method . '(mixed $notifiable): mixed {}';
             }
         }
 
@@ -2460,6 +2468,8 @@ PHP;
                 $translated = $this->translatePhpStanPragmas($source);
                 $translated = $this->translateLaravelDateHelperCalls($translated);
                 $translated = $this->annotateLaravelCollectionMacroClosures($translated);
+                $translated = $this->annotateLaravelExcelEventClosures($translated);
+                $translated = $this->annotateLaravelQueryBuilderClosures($translated);
                 $translated = $this->annotateLaravelRequestParameters($translated);
                 $translated = $this->rewriteLaravelRequestPropertyReads($translated, $projectRoot);
                 $translated = $this->annotateLaravelJsonResourceDynamicMembers($translated, $relativePath);
@@ -2709,6 +2719,60 @@ PHP;
         $translated = preg_replace_callback(
             '/((?:\\\\?Illuminate\\\\Support\\\\)?Collection::macro\s*\(\s*[\'"][^\'"]+[\'"]\s*,\s*function\s*\([^)]*\)\s*(?::\s*[^{]+)?\{)(?!\s*\/\*\*\s*@var\s+[^*]*\$this)/m',
             static fn (array $matches): string => $matches[1] . PHP_EOL . '                    /** @var \Illuminate\Support\Collection $this */',
+            $source,
+        );
+
+        return is_string($translated) ? $translated : $source;
+    }
+
+    private function annotateLaravelExcelEventClosures(string $source): string
+    {
+        if (! str_contains($source, '::class') || ! str_contains($source, 'function')) {
+            return $source;
+        }
+
+        $events = [
+            'BeforeExport' => '\\Maatwebsite\\Excel\\Events\\BeforeExport',
+            'BeforeWriting' => '\\Maatwebsite\\Excel\\Events\\BeforeWriting',
+            'BeforeSheet' => '\\Maatwebsite\\Excel\\Events\\BeforeSheet',
+            'AfterSheet' => '\\Maatwebsite\\Excel\\Events\\AfterSheet',
+        ];
+
+        $translated = $source;
+
+        foreach ($events as $event => $class) {
+            $pattern = '/((?:\\\\?Maatwebsite\\\\Excel\\\\Events\\\\)?' . preg_quote($event, '/') . '::class\s*=>\s*(?:static\s+)?function\s*\(\s*\$([A-Za-z_][A-Za-z0-9_]*)\s*\)\s*(?::\s*[^{]+)?\{)(?!\s*\/\*\*\s*@var\s+[^*]*\$[A-Za-z_][A-Za-z0-9_]*)/m';
+            $translated = preg_replace_callback(
+                $pattern,
+                static fn (array $matches): string => $matches[1] . PHP_EOL . '                /** @var ' . $class . ' $' . $matches[2] . ' */',
+                $translated,
+            ) ?? $translated;
+        }
+
+        return $translated;
+    }
+
+    private function annotateLaravelQueryBuilderClosures(string $source): string
+    {
+        if (! str_contains($source, 'function')) {
+            return $source;
+        }
+
+        $methods = [
+            'where',
+            'orWhere',
+            'whereIn',
+            'orWhereIn',
+            'whereExists',
+            'orWhereExists',
+            'whereNotExists',
+            'orWhereNotExists',
+        ];
+        $methodPattern = implode('|', array_map(static fn (string $method): string => preg_quote($method, '/'), $methods));
+
+        $translated = preg_replace_callback(
+            '/(->\s*(?:' . $methodPattern . ')\s*\((?:(?!\{).)*?function\s*\(\s*\$([A-Za-z_][A-Za-z0-9_]*)\s*\)(?:\s*use\s*\([^)]*\))?\s*(?::\s*[^{]+)?\{)(?!\s*\/\*\*\s*@var\s+[^*]*\$[A-Za-z_][A-Za-z0-9_]*)/ms',
+            static fn (array $matches): string => $matches[1] . PHP_EOL . '                /** @var \Illuminate\Database\Query\Builder $' . $matches[2] . ' */',
             $source,
         );
 
@@ -3658,6 +3722,13 @@ PHP,
         return null;
     }
 PHP,
+            'lockforupdate' => <<<'PHP'
+
+    public static function lockForUpdate(): \Illuminate\Database\Eloquent\Builder
+    {
+        return static::query();
+    }
+PHP,
             'findorfail' => <<<'PHP'
 
     public static function findOrFail(mixed $id, array|string $columns = ['*']): mixed
@@ -3914,6 +3985,7 @@ PHP,
             ' * @method static \\Illuminate\\Database\\Eloquent\\Builder<static> take(int $value)',
             ' * @method static \\Illuminate\\Database\\Eloquent\\Builder<static> offset(int $value)',
             ' * @method static \\Illuminate\\Database\\Eloquent\\Builder<static> skip(int $value)',
+            ' * @method static \\Illuminate\\Database\\Eloquent\\Builder<static> lockForUpdate()',
             ' * @method static \\Illuminate\\Database\\Eloquent\\Builder<static> whereLike(string $column, mixed $value, bool $caseSensitive = false, string $boolean = "and", bool $not = false)',
             ' * @method static \\Illuminate\\Database\\Eloquent\\Builder<static> wherelike(string $column, mixed $value, bool $caseSensitive = false, string $boolean = "and", bool $not = false)',
             ' * @method static \\Illuminate\\Database\\Eloquent\\Builder<static> whereIntegerInRaw(string $column, mixed $values, string $boolean = "and", bool $not = false)',
