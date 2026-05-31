@@ -112,7 +112,7 @@ function testRuntimeConfigGeneration(string $project, string $root): void
         fail('runtime config should keep strict unused definition checks by default');
     }
 
-    foreach (['"mixed-operand"', '"mixed-argument"', '"mixed-assignment"', '"mixed-method-access"', '"mixed-property-access"', '"mixed-array-access"', '"mixed-array-assignment"', '"mixed-return-statement"', '"mixed-property-type-coercion"', '"ambiguous-object-property-access"', '"ambiguous-object-method-access"', '"non-documented-property"', '"non-documented-method"', '"possibly-invalid-argument"', '"possibly-null-property-access"', '"possible-method-access-on-null"', '"possibly-null-argument"'] as $expectedDefaultIgnore) {
+    foreach (['"mixed-operand"', '"mixed-argument"', '"mixed-assignment"', '"mixed-method-access"', '"mixed-property-access"', '"mixed-array-access"', '"mixed-array-assignment"', '"mixed-return-statement"', '"mixed-property-type-coercion"', '"mixed-array-index"', '"invalid-iterator"', '"invalid-member-selector"', '"less-specific-return-statement"', '"less-specific-argument"', '"less-specific-nested-argument-type"', '"less-specific-nested-return-statement"', '"ambiguous-object-property-access"', '"ambiguous-object-method-access"', '"non-documented-property"', '"non-documented-method"', '"possibly-invalid-argument"', '"possibly-null-property-access"', '"possible-method-access-on-null"', '"possibly-null-argument"'] as $expectedDefaultIgnore) {
         if (! str_contains($config, $expectedDefaultIgnore)) {
             fail('runtime config missed a default Laravel dynamic data compatibility ignore: ' . $expectedDefaultIgnore);
         }
