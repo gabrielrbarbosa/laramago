@@ -488,15 +488,23 @@ PHP,
         return str_replace(
             [
                 '@return ($guard is null ? \Illuminate\Contracts\Auth\Factory : \Illuminate\Contracts\Auth\Guard)',
+                '@return ($key is null ? \Illuminate\Contracts\Translation\Translator : array|string)',
                 'function auth($guard = null): AuthFactory|Guard',
                 'function now($tz = null): CarbonInterface',
                 'function today($tz = null): CarbonInterface',
+                'function trans($key = null, $replace = [], $locale = null): Translator|array|string',
+                " * @param  string|null  \$locale\n     */\n    function __",
+                'function __($key = null, $replace = [], $locale = null): string|array|null',
             ],
             [
                 '@return ($guard is null ? \Illuminate\Auth\AuthManager : \Illuminate\Contracts\Auth\Guard)',
+                '@return ($key is null ? \Illuminate\Contracts\Translation\Translator : string)',
                 'function auth($guard = null): \Illuminate\Auth\AuthManager|Guard',
                 'function now($tz = null): \Illuminate\Support\Carbon',
                 'function today($tz = null): \Illuminate\Support\Carbon',
+                'function trans($key = null, $replace = [], $locale = null): Translator|string',
+                " * @param  string|null  \$locale\n     * @return (\$key is null ? null : string)\n     */\n    function __",
+                'function __($key = null, $replace = [], $locale = null): ?string',
             ],
             $source,
         );

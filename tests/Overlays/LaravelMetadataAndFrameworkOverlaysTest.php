@@ -354,6 +354,7 @@ PHP);
 
 use Illuminate\Contracts\Auth\Factory as AuthFactory;
 use Illuminate\Contracts\Auth\Guard;
+use Illuminate\Contracts\Translation\Translator;
 use Carbon\CarbonInterface;
 
 if (! function_exists('auth')) {
@@ -376,6 +377,33 @@ if (! function_exists('now')) {
 
 if (! function_exists('today')) {
     function today($tz = null): CarbonInterface
+    {
+    }
+}
+
+if (! function_exists('trans')) {
+    /**
+     * Translate the given message.
+     *
+     * @param  string|null  $key
+     * @param  array  $replace
+     * @param  string|null  $locale
+     * @return ($key is null ? \Illuminate\Contracts\Translation\Translator : array|string)
+     */
+    function trans($key = null, $replace = [], $locale = null): Translator|array|string
+    {
+    }
+}
+
+if (! function_exists('__')) {
+    /**
+     * Translate the given message.
+     *
+     * @param  string|null  $key
+     * @param  array  $replace
+     * @param  string|null  $locale
+     */
+    function __($key = null, $replace = [], $locale = null): string|array|null
     {
     }
 }
@@ -908,6 +936,10 @@ PHP);
 
     if (! is_string($foundationHelpersOverlay) || ! str_contains($foundationHelpersOverlay, '@return ($guard is null ? \\Illuminate\\Auth\\AuthManager : \\Illuminate\\Contracts\\Auth\\Guard)') || ! str_contains($foundationHelpersOverlay, 'function auth($guard = null): \\Illuminate\\Auth\\AuthManager|Guard') || ! str_contains($foundationHelpersOverlay, 'function now($tz = null): \\Illuminate\\Support\\Carbon')) {
         fail('foundation helpers overlay did not expose the default auth manager return type');
+    }
+
+    if (! is_string($foundationHelpersOverlay) || ! str_contains($foundationHelpersOverlay, '@return ($key is null ? \\Illuminate\\Contracts\\Translation\\Translator : string)') || ! str_contains($foundationHelpersOverlay, 'function trans($key = null, $replace = [], $locale = null): Translator|string') || ! str_contains($foundationHelpersOverlay, '@return ($key is null ? null : string)') || ! str_contains($foundationHelpersOverlay, 'function __($key = null, $replace = [], $locale = null): ?string')) {
+        fail('foundation helpers overlay did not expose keyed translation helpers as strings');
     }
 
     if (! is_string($httpOverlay) || ! str_contains($httpOverlay, '@method static \\Illuminate\\Http\\Client\\Response get(') || ! str_contains($httpOverlay, '@method static \\Illuminate\\Http\\Client\\Response send(')) {
