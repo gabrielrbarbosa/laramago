@@ -6,7 +6,7 @@ namespace Laramago;
 
 final class Application
 {
-    private const VERSION = '0.1.34';
+    private const VERSION = '0.1.35';
 
     private const CONFIG_FILE = 'mago.toml';
 
@@ -2123,17 +2123,17 @@ PHP;
             ' * @method static \\Illuminate\\Database\\Eloquent\\Builder<static> take(int $value)',
             ' * @method static \\Illuminate\\Database\\Eloquent\\Builder<static> offset(int $value)',
             ' * @method static \\Illuminate\\Database\\Eloquent\\Builder<static> skip(int $value)',
-            ' * @method static static|null create(array $attributes = null)',
-            ' * @method static static|null forceCreate(array $attributes)',
+            ' * @method static self create(array $attributes = null)',
+            ' * @method static self forceCreate(array $attributes)',
             ' * @method static static|null first(array|string $columns = ["*"])',
-            ' * @method static static|null firstOrFail(array|string $columns = ["*"])',
+            ' * @method static self firstOrFail(array|string $columns = ["*"])',
             ' * @method static static|null firstWhere(mixed $column, mixed $operator = null, mixed $value = null, string $boolean = "and")',
-            ' * @method static static|null firstOrCreate(array $attributes = null, array $values = null)',
-            ' * @method static static|null updateOrCreate(array $attributes, array $values = null)',
-            ' * @method static static|null sole(array|string $columns = ["*"])',
+            ' * @method static self firstOrCreate(array $attributes = null, array $values = null)',
+            ' * @method static self updateOrCreate(array $attributes, array $values = null)',
+            ' * @method static self sole(array|string $columns = ["*"])',
             ' * @method static \\Illuminate\\Database\\Eloquent\\Collection all(array|string $columns = ["*"])',
             ' * @method static static|null find(mixed $id, array|string $columns = ["*"])',
-            ' * @method static static|null findOrFail(mixed $id, array|string $columns = ["*"])',
+            ' * @method static self findOrFail(mixed $id, array|string $columns = ["*"])',
             ' * @method static \\Illuminate\\Database\\Eloquent\\Collection get(array|string $columns = ["*"])',
             ' * @method static \\Illuminate\\Support\\Collection pluck(string $column, mixed $key = null)',
             ' * @method static \\Illuminate\\LazyCollection cursor()',
@@ -2148,7 +2148,6 @@ PHP;
             ' * @method static mixed max(string $column)',
             ' * @method static bool exists()',
             ' * @method static bool doesntExist()',
-            ' * @method static int delete()',
             ' * @method static int destroy(mixed $ids)',
             ' * @method static bool insert(array $values)',
             ' * @method static int upsert(array $values, array|string $uniqueBy, array|null $update = null)',

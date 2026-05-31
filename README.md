@@ -105,7 +105,7 @@ Generated overlays currently add:
 - `@property` entries for database columns with cast-aware types, including encrypted casts, collection/array object casts, date casts, and enum casts;
 - `@property-read` entries for legacy `getFooAttribute()` accessors and `Attribute` accessors;
 - `@property-read` entries for Eloquent relations, including through, polymorphic, and many-to-many collection relations;
-- `@method static` entries for common Eloquent builder chains and terminals such as `where`, `whereIn`, `join`, `leftJoin`, `groupBy`, `having`, `with`, `withCount`, `select`, `orderBy`, `first`, `firstOrCreate`, `updateOrCreate`, `get`, `pluck`, `exists`, `count`, `insert`, `delete`, `find`, and `findOrFail`;
+- `@method static` entries for common Eloquent builder chains and terminals such as `where`, `whereIn`, `join`, `leftJoin`, `groupBy`, `having`, `with`, `withCount`, `select`, `orderBy`, `first`, `firstOrCreate`, `updateOrCreate`, `get`, `pluck`, `exists`, `count`, `insert`, `destroy`, `find`, and `findOrFail`;
 - merged generated metadata with existing model class PHPDoc, so project annotations such as `@mixin`, `@method`, `@property`, and generic hints stay visible;
 - `createToken` return types for models using Laravel Sanctum's `HasApiTokens` trait;
 - `@method static` entries for classic `scopeFoo()` local scopes, trait-defined local scopes, inherited local scopes, and Laravel `#[Scope]` methods;

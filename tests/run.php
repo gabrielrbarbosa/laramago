@@ -797,12 +797,12 @@ PHP;
         '@method static \\Illuminate\\Database\\Eloquent\\Builder<static> groupBy(array|string ...$groups)',
         '@method static \\Illuminate\\Database\\Eloquent\\Builder<static> withCount(array|string $relations)',
         '@method static \\Illuminate\\Database\\Eloquent\\Builder<static> orderBy(string $column, string $direction = "asc")',
-        '@method static static|null create(array $attributes = null)',
+        '@method static self create(array $attributes = null)',
         '@method static static|null first(array|string $columns = ["*"])',
-        '@method static static|null firstOrFail(array|string $columns = ["*"])',
-        '@method static static|null firstOrCreate(array $attributes = null, array $values = null)',
-        '@method static static|null updateOrCreate(array $attributes, array $values = null)',
-        '@method static static|null findOrFail(mixed $id, array|string $columns = ["*"])',
+        '@method static self firstOrFail(array|string $columns = ["*"])',
+        '@method static self firstOrCreate(array $attributes = null, array $values = null)',
+        '@method static self updateOrCreate(array $attributes, array $values = null)',
+        '@method static self findOrFail(mixed $id, array|string $columns = ["*"])',
         '@method static \\Illuminate\\Database\\Eloquent\\Collection get(array|string $columns = ["*"])',
         '@method static \\Illuminate\\Support\\Collection pluck(string $column, mixed $key = null)',
         '@method static bool exists()',
@@ -819,6 +819,10 @@ PHP;
 
     if (substr_count($overlay, '/**') !== 1) {
         fail('model docblock overlay should merge with the existing class docblock');
+    }
+
+    if (str_contains($overlay, '@method static int delete()')) {
+        fail('model docblock overlay should not shadow the instance delete method');
     }
 
     if (strpos($overlay, '@mixin \\Illuminate\\Database\\Eloquent\\Builder<Product>') > strpos($overlay, '@laramago-generated')) {
