@@ -1,8 +1,15 @@
 # Laramago
 
+[![Packagist](https://img.shields.io/packagist/v/laramago/laramago.svg?style=flat-square)](https://github.com/gabrielrbarbosa/laramago)
+[![Packagist Downloads](https://img.shields.io/packagist/dt/laramago/laramago.svg?style=flat-square)](https://github.com/gabrielrbarbosa/laramago)
+[![Packagist License](https://img.shields.io/packagist/l/laramago/laramago.svg?style=flat-square)](https://github.com/gabrielrbarbosa/laramago)
+[![Laravel Compatibility](https://badge.laravel.cloud/badge/laramago/laramago)](https://packagist.org/packages/laramago/laramago)
+
 ## Your Laravel CI should run in seconds, not minutes!
 
 Laravel-aware static analysis for [Mago](https://github.com/carthage-software/mago).
+
+[Buy me a coffee](http://buymeacoffee.com/login?redirect=https://buymeacoffee.com/gabrielrbarbosa)
 
 Laramago is a Composer package that gives Laravel applications a practical migration path from Larastan/PHPStan to Mago. It ships a Laravel runtime preset, a stable `vendor/bin/laramago` command, generated Eloquent model metadata overlays, and a baseline workflow designed for existing applications with real legacy noise.
 
