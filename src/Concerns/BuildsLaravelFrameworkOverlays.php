@@ -1256,6 +1256,31 @@ PHP);
 PHP);
         }
 
+        if (! str_contains($source, 'function when(')) {
+            $source = $this->insertBeforeFinalClassBrace($source, <<<'PHP'
+
+    /**
+     * Laramago overlay for Conditionable fluent query chains.
+     *
+     * @return $this
+     */
+    public function when(mixed $value = null, ?callable $callback = null, ?callable $default = null): static
+    {
+        return $this;
+    }
+
+    /**
+     * Laramago overlay for Conditionable fluent query chains.
+     *
+     * @return $this
+     */
+    public function unless(mixed $value = null, ?callable $callback = null, ?callable $default = null): static
+    {
+        return $this;
+    }
+PHP);
+        }
+
         return $this->insertClassDocblockLines($source, 'Builder', [
             ' * @method $this selectRaw(mixed $expression, array $bindings = [])',
             ' * @method $this selectraw(mixed $expression, array $bindings = [])',

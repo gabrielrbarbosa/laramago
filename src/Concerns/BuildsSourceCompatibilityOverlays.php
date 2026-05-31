@@ -84,6 +84,9 @@ trait BuildsSourceCompatibilityOverlays
         $translated = $this->normalizeStringableInternalFunctionArguments($translated);
         $translated = $this->normalizeFalseReturningInternalFunctionResults($translated);
         $translated = $this->normalizePhpStanScalarReturnCompatibility($translated);
+        $translated = $this->normalizeLaravelCommandReturnCompatibility($translated);
+        $translated = $this->normalizeDeclaredScalarDynamicReturns($translated);
+        $translated = $this->rewriteJsonResponseFactoryReturns($translated);
         $translated = $this->ignoreFalseReturningInternalFunctionPipelines($translated);
         $translated = $this->ignoreGuardedSimpleXmlFalseReturns($translated);
         $translated = $this->ignorePhpStanAcceptedNullAndFalseComparisons($translated);
@@ -775,6 +778,8 @@ trait BuildsSourceCompatibilityOverlays
             ! str_contains($source, 'min(')
             && ! str_contains($source, '->delete(')
             && ! str_contains($source, 'str_replace(')
+            && ! str_contains($source, '->getValue(')
+            && ! str_contains($source, 'format')
         ) {
             return $source;
         }
@@ -803,7 +808,226 @@ trait BuildsSourceCompatibilityOverlays
             $translated,
         ) ?? $translated;
 
+        $translated = preg_replace(
+            '/(\?\s*)(?!\(string\)\s*)str_replace\(/',
+            '$1(string) str_replace(',
+            $translated,
+        ) ?? $translated;
+
+        $translated = preg_replace(
+            '/(:\s*)(?!\(string\)\s*)((?:\$this|self|static)\s*(?:->|::)\s*format[A-Za-z0-9_]*\([^;\r\n]*\))/',
+            '$1(string) $2',
+            $translated,
+        ) ?? $translated;
+
+        $translated = preg_replace(
+            '/(\breturn\s+)(?!\(string\)\s*)(\$[A-Za-z_][A-Za-z0-9_]*\s*->\s*getValue\s*\()/',
+            '$1(string) $2',
+            $translated,
+        ) ?? $translated;
+
         return $translated;
+    }
+
+    private function normalizeLaravelCommandReturnCompatibility(string $source): string
+    {
+        if (
+            ! str_contains($source, 'function handle(')
+            || (! str_contains($source, 'return true;') && ! str_contains($source, 'return false;'))
+            || preg_match('/class\s+[A-Za-z_][A-Za-z0-9_]*\s+extends\s+(?:\\\\?Illuminate\\\\Console\\\\Command|Command)\b/', $source) !== 1
+        ) {
+            return $source;
+        }
+
+        $tokens = token_get_all($source);
+        $offsets = [];
+        $cursor = 0;
+
+        foreach ($tokens as $index => $token) {
+            $offsets[$index] = $cursor;
+            $cursor += strlen(is_array($token) ? $token[1] : $token);
+        }
+
+        $replacements = [];
+        $count = count($tokens);
+
+        for ($index = 0; $index < $count; $index++) {
+            $token = $tokens[$index];
+
+            if (! is_array($token) || $token[0] !== T_FUNCTION) {
+                continue;
+            }
+
+            $nameIndex = $this->nextMeaningfulTokenIndex($tokens, $index + 1);
+
+            if ($nameIndex === null || ! is_array($tokens[$nameIndex]) || $tokens[$nameIndex][0] !== T_STRING || $tokens[$nameIndex][1] !== 'handle') {
+                continue;
+            }
+
+            $openBrace = null;
+
+            for ($cursorIndex = $nameIndex + 1; $cursorIndex < $count; $cursorIndex++) {
+                if ($tokens[$cursorIndex] === ';') {
+                    break;
+                }
+
+                if ($tokens[$cursorIndex] === '{') {
+                    $openBrace = $cursorIndex;
+                    break;
+                }
+            }
+
+            if ($openBrace === null) {
+                continue;
+            }
+
+            $header = substr($source, $offsets[$index], $offsets[$openBrace] - $offsets[$index]);
+
+            if (preg_match('/:\s*int\s*$/', $header) !== 1) {
+                continue;
+            }
+
+            $closeBrace = $this->matchingBraceTokenIndex($tokens, $openBrace);
+
+            if ($closeBrace === null) {
+                continue;
+            }
+
+            $bodyStart = $offsets[$openBrace];
+            $bodyLength = $offsets[$closeBrace] - $bodyStart + 1;
+            $body = substr($source, $bodyStart, $bodyLength);
+            $body = preg_replace('/\breturn\s+true\s*;/', 'return self::SUCCESS;', $body) ?? $body;
+            $body = preg_replace('/\breturn\s+false\s*;/', 'return self::FAILURE;', $body) ?? $body;
+
+            $replacements[] = [$bodyStart, $bodyLength, $body];
+        }
+
+        foreach (array_reverse($replacements) as [$start, $length, $replacement]) {
+            $source = substr_replace($source, $replacement, $start, $length);
+        }
+
+        return $source;
+    }
+
+    private function normalizeDeclaredScalarDynamicReturns(string $source): string
+    {
+        if (! str_contains($source, 'return $') || (! str_contains($source, ': bool') && ! str_contains($source, ': string'))) {
+            return $source;
+        }
+
+        return $this->replaceFunctionBodies($source, static function (string $header, string $body): string {
+            if (preg_match('/:\s*bool\s*$/', $header) === 1) {
+                return preg_replace(
+                    '/(\breturn\s+)(?!\(bool\)\s*)(\$[A-Za-z_][A-Za-z0-9_]*(?:\s*->\s*[A-Za-z_][A-Za-z0-9_]*)+\s*;)/',
+                    '$1(bool) $2',
+                    $body,
+                ) ?? $body;
+            }
+
+            if (preg_match('/:\s*string\s*$/', $header) === 1) {
+                return preg_replace(
+                    '/(\breturn\s+)(?!\(string\)\s*)(\$this\s*->\s*get[A-Z][A-Za-z0-9_]*\([^;\r\n]*\)\s*;)/',
+                    '$1(string) $2',
+                    $body,
+                ) ?? $body;
+            }
+
+            return $body;
+        });
+    }
+
+    private function rewriteJsonResponseFactoryReturns(string $source): string
+    {
+        if (! str_contains($source, 'Response::make(') || ! str_contains($source, 'JsonResponse')) {
+            return $source;
+        }
+
+        $source = $this->replaceFunctionBodies($source, static function (string $header, string $body): string {
+            if (preg_match('/:\s*\\\\?(?:Illuminate\\\\Http\\\\)?JsonResponse\s*$/', $header) !== 1) {
+                return $body;
+            }
+
+            return preg_replace(
+                '/(\breturn\s+(?:\\\\?Illuminate\\\\Support\\\\Facades\\\\)?Response::)make\(\s*(\[)/',
+                '$1json($2',
+                $body,
+            ) ?? $body;
+        });
+
+        if (str_contains($source, '@return JsonResponse')) {
+            $source = preg_replace(
+                '/(\breturn\s+(?:\\\\?Illuminate\\\\Support\\\\Facades\\\\)?Response::)make\(\s*(\[)/',
+                '$1json($2',
+                $source,
+            ) ?? $source;
+        }
+
+        return $source;
+    }
+
+    /**
+     * @param callable(string, string): string $callback
+     */
+    private function replaceFunctionBodies(string $source, callable $callback): string
+    {
+        $tokens = token_get_all($source);
+        $offsets = [];
+        $cursor = 0;
+
+        foreach ($tokens as $index => $token) {
+            $offsets[$index] = $cursor;
+            $cursor += strlen(is_array($token) ? $token[1] : $token);
+        }
+
+        $replacements = [];
+        $count = count($tokens);
+
+        for ($index = 0; $index < $count; $index++) {
+            $token = $tokens[$index];
+
+            if (! is_array($token) || $token[0] !== T_FUNCTION) {
+                continue;
+            }
+
+            $openBrace = null;
+
+            for ($cursorIndex = $index + 1; $cursorIndex < $count; $cursorIndex++) {
+                if ($tokens[$cursorIndex] === ';') {
+                    break;
+                }
+
+                if ($tokens[$cursorIndex] === '{') {
+                    $openBrace = $cursorIndex;
+                    break;
+                }
+            }
+
+            if ($openBrace === null) {
+                continue;
+            }
+
+            $closeBrace = $this->matchingBraceTokenIndex($tokens, $openBrace);
+
+            if ($closeBrace === null) {
+                continue;
+            }
+
+            $bodyStart = $offsets[$openBrace];
+            $bodyLength = $offsets[$closeBrace] - $bodyStart + 1;
+            $header = substr($source, $offsets[$index], $offsets[$openBrace] - $offsets[$index]);
+            $body = substr($source, $bodyStart, $bodyLength);
+            $replacement = $callback($header, $body);
+
+            if ($replacement !== $body) {
+                $replacements[] = [$bodyStart, $bodyLength, $replacement];
+            }
+        }
+
+        foreach (array_reverse($replacements) as [$start, $length, $replacement]) {
+            $source = substr_replace($source, $replacement, $start, $length);
+        }
+
+        return $source;
     }
 
     private function ignoreGuardedSimpleXmlFalseReturns(string $source): string
@@ -840,7 +1064,10 @@ trait BuildsSourceCompatibilityOverlays
                 && ! str_contains($line, '@mago-ignore')
             ) {
                 preg_match('/^\s*/', $line, $indentMatches);
-                $translated .= ($indentMatches[0] ?? '') . '// @mago-ignore analysis:falsable-return-statement analysis:invalid-return-statement' . $lineEnding;
+                $indent = $indentMatches[0] ?? '';
+                $translated .= $indent . 'if (! $' . $matches[1] . ' instanceof \SimpleXMLElement) {' . $lineEnding;
+                $translated .= $indent . '    throw new \RuntimeException(\'Invalid XML document.\');' . $lineEnding;
+                $translated .= $indent . '}' . $lineEnding . $lineEnding;
             }
 
             $translated .= $line . $lineEnding;
@@ -1145,13 +1372,15 @@ trait BuildsSourceCompatibilityOverlays
         $count = count($tokens);
 
         for ($index = $openBrace; $index < $count; $index++) {
-            if ($tokens[$index] === '{') {
+            $token = $tokens[$index];
+
+            if ($token === '{' || (is_array($token) && in_array($token[0], [T_CURLY_OPEN, T_DOLLAR_OPEN_CURLY_BRACES], true))) {
                 $depth++;
 
                 continue;
             }
 
-            if ($tokens[$index] !== '}') {
+            if ($token !== '}') {
                 continue;
             }
 

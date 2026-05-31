@@ -110,6 +110,19 @@ final class UsesDateHelpers
         return [$now, $today, $response, $factory, $method, $static, $message, $parsed];
     }
 
+    public function unauthorized(): \Illuminate\Http\JsonResponse
+    {
+        return response(['ok' => false], 401);
+    }
+
+    /**
+     * @return JsonResponse
+     */
+    public function documentedUnauthorized()
+    {
+        return response(['ok' => false], 401);
+    }
+
     private function now(): mixed
     {
         return null;
@@ -150,6 +163,8 @@ PHP);
             && str_contains($overlay, '\\Illuminate\\Support\\Carbon::now()->subDays(1)')
             && str_contains($overlay, '\\Illuminate\\Support\\Carbon::today()')
             && str_contains($overlay, '\\Illuminate\\Support\\Facades\\Response::make([\'ok\' => true], 202)->withHeaders')
+            && str_contains($overlay, '\\Illuminate\\Support\\Facades\\Response::json([\'ok\' => false], 401)')
+            && substr_count($overlay, '\\Illuminate\\Support\\Facades\\Response::json([\'ok\' => false], 401)') === 2
             && str_contains($overlay, 'response()->json([\'ok\' => true])')
             && str_contains($overlay, '"Generated at  for month {$now->month}"')
             && ! str_contains($overlay, '{$now->toDateString()}')
@@ -248,6 +263,41 @@ final class UsesInternalFunctions
         return $model->delete();
     }
 
+    public function enabled(object $model): bool
+    {
+        return $model->enabled;
+    }
+
+    public function logo(): string
+    {
+        return $this->getLogo();
+    }
+
+    private function getLogo(): ?string
+    {
+        return null;
+    }
+
+    public function expressionValue(object $expression, object $grammar): ?string
+    {
+        return $expression->getValue($grammar);
+    }
+
+    public function strip(?string $value): ?string
+    {
+        return $value !== null ? str_replace(['a'], '', $value) : null;
+    }
+
+    public function formatted(bool $useDashForZero): string
+    {
+        return $useDashForZero ? '-' : $this->formatMoney(0);
+    }
+
+    private function formatMoney(int $value): float|string
+    {
+        return (string) $value;
+    }
+
     public function xml(string $value): \SimpleXMLElement
     {
         $xml = simplexml_load_string($value);
@@ -303,9 +353,14 @@ PHP);
             && str_contains($overlay, '$clean = (string) str_replace([\'a\'], \'\', $model->name)')
             && str_contains($overlay, 'return (int) min($model->limit, 50)')
             && str_contains($overlay, 'return (bool) $model->delete();')
+            && str_contains($overlay, 'return (bool) $model->enabled;')
+            && str_contains($overlay, 'return (string) $this->getLogo();')
+            && str_contains($overlay, 'return (string) $expression->getValue($grammar);')
+            && str_contains($overlay, "return \$value !== null ? (string) str_replace(['a'], '', \$value) : null;")
+            && str_contains($overlay, "return \$useDashForZero ? '-' : (string) \$this->formatMoney(0);")
             && str_contains($overlay, '// @mago-ignore analysis:null-operand analysis:false-operand' . PHP_EOL . '        if ($model->deleted_at === null) {')
             && str_contains($overlay, '// @mago-ignore analysis:null-operand analysis:false-operand' . PHP_EOL . '        if ($model->offset !== false) {')
-            && str_contains($overlay, '// @mago-ignore analysis:falsable-return-statement analysis:invalid-return-statement' . PHP_EOL . '        return $xml;')
+            && str_contains($overlay, 'if (! $xml instanceof \\SimpleXMLElement) {' . PHP_EOL . '            throw new \\RuntimeException(\'Invalid XML document.\');' . PHP_EOL . '        }' . PHP_EOL . PHP_EOL . '        return $xml;')
             && str_contains($overlay, "\\Illuminate\\Support\\Facades\\Storage::disk('local')->put(\$model->path, (string) json_encode(\$model->payload))")
             && str_contains($overlay, "\\Illuminate\\Support\\Facades\\Storage::disk('r2')->get((string) strstr(\$model->path, '/img'))")
             && str_contains($overlay, "\$encoding = (string) mb_convert_encoding(\$model->body, 'UTF-8', (string) mb_detect_encoding(\$model->body))")
@@ -319,6 +374,53 @@ PHP);
     if (! $foundOverlay) {
         fail('source compatibility overlay did not normalize internal function stringable/false-returning pipelines');
     }
+}
+
+function testLaravelCommandReturnOverlayGeneration(string $project, string $root): void
+{
+    require_once $root . '/src/Application.php';
+
+    file_put_contents($project . '/app/SyncCatalogCommand.php', <<<'PHP'
+<?php
+
+namespace App;
+
+use Illuminate\Console\Command;
+
+final class SyncCatalogCommand extends Command
+{
+    public function handle(): int
+    {
+        if (true) {
+            return true;
+        }
+
+        return false;
+    }
+}
+PHP);
+
+    $application = new Laramago\Application();
+    $method = new ReflectionMethod($application, 'phpStanPragmaSubstitutions');
+    $method->invoke($application, $project, [], []);
+
+    $map = json_decode((string) file_get_contents($project . '/.laramago/cache/phpstan-pragma-overlays.json'), true);
+
+    foreach (is_array($map) ? $map : [] as $entry) {
+        if (($entry['original'] ?? null) !== 'app/SyncCatalogCommand.php' || ! is_string($entry['overlay'] ?? null)) {
+            continue;
+        }
+
+        $overlay = file_get_contents($project . '/' . $entry['overlay']);
+
+        if (is_string($overlay)
+            && str_contains($overlay, 'return self::SUCCESS;')
+            && str_contains($overlay, 'return self::FAILURE;')) {
+            return;
+        }
+    }
+
+    fail('source compatibility overlay did not normalize Laravel command bool return codes');
 }
 
 function testLaravelHttpClientWrapperReturnTypeOverlayGeneration(string $project, string $root): void
