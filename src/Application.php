@@ -6,7 +6,7 @@ namespace Laramago;
 
 final class Application
 {
-    private const VERSION = '0.1.6';
+    private const VERSION = '0.1.7';
 
     private const CONFIG_FILE = 'mago.toml';
 
@@ -817,8 +817,6 @@ PHP;
 
 namespace Illuminate\Database\Eloquent\Factories;
 
-use Illuminate\Database\Eloquent\Attributes\UseFactory;
-
 trait HasFactory
 {
     /**
@@ -828,11 +826,7 @@ trait HasFactory
      */
     public static function factory($count = null, $state = [])
     {
-        $factory = static::newFactory() ?? Factory::factoryForModel(static::class);
-
-        return $factory
-            ->count(is_numeric($count) ? $count : null)
-            ->state(is_callable($count) || is_array($count) ? $count : $state);
+        throw new \LogicException('Laramago analysis overlay.');
     }
 
     /**
@@ -840,11 +834,7 @@ trait HasFactory
      */
     protected static function newFactory()
     {
-        if (isset(static::$factory)) {
-            return static::$factory::new();
-        }
-
-        return static::getUseFactoryAttribute() ?? null;
+        return null;
     }
 
     /**
@@ -852,17 +842,6 @@ trait HasFactory
      */
     protected static function getUseFactoryAttribute()
     {
-        $attributes = (new \ReflectionClass(static::class))
-            ->getAttributes(UseFactory::class);
-
-        if ($attributes !== []) {
-            $factory = $attributes[0]->newInstance()->factoryClass::new();
-
-            $factory->guessModelNamesUsing(fn () => static::class);
-
-            return $factory;
-        }
-
         return null;
     }
 }
