@@ -114,6 +114,8 @@ vendor/bin/laramago clear
 
 Writes a minimal `mago.toml` with project source settings. Existing configs are preserved unless `--force` is provided.
 
+Laramago does not exclude application paths by default. Add `--exclude=path/**` only for project-specific legacy areas that should be omitted from analysis.
+
 ### `prepare`
 
 Builds Laravel model overlays without running analysis. This is useful when debugging generated metadata.

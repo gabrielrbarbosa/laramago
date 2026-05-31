@@ -30,6 +30,10 @@ if (! str_contains($config, 'paths = ["app"]')) {
     fail('init did not write the default Laravel app path');
 }
 
+if (! str_contains($config, 'excludes = []')) {
+    fail('init should not write application-specific default excludes');
+}
+
 if (str_contains($config, '[analyzer]') || str_contains($config, '[formatter]') || str_contains($config, '[linter]')) {
     fail('init leaked Laramago runtime defaults into project mago.toml');
 }

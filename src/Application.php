@@ -6,7 +6,7 @@ namespace Laramago;
 
 final class Application
 {
-    private const VERSION = '0.1.8';
+    private const VERSION = '0.1.9';
 
     private const CONFIG_FILE = 'mago.toml';
 
@@ -353,17 +353,7 @@ HELP);
      */
     private function defaultLaravelExcludes(string $projectRoot): array
     {
-        $candidates = [
-            'app/Helpers/Integracao/**',
-            'app/Http/Controllers/NotaFiscal/**',
-            'app/Services/Integracao/**',
-            'app/Services/NotaFiscal/**',
-        ];
-
-        return array_values(array_filter(
-            $candidates,
-            static fn (string $path): bool => file_exists($projectRoot . '/' . rtrim($path, '/*'))
-        ));
+        return [];
     }
 
     private function detectPhpVersion(string $projectRoot): string
