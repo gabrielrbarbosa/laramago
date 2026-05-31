@@ -233,7 +233,7 @@ TOML;
         $includesValue = $this->tomlArray($includes);
         $excludesValue = $this->tomlArray($excludes);
         $ignoreBlock = $this->renderAnalyzerIgnoreBlock($this->runtimeAnalyzerIgnores($arguments, $frameworkOverlayIgnoredCodes));
-        $findUnusedDefinitions = $this->usesPhpStanCompatibilityProfile($arguments) ? 'false' : 'true';
+        $findUnusedDefinitions = in_array('--find-unused-definitions', $arguments, true) ? 'true' : 'false';
 
         return <<<TOML
 version = "1"

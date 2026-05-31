@@ -108,8 +108,8 @@ function testRuntimeConfigGeneration(string $project, string $root): void
         fail('runtime config did not include Composer autoload paths outside the analyzed source paths');
     }
 
-    if (! str_contains($config, 'find-unused-definitions = true')) {
-        fail('runtime config should keep strict unused definition checks by default');
+    if (! str_contains($config, 'find-unused-definitions = false')) {
+        fail('runtime config should keep PHPStan-compatible unused definition checks disabled by default');
     }
 
     foreach (['"mixed-operand"', '"mixed-argument"', '"mixed-assignment"', '"mixed-method-access"', '"mixed-property-access"', '"mixed-array-access"', '"mixed-array-assignment"', '"mixed-return-statement"', '"mixed-property-type-coercion"', '"mixed-array-index"', '"invalid-iterator"', '"invalid-member-selector"', '"less-specific-return-statement"', '"less-specific-argument"', '"less-specific-nested-argument-type"', '"less-specific-nested-return-statement"', '"ambiguous-object-property-access"', '"ambiguous-object-method-access"', '"non-documented-property"', '"non-documented-method"', '"possibly-invalid-argument"', '"possibly-null-property-access"', '"possible-method-access-on-null"', '"possibly-null-argument"'] as $expectedDefaultIgnore) {
@@ -164,6 +164,13 @@ PHP);
 
     if (str_contains($config, '"invalid-argument"')) {
         fail('runtime config should not include PHPStan level ignores unless explicitly requested');
+    }
+
+    $unusedDefinitionRuntimeConfig = $method->invoke($application, $project, ['--find-unused-definitions']);
+    $unusedDefinitionConfig = file_get_contents($project . '/' . $unusedDefinitionRuntimeConfig);
+
+    if (! str_contains((string) $unusedDefinitionConfig, 'find-unused-definitions = true')) {
+        fail('runtime config should allow explicit opt-in to Mago unused definition checks');
     }
 
     $levelRuntimeConfig = $method->invoke($application, $project, ['--phpstan-level=6']);

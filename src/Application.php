@@ -13,7 +13,7 @@ require_once __DIR__ . '/Concerns/RunsMagoProcesses.php';
 
 final class Application
 {
-    private const VERSION = '0.1.65';
+    private const VERSION = '0.1.66';
 
     private const CONFIG_FILE = 'mago.toml';
 
@@ -409,9 +409,9 @@ Usage:
   laramago init [--force] [--source=app] [--exclude=path/**]
   laramago migrate-phpstan [--force] [--phpstan-config=phpstan.neon] [--update-composer]
   laramago prepare
-  laramago analyze [--phpstan-level=0..10|max] [--no-laravel-model-overlays] [--no-laravel-framework-overlays] [--no-phpstan-pragma-overlays] [mago analyze options] [path ...]
-  laramago baseline [--force] [--phpstan-level=0..10|max]
-  laramago verify-baseline [--phpstan-level=0..10|max]
+  laramago analyze [--phpstan-level=0..10|max] [--find-unused-definitions] [--no-laravel-model-overlays] [--no-laravel-framework-overlays] [--no-phpstan-pragma-overlays] [mago analyze options] [path ...]
+  laramago baseline [--force] [--phpstan-level=0..10|max] [--find-unused-definitions]
+  laramago verify-baseline [--phpstan-level=0..10|max] [--find-unused-definitions]
   laramago doctor
   laramago count [path ...]
   laramago codes [path ...]

@@ -24,7 +24,7 @@ Mago 1.29 does not expose a Composer-loaded analyzer extension API equivalent to
 - generated Laravel framework overlays for application-specific auth model types;
 - generated symbol stubs for excluded legacy application paths, so references stay resolvable without analyzing those files;
 - Composer `autoload` and `autoload-dev` PSR-4/classmap paths included for type discovery, so classes outside `app` such as seeders stay resolvable;
-- a default Laravel dynamic-data compatibility profile that filters noisy mixed-data diagnostics common in Eloquent, request, resource, and legacy payload workflows;
+- a default Laravel compatibility profile that filters noisy mixed-data diagnostics common in Eloquent, request, resource, and legacy payload workflows, while leaving Mago's dead-code checks opt-in to match normal Larastan/PHPStan gates;
 - baseline usage for existing applications that still have analyzer debt or want to migrate gradually;
 - path translation so diagnostics point back to application files instead of generated cache files;
 - Composer commands that can replace existing `phpstan` scripts;
@@ -64,7 +64,7 @@ To mimic an existing PHPStan/Larastan gate during migration, opt in explicitly:
 vendor/bin/laramago analyze --phpstan-level=6 --reporting-format=count
 ```
 
-The `--phpstan-level=0..10|max` profile keeps Laramago's default analysis strict for new projects, while filtering Mago diagnostics that are outside the requested Larastan/PHPStan migration gate. Level 6 is common for existing Laravel applications, but the option is not tied to one project.
+The `--phpstan-level=0..10|max` profile keeps Laramago level agnostic, while filtering Mago diagnostics that are outside the requested Larastan/PHPStan migration gate. Level 6 is common for existing Laravel applications, but the option is not tied to one project.
 
 For existing applications, create a baseline only when Mago reports issues that are not part of the migration scope yet:
 
@@ -152,9 +152,9 @@ vendor/bin/laramago analyze --no-phpstan-pragma-overlays
 vendor/bin/laramago init [--force] [--source=app] [--exclude=path/**]
 vendor/bin/laramago migrate-phpstan [--force] [--phpstan-config=phpstan.neon] [--update-composer]
 vendor/bin/laramago prepare
-vendor/bin/laramago analyze [--phpstan-level=0..10|max] [--no-phpstan-pragma-overlays] [mago analyze options] [path ...]
-vendor/bin/laramago baseline [--force] [--phpstan-level=0..10|max]
-vendor/bin/laramago verify-baseline [--phpstan-level=0..10|max]
+vendor/bin/laramago analyze [--phpstan-level=0..10|max] [--find-unused-definitions] [--no-phpstan-pragma-overlays] [mago analyze options] [path ...]
+vendor/bin/laramago baseline [--force] [--phpstan-level=0..10|max] [--find-unused-definitions]
+vendor/bin/laramago verify-baseline [--phpstan-level=0..10|max] [--find-unused-definitions]
 vendor/bin/laramago doctor
 vendor/bin/laramago count [path ...]
 vendor/bin/laramago codes [path ...]
@@ -184,6 +184,8 @@ Builds Laravel model overlays without running analysis. This is useful when debu
 Runs `mago analyze` with Laramago's generated runtime config, model overlays, and the project baseline when present.
 
 When multiple Laramago commands run in the same project, `analyze` waits for the project lock before preparing overlays and invoking Mago. This keeps CI logs reliable even when Composer scripts or local terminals overlap.
+
+By default Laramago disables Mago's unused-definition pass because Larastan/PHPStan level gates do not normally fail Laravel applications for unused app methods and properties. Pass `--find-unused-definitions` when you intentionally want that stricter Mago dead-code signal.
 
 ### `baseline`
 
@@ -247,11 +249,11 @@ Laramago owns Laravel integration, not your project's strictness level. During `
 
 - Laravel linter integration enabled;
 - Pint-compatible formatter defaults;
-- analyzer settings suitable for legacy Laravel applications, including Laravel dynamic-data compatibility ignores for mixed request, model, collection, and payload flows;
+- analyzer settings suitable for Laravel applications, including Laravel dynamic-data compatibility ignores for mixed request, model, collection, and payload flows, with unused-definition checks disabled unless `--find-unused-definitions` is passed;
 - excluded-path symbol stubs added to runtime includes when project excludes are present;
 - the project source settings copied from the committed `mago.toml`.
 
-Laramago's default analyzer profile intentionally suppresses Laravel dynamic-data diagnostics that Mago cannot model without framework-specific analyzer extensions yet, while keeping concrete type mismatches and control-flow issues visible. Use `laramago-analyzer-baseline.toml`, project `mago.toml` settings, or Mago flags such as `--minimum-fail-level` and `--minimum-report-level` for project-specific debt that is outside the shared Laravel compatibility profile.
+Laramago's default analyzer profile intentionally suppresses Laravel dynamic-data diagnostics that Mago cannot model without framework-specific analyzer extensions yet, while keeping concrete type mismatches and control-flow issues visible. It also leaves unused-definition detection off by default for PHPStan/Larastan parity. Use `laramago-analyzer-baseline.toml`, `--find-unused-definitions`, project `mago.toml` settings, or Mago flags such as `--minimum-fail-level` and `--minimum-report-level` for project-specific debt that is outside the shared Laravel compatibility profile.
 
 The `--phpstan-level` option is an explicit migration preset for projects that previously used a PHPStan/Larastan level gate. It is opt-in so Laramago stays level agnostic for new projects and stricter teams. `--phpstan-level=max` keeps Mago's native strictness, while lower migration levels progressively suppress Mago checks that PHPStan/Larastan would not normally fail at that level.
 

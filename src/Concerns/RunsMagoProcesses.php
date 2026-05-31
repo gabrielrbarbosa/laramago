@@ -84,6 +84,7 @@ trait RunsMagoProcesses
                 && $argument !== '--no-laravel-model-overlays'
                 && $argument !== '--no-laravel-framework-overlays'
                 && $argument !== '--no-phpstan-pragma-overlays'
+                && $argument !== '--find-unused-definitions'
         ));
     }
 
