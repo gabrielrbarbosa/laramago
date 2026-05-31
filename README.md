@@ -98,6 +98,8 @@ During `analyze`, `baseline`, and `verify-baseline`, Laramago:
 
 The application source tree is not modified.
 
+Laramago serializes cache-producing commands per project, so overlapping `analyze`, `doctor`, `prepare`, `baseline`, `verify-baseline`, and `clear` invocations cannot mutate the same `.laramago/cache` files at the same time.
+
 Generated overlays currently add:
 
 - `@property` entries for database columns with cast-aware types, including encrypted casts, collection/array object casts, date casts, and enum casts;
@@ -169,6 +171,8 @@ Builds Laravel model overlays without running analysis. This is useful when debu
 ### `analyze`
 
 Runs `mago analyze` with Laramago's generated runtime config, model overlays, and the project baseline when present.
+
+When multiple Laramago commands run in the same project, `analyze` waits for the project lock before preparing overlays and invoking Mago. This keeps CI logs reliable even when Composer scripts or local terminals overlap.
 
 ### `baseline`
 

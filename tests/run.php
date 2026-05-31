@@ -64,6 +64,7 @@ testRuntimeConfigGeneration($project, $root);
 testPhpStanMigration($project, $root, $binary);
 testExcludedSymbolStubGeneration($project, $root);
 testRaceSafeCacheDirectoryOperations($project, $root);
+testProjectLockSerializesCacheCommands($project, $binary);
 testProjectClassDiscoveryUsesConfiguredSourcePaths($project, $root);
 testAnalysisIgnoresStaleRuntimeBaseline($project, $root);
 testPhpStanPragmaOverlayGeneration($project, $root);
@@ -473,6 +474,65 @@ function testRaceSafeCacheDirectoryOperations(string $project, string $root): vo
 
     if (is_dir($raceDirectory)) {
         fail('cache directory operations left the test directory behind');
+    }
+}
+
+function testProjectLockSerializesCacheCommands(string $project, string $binary): void
+{
+    $lockDirectory = $project . '/.laramago';
+    $lockPath = $lockDirectory . '/laramago.lock';
+
+    if (! is_dir($lockDirectory)) {
+        mkdir($lockDirectory, 0777, true);
+    }
+
+    $process = proc_open([
+        PHP_BINARY,
+        '-r',
+        <<<'PHP'
+$handle = fopen($argv[1], 'c');
+flock($handle, LOCK_EX);
+fwrite(STDOUT, "locked\n");
+sleep(1);
+flock($handle, LOCK_UN);
+fclose($handle);
+PHP,
+        $lockPath,
+    ], [
+        0 => STDIN,
+        1 => ['pipe', 'w'],
+        2 => ['pipe', 'w'],
+    ], $pipes);
+
+    if (! is_resource($process)) {
+        fail('unable to start lock holder process');
+    }
+
+    $ready = fgets($pipes[1]);
+
+    if ($ready !== "locked\n") {
+        proc_close($process);
+        fail('lock holder process did not acquire the lock');
+    }
+
+    $startedAt = microtime(true);
+    $result = captureRun([PHP_BINARY, $binary, 'clear', '--project=' . $project]);
+    $elapsed = microtime(true) - $startedAt;
+    $stderr = stream_get_contents($pipes[2]);
+    fclose($pipes[1]);
+    fclose($pipes[2]);
+    $lockHolderExitCode = proc_close($process);
+
+    if ($lockHolderExitCode !== 0 || (is_string($stderr) && $stderr !== '')) {
+        fail('lock holder process failed');
+    }
+
+    if ($result['exitCode'] !== 0) {
+        fail('clear command failed while waiting for the project lock');
+    }
+
+    if ($elapsed < 0.75) {
+        fail('project lock did not serialize cache commands');
     }
 }
 

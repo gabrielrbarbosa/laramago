@@ -6,13 +6,17 @@ namespace Laramago;
 
 final class Application
 {
-    private const VERSION = '0.1.29';
+    private const VERSION = '0.1.30';
 
     private const CONFIG_FILE = 'mago.toml';
 
     private const BASELINE_FILE = 'laramago-analyzer-baseline.toml';
 
     private const CACHE_DIR = '.laramago/cache';
+
+    private const STATE_DIR = '.laramago';
+
+    private const LOCK_FILE = '.laramago/laramago.lock';
 
     private const MODEL_OVERLAY_DIR = '.laramago/cache/model-overlays';
 
@@ -101,13 +105,16 @@ final class Application
     private function prepare(array $arguments): int
     {
         $projectRoot = $this->projectRoot($arguments);
-        $modelSubstitutions = $this->laravelModelSubstitutions($projectRoot, $arguments);
-        $frameworkSubstitutions = $this->laravelFrameworkSubstitutions($projectRoot, $arguments);
 
-        $this->line('Prepared ' . (int) (count($modelSubstitutions) / 2) . ' Laravel model overlays.');
-        $this->line('Prepared ' . (int) (count($frameworkSubstitutions) / 2) . ' Laravel framework overlays.');
+        return $this->withProjectLock($projectRoot, function () use ($projectRoot, $arguments): int {
+            $modelSubstitutions = $this->laravelModelSubstitutions($projectRoot, $arguments);
+            $frameworkSubstitutions = $this->laravelFrameworkSubstitutions($projectRoot, $arguments);
 
-        return 0;
+            $this->line('Prepared ' . (int) (count($modelSubstitutions) / 2) . ' Laravel model overlays.');
+            $this->line('Prepared ' . (int) (count($frameworkSubstitutions) / 2) . ' Laravel framework overlays.');
+
+            return 0;
+        });
     }
 
     /**
@@ -186,28 +193,31 @@ final class Application
     private function analyze(array $arguments): int
     {
         $projectRoot = $this->projectRoot($arguments);
-        $mago = $this->findMagoBinary($projectRoot);
 
-        if ($mago === null) {
-            $this->line('Unable to find Mago. Install carthage-software/mago or laramago/laramago in this project.');
+        return $this->withProjectLock($projectRoot, function () use ($projectRoot, $arguments): int {
+            $mago = $this->findMagoBinary($projectRoot);
 
-            return 1;
-        }
+            if ($mago === null) {
+                $this->line('Unable to find Mago. Install carthage-software/mago or laramago/laramago in this project.');
 
-        $runtimeConfig = $this->prepareRuntimeConfig($projectRoot, $arguments);
-        $modelSubstitutions = $this->laravelModelSubstitutions($projectRoot, $arguments);
-        $frameworkSubstitutions = $this->laravelFrameworkSubstitutions($projectRoot, $arguments);
-        $pragmaSubstitutions = $this->phpStanPragmaSubstitutions($projectRoot, $arguments, $this->substitutionOriginalPaths($modelSubstitutions));
-        $substitutions = array_merge($modelSubstitutions, $frameworkSubstitutions, $pragmaSubstitutions);
-        $command = [$mago, '--config', $runtimeConfig, 'analyze'];
-        $command = array_merge(
-            $command,
-            $this->defaultAnalyzeFlags($projectRoot, $arguments, $modelSubstitutions !== []),
-            $substitutions,
-            $this->stripLaramagoOptions($arguments),
-        );
+                return 1;
+            }
 
-        return $this->process($command, $projectRoot);
+            $runtimeConfig = $this->prepareRuntimeConfig($projectRoot, $arguments);
+            $modelSubstitutions = $this->laravelModelSubstitutions($projectRoot, $arguments);
+            $frameworkSubstitutions = $this->laravelFrameworkSubstitutions($projectRoot, $arguments);
+            $pragmaSubstitutions = $this->phpStanPragmaSubstitutions($projectRoot, $arguments, $this->substitutionOriginalPaths($modelSubstitutions));
+            $substitutions = array_merge($modelSubstitutions, $frameworkSubstitutions, $pragmaSubstitutions);
+            $command = [$mago, '--config', $runtimeConfig, 'analyze'];
+            $command = array_merge(
+                $command,
+                $this->defaultAnalyzeFlags($projectRoot, $arguments, $modelSubstitutions !== []),
+                $substitutions,
+                $this->stripLaramagoOptions($arguments),
+            );
+
+            return $this->process($command, $projectRoot);
+        });
     }
 
     /**
@@ -216,48 +226,51 @@ final class Application
     private function baseline(array $arguments): int
     {
         $projectRoot = $this->projectRoot($arguments);
-        $mago = $this->findMagoBinary($projectRoot);
 
-        if ($mago === null) {
-            $this->line('Unable to find Mago. Install carthage-software/mago or laramago/laramago in this project.');
+        return $this->withProjectLock($projectRoot, function () use ($projectRoot, $arguments): int {
+            $mago = $this->findMagoBinary($projectRoot);
 
-            return 1;
-        }
+            if ($mago === null) {
+                $this->line('Unable to find Mago. Install carthage-software/mago or laramago/laramago in this project.');
 
-        $baselinePath = self::BASELINE_FILE;
-        $runtimeConfig = $this->prepareRuntimeConfig($projectRoot, $arguments);
-        $command = [
-            $mago,
-            '--config',
-            $runtimeConfig,
-            'analyze',
-            '--baseline',
-            $baselinePath,
-            '--generate-baseline',
-            '--reporting-format=count',
-        ];
+                return 1;
+            }
 
-        $substitutions = $this->laravelModelSubstitutions($projectRoot, $arguments);
-        $command = array_merge(
-            $command,
-            $substitutions,
-            $this->laravelFrameworkSubstitutions($projectRoot, $arguments),
-            $this->phpStanPragmaSubstitutions($projectRoot, $arguments, $this->substitutionOriginalPaths($substitutions)),
-        );
+            $baselinePath = self::BASELINE_FILE;
+            $runtimeConfig = $this->prepareRuntimeConfig($projectRoot, $arguments);
+            $command = [
+                $mago,
+                '--config',
+                $runtimeConfig,
+                'analyze',
+                '--baseline',
+                $baselinePath,
+                '--generate-baseline',
+                '--reporting-format=count',
+            ];
 
-        if (is_file($projectRoot . '/' . $baselinePath) && ! in_array('--force', $arguments, true)) {
-            $command[] = '--backup-baseline';
-        }
+            $substitutions = $this->laravelModelSubstitutions($projectRoot, $arguments);
+            $command = array_merge(
+                $command,
+                $substitutions,
+                $this->laravelFrameworkSubstitutions($projectRoot, $arguments),
+                $this->phpStanPragmaSubstitutions($projectRoot, $arguments, $this->substitutionOriginalPaths($substitutions)),
+            );
 
-        $command = array_merge($command, $this->stripLaramagoOptions($arguments));
+            if (is_file($projectRoot . '/' . $baselinePath) && ! in_array('--force', $arguments, true)) {
+                $command[] = '--backup-baseline';
+            }
 
-        $exitCode = $this->process($command, $projectRoot);
+            $command = array_merge($command, $this->stripLaramagoOptions($arguments));
 
-        if ($exitCode === 0 && $substitutions !== []) {
-            $this->translateBaselinePaths($projectRoot, overlayToOriginal: true, source: self::BASELINE_FILE, target: self::BASELINE_FILE);
-        }
+            $exitCode = $this->process($command, $projectRoot);
 
-        return $exitCode;
+            if ($exitCode === 0 && $substitutions !== []) {
+                $this->translateBaselinePaths($projectRoot, overlayToOriginal: true, source: self::BASELINE_FILE, target: self::BASELINE_FILE);
+            }
+
+            return $exitCode;
+        });
     }
 
     /**
@@ -266,32 +279,35 @@ final class Application
     private function verifyBaseline(array $arguments): int
     {
         $projectRoot = $this->projectRoot($arguments);
-        $mago = $this->findMagoBinary($projectRoot);
 
-        if ($mago === null) {
-            $this->line('Unable to find Mago. Install carthage-software/mago or laramago/laramago in this project.');
+        return $this->withProjectLock($projectRoot, function () use ($projectRoot, $arguments): int {
+            $mago = $this->findMagoBinary($projectRoot);
 
-            return 1;
-        }
+            if ($mago === null) {
+                $this->line('Unable to find Mago. Install carthage-software/mago or laramago/laramago in this project.');
 
-        $modelSubstitutions = $this->laravelModelSubstitutions($projectRoot, $arguments);
-        $substitutions = array_merge(
-            $modelSubstitutions,
-            $this->laravelFrameworkSubstitutions($projectRoot, $arguments),
-            $this->phpStanPragmaSubstitutions($projectRoot, $arguments, $this->substitutionOriginalPaths($modelSubstitutions)),
-        );
+                return 1;
+            }
 
-        $runtimeConfig = $this->prepareRuntimeConfig($projectRoot, $arguments);
+            $modelSubstitutions = $this->laravelModelSubstitutions($projectRoot, $arguments);
+            $substitutions = array_merge(
+                $modelSubstitutions,
+                $this->laravelFrameworkSubstitutions($projectRoot, $arguments),
+                $this->phpStanPragmaSubstitutions($projectRoot, $arguments, $this->substitutionOriginalPaths($modelSubstitutions)),
+            );
 
-        return $this->process(array_merge([
-            $mago,
-            '--config',
-            $runtimeConfig,
-            'analyze',
-        ], $this->defaultAnalyzeFlags($projectRoot, $arguments, $modelSubstitutions !== []), [
-            '--verify-baseline',
-            '--reporting-format=count',
-        ], $substitutions, $this->stripLaramagoOptions($arguments)), $projectRoot);
+            $runtimeConfig = $this->prepareRuntimeConfig($projectRoot, $arguments);
+
+            return $this->process(array_merge([
+                $mago,
+                '--config',
+                $runtimeConfig,
+                'analyze',
+            ], $this->defaultAnalyzeFlags($projectRoot, $arguments, $modelSubstitutions !== []), [
+                '--verify-baseline',
+                '--reporting-format=count',
+            ], $substitutions, $this->stripLaramagoOptions($arguments)), $projectRoot);
+        });
     }
 
     /**
@@ -300,15 +316,18 @@ final class Application
     private function clear(array $arguments): int
     {
         $projectRoot = $this->projectRoot($arguments);
-        $cachePath = $projectRoot . '/' . self::CACHE_DIR;
 
-        if (is_dir($cachePath)) {
-            $this->removeDirectory($cachePath);
-        }
+        return $this->withProjectLock($projectRoot, function () use ($projectRoot): int {
+            $cachePath = $projectRoot . '/' . self::CACHE_DIR;
 
-        $this->line("Cleared {$cachePath}");
+            if (is_dir($cachePath)) {
+                $this->removeDirectory($cachePath);
+            }
 
-        return 0;
+            $this->line("Cleared {$cachePath}");
+
+            return 0;
+        });
     }
 
     /**
@@ -317,46 +336,49 @@ final class Application
     private function doctor(array $arguments): int
     {
         $projectRoot = $this->projectRoot($arguments);
-        $failed = false;
 
-        $this->line("Project: {$projectRoot}");
+        return $this->withProjectLock($projectRoot, function () use ($projectRoot, $arguments): int {
+            $failed = false;
 
-        if ($this->findMagoBinary($projectRoot) === null) {
-            $this->line('FAIL Mago binary was not found.');
-            $failed = true;
-        } else {
-            $this->line('OK   Mago binary is available.');
-        }
+            $this->line("Project: {$projectRoot}");
 
-        if (is_file($projectRoot . '/' . self::CONFIG_FILE)) {
-            $this->line('OK   mago.toml exists.');
-        } else {
-            $this->line('FAIL mago.toml is missing. Run `vendor/bin/laramago init`.');
-            $failed = true;
-        }
+            if ($this->findMagoBinary($projectRoot) === null) {
+                $this->line('FAIL Mago binary was not found.');
+                $failed = true;
+            } else {
+                $this->line('OK   Mago binary is available.');
+            }
 
-        if (is_file($projectRoot . '/' . self::BASELINE_FILE)) {
-            $this->line('OK   laramago-analyzer-baseline.toml exists.');
-        } else {
-            $this->line('OK   No Laramago baseline configured; analysis will run without one.');
-        }
+            if (is_file($projectRoot . '/' . self::CONFIG_FILE)) {
+                $this->line('OK   mago.toml exists.');
+            } else {
+                $this->line('FAIL mago.toml is missing. Run `vendor/bin/laramago init`.');
+                $failed = true;
+            }
 
-        if (! is_file($projectRoot . '/bootstrap/app.php')) {
-            $this->line('WARN Laravel bootstrap file was not found; model overlays will be skipped.');
+            if (is_file($projectRoot . '/' . self::BASELINE_FILE)) {
+                $this->line('OK   laramago-analyzer-baseline.toml exists.');
+            } else {
+                $this->line('OK   No Laramago baseline configured; analysis will run without one.');
+            }
+
+            if (! is_file($projectRoot . '/bootstrap/app.php')) {
+                $this->line('WARN Laravel bootstrap file was not found; model overlays will be skipped.');
+
+                return $failed ? 1 : 0;
+            }
+
+            $this->line('OK   Laravel bootstrap file exists.');
+
+            $runtimeConfig = $this->prepareRuntimeConfig($projectRoot, $arguments);
+            $modelSubstitutions = $this->laravelModelSubstitutions($projectRoot, $arguments);
+            $frameworkSubstitutions = $this->laravelFrameworkSubstitutions($projectRoot, $arguments);
+            $this->line('OK   Prepared Laramago runtime config: ' . $runtimeConfig);
+            $this->line('OK   Prepared ' . (int) (count($modelSubstitutions) / 2) . ' Laravel model overlays.');
+            $this->line('OK   Prepared ' . (int) (count($frameworkSubstitutions) / 2) . ' Laravel framework overlays.');
 
             return $failed ? 1 : 0;
-        }
-
-        $this->line('OK   Laravel bootstrap file exists.');
-
-        $runtimeConfig = $this->prepareRuntimeConfig($projectRoot, $arguments);
-        $modelSubstitutions = $this->laravelModelSubstitutions($projectRoot, $arguments);
-        $frameworkSubstitutions = $this->laravelFrameworkSubstitutions($projectRoot, $arguments);
-        $this->line('OK   Prepared Laramago runtime config: ' . $runtimeConfig);
-        $this->line('OK   Prepared ' . (int) (count($modelSubstitutions) / 2) . ' Laravel model overlays.');
-        $this->line('OK   Prepared ' . (int) (count($frameworkSubstitutions) / 2) . ' Laravel framework overlays.');
-
-        return $failed ? 1 : 0;
+        });
     }
 
     private function help(): int
@@ -2303,6 +2325,33 @@ PHP;
             'stdout' => is_string($stdout) ? $stdout : '',
             'stderr' => is_string($stderr) ? $stderr : '',
         ];
+    }
+
+    private function withProjectLock(string $projectRoot, \Closure $callback): int
+    {
+        $this->ensureDirectory($projectRoot . '/' . self::STATE_DIR);
+
+        $handle = fopen($projectRoot . '/' . self::LOCK_FILE, 'c');
+
+        if ($handle === false) {
+            $this->line('Unable to open Laramago project lock.');
+
+            return 1;
+        }
+
+        if (! flock($handle, LOCK_EX)) {
+            fclose($handle);
+            $this->line('Unable to acquire Laramago project lock.');
+
+            return 1;
+        }
+
+        try {
+            return $callback();
+        } finally {
+            flock($handle, LOCK_UN);
+            fclose($handle);
+        }
     }
 
     private function ensureDirectory(string $directory): void
