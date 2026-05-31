@@ -61,6 +61,7 @@ testDoctorTreatsMissingBaselineAsOptional($project, $binary);
 testBaselinePathTranslation($project, $root);
 testOutputPathTranslation($project, $root);
 testRuntimeConfigGeneration($project, $root);
+testNativeMagoBinaryIsPreferred($project, $root);
 testPhpStanMigration($project, $root, $binary);
 testExcludedSymbolStubGeneration($project, $root);
 testRaceSafeCacheDirectoryOperations($project, $root);
@@ -71,6 +72,7 @@ testPhpStanPragmaOverlayGeneration($project, $root);
 testLaravelDateHelperOverlayGeneration($project, $root);
 testLaravelCollectionMacroOverlayGeneration($project, $root);
 testLaravelRequestPropertyReadOverlayGeneration($project, $root);
+testLaravelFormRequestDynamicPropertyOverlayGeneration($project, $root);
 testCaseInsensitiveOverlaySkipsSingleAliasFiles($project, $root);
 testCaseInsensitiveOverlayRespectsExcludes($project, $root);
 testTraitSelfCallOverlayGeneration($project, $root);
@@ -300,6 +302,28 @@ function testRuntimeConfigGeneration(string $project, string $root): void
 
     if (! str_contains($levelConfig, 'find-unused-definitions = false')) {
         fail('PHPStan level 6 compatibility should disable Mago unused definition checks');
+    }
+}
+
+function testNativeMagoBinaryIsPreferred(string $project, string $root): void
+{
+    require_once $root . '/src/Application.php';
+
+    $nativeDirectory = $project . '/vendor/carthage-software/mago/composer/bin/1.29.0/mago-1.29.0-x86_64-unknown-linux-gnu';
+    $proxyDirectory = $project . '/vendor/bin';
+    mkdir($nativeDirectory, 0777, true);
+    mkdir($proxyDirectory, 0777, true);
+    file_put_contents($nativeDirectory . '/mago', '#!/bin/sh');
+    file_put_contents($proxyDirectory . '/mago', '#!/usr/bin/env php');
+    chmod($nativeDirectory . '/mago', 0755);
+    chmod($proxyDirectory . '/mago', 0755);
+
+    $application = new Laramago\Application();
+    $method = new ReflectionMethod($application, 'findMagoBinary');
+    $binary = $method->invoke($application, $project);
+
+    if ($binary !== $nativeDirectory . '/mago') {
+        fail('Laramago should prefer the native Mago binary over the Composer PHP proxy');
     }
 }
 
@@ -843,13 +867,21 @@ use Illuminate\Http\Request;
 
 class SearchController
 {
+    protected Request $request;
+
+    public function __construct(Request $request)
+    {
+        $this->request = $request;
+    }
+
     public function index(Request $request): mixed
     {
         $value = $request->search;
+        $stored = $this->request->per_page;
         $hasSearch = isset($request->search);
         $request->search = 'changed';
 
-        return [$value, $hasSearch];
+        return [$value, $stored, $hasSearch];
     }
 }
 PHP);
@@ -869,6 +901,7 @@ PHP);
 
         if (is_string($overlay)
             && str_contains($overlay, '$value = $request->input(\'search\');')
+            && str_contains($overlay, '$stored = $this->request->input(\'per_page\');')
             && str_contains($overlay, '$hasSearch = isset($request->search);')
             && str_contains($overlay, '$request->search = \'changed\';')) {
             return;
@@ -876,6 +909,77 @@ PHP);
     }
 
     fail('Laravel request property read overlay did not rewrite dynamic input access safely');
+}
+
+function testLaravelFormRequestDynamicPropertyOverlayGeneration(string $project, string $root): void
+{
+    require_once $root . '/src/Application.php';
+
+    mkdir($project . '/app/Http/Requests/Orders', 0777, true);
+
+    file_put_contents($project . '/app/Http/Requests/Orders/TracksTenant.php', <<<'PHP'
+<?php
+
+namespace App\Http\Requests\Orders;
+
+trait TracksTenant
+{
+    private int $clienteSistemaId;
+}
+PHP);
+
+    file_put_contents($project . '/app/Http/Requests/Orders/StoreOrderRequest.php', <<<'PHP'
+<?php
+
+namespace App\Http\Requests\Orders;
+
+use Illuminate\Foundation\Http\FormRequest;
+
+class StoreOrderRequest extends FormRequest
+{
+    use TracksTenant;
+
+    public function prepareForValidation(): void
+    {
+        $local = new \stdClass();
+        $this->service = new \stdClass();
+        $this->merge(['product' => $this->product]);
+    }
+
+    public function rules(): array
+    {
+        return [
+            'quantity' => "lte:{$this->quantityLimit}",
+        ];
+    }
+}
+PHP);
+
+    $application = new Laramago\Application();
+    $method = new ReflectionMethod($application, 'phpStanPragmaSubstitutions');
+    $method->invoke($application, $project, [], []);
+
+    $map = json_decode((string) file_get_contents($project . '/.laramago/cache/phpstan-pragma-overlays.json'), true);
+
+    foreach (is_array($map) ? $map : [] as $entry) {
+        if (($entry['original'] ?? null) !== 'app/Http/Requests/Orders/StoreOrderRequest.php' || ! is_string($entry['overlay'] ?? null)) {
+            continue;
+        }
+
+        $overlay = file_get_contents($project . '/' . $entry['overlay']);
+
+        if (is_string($overlay)
+            && str_contains($overlay, '@property mixed $service')
+            && str_contains($overlay, '@property mixed $product')
+            && str_contains($overlay, '@property mixed $quantityLimit')
+            && ! str_contains($overlay, '@property mixed $local')
+            && ! str_contains($overlay, '@property mixed $clienteSistemaId')
+            && str_contains($overlay, 'public function __set(string $key, mixed $value): void')) {
+            return;
+        }
+    }
+
+    fail('Laravel FormRequest overlay did not document dynamic request properties');
 }
 
 function testCaseInsensitiveOverlaySkipsSingleAliasFiles(string $project, string $root): void
@@ -1226,6 +1330,7 @@ function testLaravelFrameworkOverlayGeneration(string $project, string $root): v
     mkdir($project . '/vendor/laravel/framework/src/Illuminate/Database/Eloquent/Factories', 0777, true);
     mkdir($project . '/vendor/laravel/framework/src/Illuminate/Database/Query', 0777, true);
     mkdir($project . '/vendor/laravel/framework/src/Illuminate/Auth', 0777, true);
+    mkdir($project . '/vendor/laravel/framework/src/Illuminate/Contracts/Broadcasting', 0777, true);
     mkdir($project . '/vendor/laravel/framework/src/Illuminate/Contracts/Auth', 0777, true);
     mkdir($project . '/vendor/laravel/framework/src/Illuminate/Contracts/Foundation', 0777, true);
     mkdir($project . '/vendor/laravel/framework/src/Illuminate/Foundation', 0777, true);
@@ -1233,6 +1338,7 @@ function testLaravelFrameworkOverlayGeneration(string $project, string $root): v
     mkdir($project . '/vendor/laravel/framework/src/Illuminate/Routing', 0777, true);
     mkdir($project . '/vendor/laravel/framework/src/Illuminate/Support/Facades', 0777, true);
     mkdir($project . '/vendor/laravel/socialite/src/Contracts', 0777, true);
+    mkdir($project . '/vendor/laravel/socialite/src/Two', 0777, true);
     mkdir($project . '/vendor/nesbot/carbon/src/Carbon', 0777, true);
 
     file_put_contents($project . '/config/auth.php', <<<'PHP'
@@ -1250,6 +1356,20 @@ return [
 PHP);
 
     file_put_contents($project . '/vendor/laravel/framework/src/Illuminate/Contracts/Auth/Guard.php', '<?php');
+
+    file_put_contents($project . '/vendor/laravel/framework/src/Illuminate/Contracts/Broadcasting/ShouldBroadcast.php', <<<'PHP'
+<?php
+
+namespace Illuminate\Contracts\Broadcasting;
+
+interface ShouldBroadcast
+{
+    /**
+     * @return \Illuminate\Broadcasting\Channel|\Illuminate\Broadcasting\Channel[]|string[]|string
+     */
+    public function broadcastOn();
+}
+PHP);
 
     file_put_contents($project . '/vendor/laravel/framework/src/Illuminate/Auth/AuthManager.php', <<<'PHP'
 <?php
@@ -1366,7 +1486,22 @@ namespace Laravel\Socialite\Contracts;
 
 interface Provider
 {
+    /**
+     * @return \Laravel\Socialite\Contracts\User
+     */
+    public function user();
+
     public function redirect();
+}
+PHP);
+
+    file_put_contents($project . '/vendor/laravel/socialite/src/Two/User.php', <<<'PHP'
+<?php
+
+namespace Laravel\Socialite\Two;
+
+class User
+{
 }
 PHP);
 
@@ -1506,7 +1641,7 @@ PHP);
     $method = new ReflectionMethod($application, 'laravelFrameworkSubstitutions');
     $substitutions = $method->invoke($application, $project, []);
 
-    if (! is_array($substitutions) || count($substitutions) !== 38) {
+    if (! is_array($substitutions) || count($substitutions) !== 42) {
         fail('framework overlay generation returned unexpected substitutions');
     }
 
@@ -1520,6 +1655,7 @@ PHP);
     $baseCarbonImmutableOverlay = file_get_contents($project . '/.laramago/cache/framework-overlays/BaseCarbonImmutable.php');
     $foundationHelpersOverlay = file_get_contents($project . '/.laramago/cache/framework-overlays/FoundationHelpers.php');
     $notificationOverlay = file_get_contents($project . '/.laramago/cache/framework-overlays/Notification.php');
+    $shouldBroadcastOverlay = file_get_contents($project . '/.laramago/cache/framework-overlays/ShouldBroadcast.php');
     $eloquentBuilderOverlay = file_get_contents($project . '/.laramago/cache/framework-overlays/Builder.php');
     $eloquentModelOverlay = file_get_contents($project . '/.laramago/cache/framework-overlays/EloquentModel.php');
     $hasAttributesOverlay = file_get_contents($project . '/.laramago/cache/framework-overlays/HasAttributes.php');
@@ -1529,6 +1665,7 @@ PHP);
     $scopeOverlay = file_get_contents($project . '/.laramago/cache/framework-overlays/Scope.php');
     $fromCollectionOverlay = file_get_contents($project . '/.laramago/cache/framework-overlays/FromCollection.php');
     $socialiteProviderOverlay = file_get_contents($project . '/.laramago/cache/framework-overlays/SocialiteProvider.php');
+    $socialiteUserOverlay = file_get_contents($project . '/.laramago/cache/framework-overlays/SocialiteUser.php');
 
     if (! is_string($guardOverlay) || ! str_contains($guardOverlay, '@return \\App\\Models\\Usuario\\Usuario|null')) {
         fail('guard overlay did not use the configured auth model');
@@ -1566,12 +1703,20 @@ PHP);
         fail('base Carbon immutable overlay did not expose lowercase Carbon method aliases');
     }
 
-    if (! is_string($notificationOverlay) || ! str_contains($notificationOverlay, 'public function towhatsapp(mixed ...$arguments): mixed {}') || str_contains($notificationOverlay, 'public mixed $sendType;')) {
+    if (! is_string($notificationOverlay) || str_contains($notificationOverlay, '@property mixed $sendType') || ! str_contains($notificationOverlay, 'public function __get(string $key): mixed') || ! str_contains($notificationOverlay, 'public function towhatsapp(mixed ...$arguments): mixed {}') || str_contains($notificationOverlay, 'public mixed $sendType;')) {
         fail('notification overlay did not expose project custom channel members');
     }
 
-    if (! is_string($socialiteProviderOverlay) || ! str_contains($socialiteProviderOverlay, 'public function with(array $parameters): static;') || ! str_contains($socialiteProviderOverlay, 'public function scopes(array $scopes): static;')) {
+    if (! is_string($shouldBroadcastOverlay) || ! str_contains($shouldBroadcastOverlay, '@return mixed')) {
+        fail('ShouldBroadcast overlay did not relax Laravel broadcast channel return docs');
+    }
+
+    if (! is_string($socialiteProviderOverlay) || ! str_contains($socialiteProviderOverlay, '@return \\Laravel\\Socialite\\Contracts\\User|null') || ! str_contains($socialiteProviderOverlay, 'public function with(array $parameters): static;') || ! str_contains($socialiteProviderOverlay, 'public function scopes(array $scopes): static;')) {
         fail('Socialite provider overlay did not expose fluent provider methods');
+    }
+
+    if (! is_string($socialiteUserOverlay) || ! str_contains($socialiteUserOverlay, 'public function setAccessTokenResponseBody(array $body): static')) {
+        fail('Socialite user overlay did not expose SocialiteProviders extension methods');
     }
 
     if (str_contains($authOverlay, 'Laravel\\Ui\\UiServiceProvider')) {

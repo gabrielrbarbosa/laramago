@@ -6,7 +6,7 @@ namespace Laramago;
 
 final class Application
 {
-    private const VERSION = '0.1.40';
+    private const VERSION = '0.1.41';
 
     private const CONFIG_FILE = 'mago.toml';
 
@@ -1337,11 +1337,12 @@ TOML;
 
     private function findMagoBinary(string $projectRoot): ?string
     {
-        $candidates = [
+        $candidates = array_merge($this->magoNativeBinaryCandidates($projectRoot), [
             $projectRoot . '/vendor/bin/mago',
+            ...$this->magoNativeBinaryCandidates(dirname(__DIR__)),
             dirname(__DIR__) . '/vendor/bin/mago',
             dirname(__DIR__, 3) . '/bin/mago',
-        ];
+        ]);
 
         foreach ($candidates as $candidate) {
             if (is_file($candidate) && is_executable($candidate)) {
@@ -1350,6 +1351,23 @@ TOML;
         }
 
         return null;
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function magoNativeBinaryCandidates(string $root): array
+    {
+        $pattern = $root . '/vendor/carthage-software/mago/composer/bin/*/mago-*/mago*';
+        $matches = glob($pattern);
+
+        if ($matches === false) {
+            return [];
+        }
+
+        rsort($matches);
+
+        return array_values(array_filter($matches, static fn (string $path): bool => is_file($path)));
     }
 
     /**
@@ -1482,10 +1500,12 @@ TOML;
         $queryBuilderPath = $projectRoot . '/vendor/laravel/framework/src/Illuminate/Database/Query/Builder.php';
         $controllerMiddlewareOptionsPath = $projectRoot . '/vendor/laravel/framework/src/Illuminate/Routing/ControllerMiddlewareOptions.php';
         $notificationPath = $projectRoot . '/vendor/laravel/framework/src/Illuminate/Notifications/Notification.php';
+        $shouldBroadcastPath = $projectRoot . '/vendor/laravel/framework/src/Illuminate/Contracts/Broadcasting/ShouldBroadcast.php';
         $hasFactoryPath = $projectRoot . '/vendor/laravel/framework/src/Illuminate/Database/Eloquent/Factories/HasFactory.php';
         $scopePath = $projectRoot . '/vendor/laravel/framework/src/Illuminate/Database/Eloquent/Scope.php';
         $fromCollectionPath = $projectRoot . '/vendor/maatwebsite/excel/src/Concerns/FromCollection.php';
         $socialiteProviderPath = $projectRoot . '/vendor/laravel/socialite/src/Contracts/Provider.php';
+        $socialiteUserPath = $projectRoot . '/vendor/laravel/socialite/src/Two/User.php';
 
         $authModel = $this->detectAuthUserModel($projectRoot);
 
@@ -1605,6 +1625,14 @@ TOML;
             }
         }
 
+        if (is_file($shouldBroadcastPath)) {
+            $shouldBroadcastSource = file_get_contents($shouldBroadcastPath);
+
+            if (is_string($shouldBroadcastSource)) {
+                $overlays[] = $this->writeFrameworkOverlay($projectRoot, 'ShouldBroadcast.php', $shouldBroadcastPath, $this->renderShouldBroadcastOverlay($shouldBroadcastSource));
+            }
+        }
+
         if (is_file($hasFactoryPath)) {
             $overlays[] = $this->writeFrameworkOverlay($projectRoot, 'HasFactory.php', $hasFactoryPath, $this->renderHasFactoryOverlay());
         }
@@ -1622,6 +1650,14 @@ TOML;
 
             if (is_string($socialiteProviderSource)) {
                 $overlays[] = $this->writeFrameworkOverlay($projectRoot, 'SocialiteProvider.php', $socialiteProviderPath, $this->renderSocialiteProviderOverlay($socialiteProviderSource));
+            }
+        }
+
+        if (is_file($socialiteUserPath)) {
+            $socialiteUserSource = file_get_contents($socialiteUserPath);
+
+            if (is_string($socialiteUserSource)) {
+                $overlays[] = $this->writeFrameworkOverlay($projectRoot, 'SocialiteUser.php', $socialiteUserPath, $this->renderSocialiteUserOverlay($socialiteUserSource));
             }
         }
 
@@ -2017,11 +2053,29 @@ PHP);
             }
         }
 
+        if ($members['properties'] !== [] && ! str_contains($source, 'function __get(')) {
+            $declarations[] = <<<'PHP'
+    public function __get(string $key): mixed
+    {
+        return null;
+    }
+PHP;
+        }
+
         if ($declarations === []) {
             return $source;
         }
 
         return $this->insertBeforeFinalClassBrace($source, PHP_EOL . implode(PHP_EOL . PHP_EOL, $declarations) . PHP_EOL);
+    }
+
+    private function renderShouldBroadcastOverlay(string $source): string
+    {
+        return str_replace(
+            '@return \Illuminate\Broadcasting\Channel|\Illuminate\Broadcasting\Channel[]|string[]|string',
+            '@return mixed',
+            $source,
+        );
     }
 
     /**
@@ -2081,6 +2135,12 @@ PHP);
 
     private function renderSocialiteProviderOverlay(string $source): string
     {
+        $source = str_replace(
+            '@return \Laravel\Socialite\Contracts\User',
+            '@return \Laravel\Socialite\Contracts\User|null',
+            $source,
+        );
+
         if (! str_contains($source, 'function with(')) {
             $source = $this->insertBeforeFinalClassBrace($source, <<<'PHP'
 
@@ -2112,6 +2172,24 @@ PHP);
         }
 
         return $source;
+    }
+
+    private function renderSocialiteUserOverlay(string $source): string
+    {
+        if (str_contains($source, 'function setAccessTokenResponseBody(')) {
+            return $source;
+        }
+
+        return $this->insertBeforeFinalClassBrace($source, <<<'PHP'
+
+    /**
+     * Store the raw access token response body used by SocialiteProviders.
+     */
+    public function setAccessTokenResponseBody(array $body): static
+    {
+        return $this;
+    }
+PHP);
     }
 
     private function renderScopeOverlay(): string
@@ -2312,7 +2390,11 @@ PHP;
                     continue;
                 }
 
-                $translated = $this->rewriteLaravelRequestPropertyReads($this->annotateLaravelCollectionMacroClosures($this->translateLaravelDateHelperCalls($this->translatePhpStanPragmas($source))));
+                $translated = $this->annotateLaravelFormRequestDynamicProperties(
+                    $this->rewriteLaravelRequestPropertyReads($this->annotateLaravelCollectionMacroClosures($this->translateLaravelDateHelperCalls($this->translatePhpStanPragmas($source)))),
+                    $relativePath,
+                    $projectRoot,
+                );
                 $minimumAliases = $translated === $source ? 2 : 1;
                 $overlay = $this->insertTraitSelfCallMethods($this->insertCaseInsensitiveMethodAliases($translated, $caseInsensitiveAliasCandidates, $minimumAliases));
 
@@ -2584,12 +2666,161 @@ PHP;
                     static fn (array $matches): string => '$request->input(\'' . $matches[1] . '\')',
                     $line,
                 ) ?? $line;
+                $line = preg_replace_callback(
+                    '/\$this\s*->\s*request\s*->\s*([A-Za-z_][A-Za-z0-9_]*)\b(?!\s*(?:\(|=|\+=|-=|\*=|\/=|%=|\.=|\?\?=|\+\+|--))/',
+                    static fn (array $matches): string => '$this->request->input(\'' . $matches[1] . '\')',
+                    $line,
+                ) ?? $line;
             }
 
             $translated .= $line . $lineEnding;
         }
 
         return $translated;
+    }
+
+    private function annotateLaravelFormRequestDynamicProperties(string $source, string $relativePath, string $projectRoot): string
+    {
+        if (! str_contains(str_replace('\\', '/', $relativePath), '/Http/Requests/') && ! str_starts_with(str_replace('\\', '/', $relativePath), 'app/Http/Requests/')) {
+            return $source;
+        }
+
+        if (preg_match('/^(?:(?:abstract|final|readonly)\s+)*class\s+([A-Za-z_][A-Za-z0-9_]*)\s+extends\s+([\\\\A-Za-z_][\\\\A-Za-z0-9_]*)\b/m', $source, $classMatches) !== 1) {
+            return $source;
+        }
+
+        $parent = strtolower($classMatches[2]);
+
+        if (! str_ends_with($parent, 'request')) {
+            return $source;
+        }
+
+        if (preg_match_all('/\$this\s*->\s*([A-Za-z_][A-Za-z0-9_]*)\b(?!\s*\()/', $source, $matches) === 0) {
+            return $source;
+        }
+
+        $declaredProperties = $this->declaredProperties($source) + $this->usedTraitDeclaredProperties($projectRoot, $source);
+        $properties = [];
+
+        foreach ($matches[1] as $property) {
+            if (in_array($property, ['request', 'container', 'redirector'], true)) {
+                continue;
+            }
+
+            if (isset($declaredProperties[$property])) {
+                continue;
+            }
+
+            $properties[$property] = true;
+        }
+
+        if ($properties === []) {
+            return $source;
+        }
+
+        $lines = [];
+
+        foreach (array_keys($properties) as $property) {
+            $lines[] = ' * @property mixed $' . $property;
+        }
+
+        $source = $this->insertClassDocblockLines($source, $classMatches[1], $lines);
+
+        if (! str_contains($source, 'function __set(')) {
+            $source = $this->insertBeforeFinalClassBrace($source, <<<'PHP'
+
+    /**
+     * Laramago overlay for Laravel FormRequest dynamic input/state properties.
+     */
+    public function __set(string $key, mixed $value): void
+    {
+    }
+PHP);
+        }
+
+        return $source;
+    }
+
+    /**
+     * @return array<string, true>
+     */
+    private function usedTraitDeclaredProperties(string $projectRoot, string $source): array
+    {
+        if (preg_match_all('/^[ \t]+use\s+([^;]+);/m', $source, $matches) === 0) {
+            return [];
+        }
+
+        $properties = [];
+
+        foreach ($matches[1] as $declaration) {
+            foreach (explode(',', $declaration) as $trait) {
+                $trait = trim(preg_replace('/\s+as\s+.*$/i', '', $trait) ?? $trait);
+
+                if ($trait === '') {
+                    continue;
+                }
+
+                $class = str_contains($trait, '\\')
+                    ? ltrim($trait, '\\')
+                    : ($this->importedClassName($source, $trait) ?? $this->namespacedClassName($source, $trait));
+
+                if ($class === null) {
+                    continue;
+                }
+
+                $path = $this->projectClassPath($projectRoot, $class);
+
+                if ($path === null || ! is_file($path)) {
+                    continue;
+                }
+
+                $traitSource = file_get_contents($path);
+
+                if (! is_string($traitSource)) {
+                    continue;
+                }
+
+                $properties += $this->declaredProperties($traitSource);
+            }
+        }
+
+        return $properties;
+    }
+
+    /**
+     * @return array<string, true>
+     */
+    private function declaredProperties(string $source): array
+    {
+        if (preg_match_all('/^[ \t]*(?:public|protected|private)\s+(?:readonly\s+)?(?:static\s+)?(?:[^$;\r\n=]+\s+)?\$([A-Za-z_][A-Za-z0-9_]*)/m', $source, $matches) === 0) {
+            return [];
+        }
+
+        $properties = [];
+
+        foreach ($matches[1] as $property) {
+            $properties[$property] = true;
+        }
+
+        return $properties;
+    }
+
+    private function namespacedClassName(string $source, string $shortName): ?string
+    {
+        if (preg_match('/^namespace\s+([^;]+);/m', $source, $matches) !== 1) {
+            return null;
+        }
+
+        return trim($matches[1]) . '\\' . $shortName;
+    }
+
+    private function projectClassPath(string $projectRoot, string $class): ?string
+    {
+        if (str_starts_with($class, 'App\\')) {
+            return $projectRoot . '/app/' . str_replace('\\', '/', substr($class, 4)) . '.php';
+        }
+
+        return null;
     }
 
     /**
