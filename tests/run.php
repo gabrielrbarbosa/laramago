@@ -80,6 +80,7 @@ testLaravelDateHelperOverlayGeneration($project, $root);
 testLaravelCollectionMacroOverlayGeneration($project, $root);
 testLaravelCollectionItemObjectOverlayGeneration($project, $root);
 testLaravelForeachObjectRowOverlayGeneration($project, $root);
+testDynamicMemberSelectorStringOverlayGeneration($project, $root);
 testLaravelNumericFallbackAssignmentOverlayGeneration($project, $root);
 testLaravelExcelEventOverlayGeneration($project, $root);
 testLaravelValidationRuleCallbackOverlayGeneration($project, $root);

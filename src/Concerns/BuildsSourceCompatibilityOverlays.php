@@ -61,6 +61,7 @@ trait BuildsSourceCompatibilityOverlays
                 $translated = $this->annotateLaravelObserverModelParameters($translated, $relativePath, $observerModels);
                 $translated = $this->annotateLaravelJsonResourceDynamicMembers($translated, $relativePath);
                 $translated = $this->annotateLaravelCollectionItemObjectClosures($translated);
+                $translated = $this->annotateDynamicMemberSelectorStrings($translated);
                 $translated = $this->annotateLaravelFormRequestDynamicProperties($translated, $relativePath, $projectRoot);
                 $translated = $this->annotateAllowDynamicPropertiesClasses($translated);
                 $minimumAliases = $translated === $source ? 2 : 1;
@@ -391,6 +392,66 @@ trait BuildsSourceCompatibilityOverlays
         );
 
         return is_string($translated) ? $translated : $source;
+    }
+
+    private function annotateDynamicMemberSelectorStrings(string $source): string
+    {
+        if (! str_contains($source, '->{$')) {
+            return $source;
+        }
+
+        $translated = preg_replace_callback(
+            '/((?:static\s+)?function\s*\(\s*)\$([A-Za-z_][A-Za-z0-9_]*)(\s*(?:,[^)]*)?\)\s*(?:use\s*\([^)]*\)\s*)?(?::\s*[^{]+)?\{)(?!\s*\/\*\*\s*@var\s+string\s+\$[A-Za-z_][A-Za-z0-9_]*)/ms',
+            static function (array $matches) use ($source): string {
+                $matched = $matches[0][0];
+                $offset = $matches[0][1];
+                $variable = $matches[2][0];
+                $bodyPreview = substr($source, $offset + strlen($matched), 1200);
+                $closureEnd = strpos($bodyPreview, '});');
+
+                if ($closureEnd !== false) {
+                    $bodyPreview = substr($bodyPreview, 0, $closureEnd);
+                }
+
+                if (! str_contains($bodyPreview, '{$' . $variable . '}')) {
+                    return $matched;
+                }
+
+                return $matches[1][0] . '$' . $variable . $matches[3][0] . PHP_EOL . '                /** @var string $' . $variable . ' */';
+            },
+            $source,
+            -1,
+            $count,
+            PREG_OFFSET_CAPTURE,
+        );
+
+        if (! is_string($translated)) {
+            return $source;
+        }
+
+        $selectorVariables = [];
+
+        if (preg_match_all('/->\s*\{\s*\$([A-Za-z_][A-Za-z0-9_]*)\s*\}/', $translated, $matches) !== false) {
+            $selectorVariables = array_fill_keys($matches[1] ?? [], true);
+        }
+
+        foreach (array_keys($selectorVariables) as $variable) {
+            $translated = preg_replace_callback(
+                '/^([ \t]*)(\$' . preg_quote($variable, '/') . '\s*=\s*[^;\r\n]+;)/m',
+                static function (array $matches) use ($translated, $variable): string {
+                    $prefix = substr($translated, max(0, (int) strpos($translated, $matches[0]) - 120), 120);
+
+                    if (preg_match('/@var\s+string\s+\$' . preg_quote($variable, '/') . '\b/', $prefix) === 1) {
+                        return $matches[0];
+                    }
+
+                    return $matches[1] . '/** @var string $' . $variable . ' */' . PHP_EOL . $matches[0];
+                },
+                $translated,
+            ) ?? $translated;
+        }
+
+        return $translated;
     }
 
     private function annotateLaravelNumericFallbackAssignments(string $source): string

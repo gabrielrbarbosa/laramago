@@ -308,6 +308,57 @@ PHP);
     fail('Laravel foreach object row overlay did not annotate object-like loop variables safely');
 }
 
+function testDynamicMemberSelectorStringOverlayGeneration(string $project, string $root): void
+{
+    require_once $root . '/src/Application.php';
+
+    file_put_contents($project . '/app/UsesDynamicMemberSelectors.php', <<<'PHP'
+<?php
+
+namespace App;
+
+final class UsesDynamicMemberSelectors
+{
+    public function read(object $row, mixed $columns): mixed
+    {
+        $primary = $this->columnName();
+        $value = $row->{$primary};
+
+        return collect($columns)->mapWithKeys(function ($column) use ($row): array {
+            return [$column => $row->{$column}];
+        })->all() + ['value' => $value];
+    }
+
+    private function columnName(): mixed
+    {
+        return 'name';
+    }
+}
+PHP);
+
+    $application = new Laramago\Application();
+    $method = new ReflectionMethod($application, 'phpStanPragmaSubstitutions');
+    $method->invoke($application, $project, [], []);
+
+    $map = json_decode((string) file_get_contents($project . '/.laramago/cache/phpstan-pragma-overlays.json'), true);
+
+    foreach (is_array($map) ? $map : [] as $entry) {
+        if (($entry['original'] ?? null) !== 'app/UsesDynamicMemberSelectors.php' || ! is_string($entry['overlay'] ?? null)) {
+            continue;
+        }
+
+        $overlay = file_get_contents($project . '/' . $entry['overlay']);
+
+        if (is_string($overlay)
+            && str_contains($overlay, '/** @var string $primary */')
+            && str_contains($overlay, '/** @var string $column */')) {
+            return;
+        }
+    }
+
+    fail('Dynamic member selector overlay did not infer selector variables as strings');
+}
+
 function testLaravelNumericFallbackAssignmentOverlayGeneration(string $project, string $root): void
 {
     require_once $root . '/src/Application.php';
