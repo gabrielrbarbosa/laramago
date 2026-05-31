@@ -171,7 +171,13 @@ final class Application
         }
 
         $excludes = $this->phpStanExcludePaths($source);
-        $config = $this->renderProjectConfig($this->detectPhpVersion($projectRoot), $this->normalizePhpStanPaths($paths), ['vendor'], $this->normalizePhpStanPaths($excludes));
+        $config = $this->renderProjectConfig(
+            $this->detectPhpVersion($projectRoot),
+            $this->normalizePhpStanPaths($paths),
+            ['vendor'],
+            $this->normalizePhpStanPaths($excludes),
+            $this->phpStanIgnoredAnalyzerCodes($source),
+        );
 
         if (file_put_contents($configPath, $config) === false) {
             $this->line("Unable to write {$configPath}.");

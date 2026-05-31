@@ -200,6 +200,73 @@ trait MigratesPhpStan
         return array_values(array_unique($normalized));
     }
 
+    private function phpStanIgnoredAnalyzerCodes(string $source): array
+    {
+        preg_match_all('/\bidentifier\s*:\s*([A-Za-z0-9_.-]+)/', $source, $matches);
+
+        $codes = [];
+
+        foreach ($matches[1] as $identifier) {
+            foreach ($this->phpStanIdentifierAnalyzerCodes($identifier) as $code) {
+                $codes[$code] = true;
+            }
+        }
+
+        return array_keys($codes);
+    }
+
+    private function phpStanIdentifierAnalyzerCodes(string $identifier): array
+    {
+        return match ($identifier) {
+            'argument.templateType', 'argument.type' => [
+                'invalid-argument',
+                'possibly-invalid-argument',
+                'null-argument',
+                'possibly-null-argument',
+                'possibly-false-argument',
+                'less-specific-argument',
+                'less-specific-nested-argument-type',
+            ],
+            'method.notFound' => [
+                'non-existent-method',
+                'possibly-non-existent-method',
+                'mixed-method-access',
+            ],
+            'missingType.generics' => [
+                'missing-template-parameter',
+                'invalid-template-parameter',
+            ],
+            'missingType.iterableValue' => [
+                'missing-iterable-value-type',
+            ],
+            'offsetAccess.notFound' => [
+                'invalid-array-access',
+                'possibly-invalid-array-access',
+                'null-array-index',
+                'possibly-null-array-access',
+                'possibly-null-array-index',
+                'undefined-int-array-index',
+                'undefined-string-array-index',
+            ],
+            'property.notFound' => [
+                'non-existent-property',
+                'invalid-property-access',
+                'invalid-property-read',
+                'mixed-property-access',
+                'possibly-null-property-access',
+            ],
+            'return.type' => [
+                'invalid-return-statement',
+                'nullable-return-statement',
+                'falsable-return-statement',
+                'mixed-return-statement',
+                'less-specific-return-statement',
+                'less-specific-nested-return-statement',
+            ],
+            default => [],
+        };
+    }
+
     private function updateComposerScripts(string $projectRoot, string $analyzeScript, string $debugScript, string $baselineScript): bool
     {
         $composerPath = $projectRoot . '/composer.json';

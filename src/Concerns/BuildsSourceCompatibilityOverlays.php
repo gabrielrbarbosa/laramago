@@ -84,6 +84,7 @@ trait BuildsSourceCompatibilityOverlays
         $translated = $this->normalizeStringableInternalFunctionArguments($translated);
         $translated = $this->normalizeFalseReturningInternalFunctionResults($translated);
         $translated = $this->ignoreFalseReturningInternalFunctionPipelines($translated);
+        $translated = $this->ignorePhpStanAcceptedNullAndFalseComparisons($translated);
         $translated = $this->rewriteLaravelHttpClientWrapperReturnTypes($translated);
         $translated = $this->annotateLaravelHttpClientWrapperAssignments($translated, $projectRoot);
         $translated = $this->annotateLaravelCollectionMacroClosures($translated);
@@ -545,6 +546,9 @@ trait BuildsSourceCompatibilityOverlays
             && ! str_contains($source, 'json_encode(')
             && ! str_contains($source, 'file_get_contents(')
             && ! str_contains($source, 'strstr(')
+            && ! str_contains($source, 'base64_decode(')
+            && ! str_contains($source, 'imagecolorallocate(')
+            && ! str_contains($source, '->zrevrange(')
         ) {
             return $source;
         }
@@ -568,6 +572,36 @@ trait BuildsSourceCompatibilityOverlays
         ) ?? $translated;
 
         $translated = preg_replace(
+            '/=\s*(?!\(string\)\s*)file_get_contents\(/',
+            '= (string) file_get_contents(',
+            $translated,
+        ) ?? $translated;
+
+        $translated = preg_replace(
+            '/=\s*(?!\(string\)\s*)strstr\(/',
+            '= (string) strstr(',
+            $translated,
+        ) ?? $translated;
+
+        $translated = preg_replace(
+            '/=\s*(?!\(string\)\s*)base64_decode\(/',
+            '= (string) base64_decode(',
+            $translated,
+        ) ?? $translated;
+
+        $translated = preg_replace(
+            '/=\s*(?!\(int\)\s*)imagecolorallocate\(/',
+            '= (int) imagecolorallocate(',
+            $translated,
+        ) ?? $translated;
+
+        $translated = preg_replace(
+            '/(=\s*[^;\r\n]*->zrevrange\([^;\r\n]+\))\s*;/',
+            '$1 ?: [];',
+            $translated,
+        ) ?? $translated;
+
+        $translated = preg_replace(
             '/(\breturn\s+)(?!\(string\)\s*)preg_replace\(/',
             '$1(string) preg_replace(',
             $translated,
@@ -576,6 +610,12 @@ trait BuildsSourceCompatibilityOverlays
         $translated = preg_replace(
             '/(=\s*)(?!\(string\)\s*)preg_replace\(/',
             '$1(string) preg_replace(',
+            $translated,
+        ) ?? $translated;
+
+        $translated = preg_replace(
+            '/(=\s*)(?!\()(preg_split\([^;\r\n]+\))\s*;/',
+            '$1($2 ?: []);',
             $translated,
         ) ?? $translated;
 
@@ -598,6 +638,18 @@ trait BuildsSourceCompatibilityOverlays
         ) ?? $translated;
 
         $translated = preg_replace(
+            '/json_decode\(\s*\(\s*(?!\(string\))json_encode\(/',
+            'json_decode(((string) json_encode(',
+            $translated,
+        ) ?? $translated;
+
+        $translated = preg_replace(
+            '/md5\(\s*(?!\(string\))json_encode\(/',
+            'md5((string) json_encode(',
+            $translated,
+        ) ?? $translated;
+
+        $translated = preg_replace(
             '/->put\(([^;\r\n]+,\s*)(?!\(string\))json_encode\(/',
             '->put($1(string) json_encode(',
             $translated,
@@ -606,6 +658,12 @@ trait BuildsSourceCompatibilityOverlays
         $translated = preg_replace(
             '/->info\(\s*(?!\(string\))json_encode\(/',
             '->info((string) json_encode(',
+            $translated,
+        ) ?? $translated;
+
+        $translated = preg_replace(
+            '/:\s*(?!\(string\))json_encode\(/',
+            ': (string) json_encode(',
             $translated,
         ) ?? $translated;
 
@@ -630,6 +688,24 @@ trait BuildsSourceCompatibilityOverlays
         $translated = preg_replace(
             '/->get\(\s*(?!\(string\))strstr\(/',
             '->get((string) strstr(',
+            $translated,
+        ) ?? $translated;
+
+        $translated = preg_replace(
+            '/gzdecode\(\s*(?!\(string\))base64_decode\(/',
+            'gzdecode((string) base64_decode(',
+            $translated,
+        ) ?? $translated;
+
+        $translated = preg_replace(
+            '/openssl_decrypt\(\s*(?!\(string\))base64_decode\(/',
+            'openssl_decrypt((string) base64_decode(',
+            $translated,
+        ) ?? $translated;
+
+        $translated = preg_replace(
+            '/readPfx\(\s*(?!\(string\))file_get_contents\(/',
+            'readPfx((string) file_get_contents(',
             $translated,
         ) ?? $translated;
 
@@ -688,6 +764,64 @@ trait BuildsSourceCompatibilityOverlays
         }
 
         return str_contains($line, 'preg_replace(') && (str_contains($line, 'iconv(') || str_contains($line, 'mb_convert_encoding('));
+    }
+
+    private function ignorePhpStanAcceptedNullAndFalseComparisons(string $source): string
+    {
+        if (
+            ! str_contains($source, 'null')
+            && ! str_contains($source, 'false')
+            && ! str_contains($source, 'NULL')
+            && ! str_contains($source, 'FALSE')
+        ) {
+            return $source;
+        }
+
+        $lines = preg_split('/(\R)/', $source, -1, PREG_SPLIT_DELIM_CAPTURE);
+
+        if (! is_array($lines)) {
+            return $source;
+        }
+
+        $translated = '';
+
+        for ($index = 0; $index < count($lines); $index += 2) {
+            $line = (string) $lines[$index];
+            $lineEnding = (string) ($lines[$index + 1] ?? '');
+
+            if ($this->needsPhpStanAcceptedComparisonPragma($line)) {
+                preg_match('/^\s*/', $line, $matches);
+                $translated .= ($matches[0] ?? '') . '// @mago-ignore analysis:null-operand analysis:false-operand' . $lineEnding;
+                $line = $this->rewritePhpStanAcceptedComparisonOperators($line);
+            }
+
+            $translated .= $line . $lineEnding;
+        }
+
+        return $translated;
+    }
+
+    private function needsPhpStanAcceptedComparisonPragma(string $line): bool
+    {
+        if (str_contains($line, '@mago-ignore')) {
+            return false;
+        }
+
+        if (preg_match('/(?:==|!=|===|!==)\s*(?:null|false)\b/i', $line) === 1) {
+            return true;
+        }
+
+        return preg_match('/\b(?:null|false)\s*(?:==|!=|===|!==)/i', $line) === 1;
+    }
+
+    private function rewritePhpStanAcceptedComparisonOperators(string $line): string
+    {
+        $line = preg_replace('/(?<![=!])==\s*(null|false)\b/i', '=== $1', $line) ?? $line;
+        $line = preg_replace('/(?<![=!])!=\s*(null|false)\b/i', '!== $1', $line) ?? $line;
+        $line = preg_replace('/\b(null|false)\s*==(?!=)/i', '$1 ===', $line) ?? $line;
+        $line = preg_replace('/\b(null|false)\s*!=(?!=)/i', '$1 !==', $line) ?? $line;
+
+        return $line;
     }
 
     private function translateLaravelCarbonImports(string $source): string

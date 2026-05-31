@@ -85,6 +85,22 @@ function testRuntimeConfigGeneration(string $project, string $root): void
             ],
         ],
     ], JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR));
+    file_put_contents($project . '/mago.toml', <<<'TOML'
+version = "1"
+php-version = "8.5.0"
+
+[source]
+workspace = "."
+paths = ["app"]
+includes = ["vendor"]
+excludes = []
+
+[analyzer]
+ignore = [
+  "invalid-return-statement",
+  { code = "nullable-return-statement", in = "app/" },
+]
+TOML);
 
     $application = new Laramago\Application();
     $method = new ReflectionMethod($application, 'prepareRuntimeConfig');
@@ -110,6 +126,10 @@ function testRuntimeConfigGeneration(string $project, string $root): void
 
     if (! str_contains($config, 'find-unused-definitions = false')) {
         fail('runtime config should keep PHPStan-compatible unused definition checks disabled by default');
+    }
+
+    if (! str_contains($config, '"invalid-return-statement"') || ! str_contains($config, '{ code = "nullable-return-statement", in = "app/" }')) {
+        fail('runtime config did not preserve project analyzer ignores');
     }
 
     foreach (['"mixed-operand"', '"mixed-argument"', '"mixed-assignment"', '"mixed-method-access"', '"mixed-property-access"', '"mixed-array-access"', '"mixed-array-assignment"', '"mixed-return-statement"', '"mixed-property-type-coercion"', '"mixed-array-index"', '"invalid-iterator"', '"invalid-member-selector"', '"less-specific-return-statement"', '"less-specific-argument"', '"less-specific-nested-argument-type"', '"less-specific-nested-return-statement"', '"ambiguous-object-property-access"', '"ambiguous-object-method-access"', '"non-documented-property"', '"non-documented-method"', '"possibly-invalid-argument"', '"possibly-null-property-access"', '"possible-method-access-on-null"', '"possibly-null-argument"'] as $expectedDefaultIgnore) {
@@ -245,6 +265,13 @@ parameters:
     paths:
         - app/
     level: 6
+    ignoreErrors:
+        - identifier: argument.type
+        - identifier: method.notFound
+        - identifier: missingType.generics
+        - identifier: offsetAccess.notFound
+        - identifier: property.notFound
+        - identifier: return.type
     excludePaths:
         analyse:
             - vendor/*
@@ -295,6 +322,12 @@ NEON);
 
     if (! str_contains($config, 'excludes = ["app/Legacy/**", "app/Services/NotaFiscal/**"]')) {
         fail('migrate-phpstan did not normalize PHPStan exclude paths');
+    }
+
+    foreach (['"possibly-false-argument"', '"non-existent-method"', '"missing-template-parameter"', '"invalid-array-access"', '"non-existent-property"', '"invalid-return-statement"', '"nullable-return-statement"', '"falsable-return-statement"'] as $expectedIgnore) {
+        if (! str_contains($config, $expectedIgnore)) {
+            fail('migrate-phpstan did not preserve PHPStan ignoreErrors identifier as analyzer ignore: ' . $expectedIgnore);
+        }
     }
 
     $composer = json_decode((string) file_get_contents($project . '/composer.json'), true);

@@ -33,11 +33,13 @@ trait BuildsRuntimeConfig
         return '8.4.0';
     }
 
-    private function renderProjectConfig(string $phpVersion, array $sourcePaths, array $includes, array $excludes): string
+    private function renderProjectConfig(string $phpVersion, array $sourcePaths, array $includes, array $excludes, array $analyzerIgnores = []): string
     {
         $paths = $this->tomlArray($sourcePaths);
         $includesValue = $this->tomlArray($includes);
         $excludesValue = $this->tomlArray($excludes);
+        $ignoreBlock = $this->renderAnalyzerIgnoreBlock($analyzerIgnores);
+        $analyzerBlock = $ignoreBlock === '' ? '' : PHP_EOL . PHP_EOL . '[analyzer]' . PHP_EOL . $ignoreBlock;
 
         return <<<TOML
 version = "1"
@@ -51,6 +53,7 @@ excludes = {$excludesValue}
 
 [source.glob]
 literal-separator = true
+{$analyzerBlock}
 TOML;
     }
 
@@ -84,6 +87,7 @@ TOML;
             $values['excludes'],
             $arguments,
             $this->analyzerIssueCodes($projectRoot, $mago),
+            $values['analyzerIgnores'],
         ));
 
         return self::RUNTIME_CONFIG_FILE;
@@ -96,6 +100,7 @@ TOML;
             'paths' => ['app'],
             'includes' => ['vendor'],
             'excludes' => $this->defaultLaravelExcludes($projectRoot),
+            'analyzerIgnores' => [],
         ];
 
         $configPath = $projectRoot . '/' . self::CONFIG_FILE;
@@ -123,6 +128,8 @@ TOML;
                 $values[$key] = $arrayValue;
             }
         }
+
+        $values['analyzerIgnores'] = $this->tomlAnalyzerIgnoreValue($config);
 
         return $values;
     }
@@ -227,12 +234,15 @@ TOML;
         return true;
     }
 
-    private function renderRuntimeConfig(string $phpVersion, array $sourcePaths, array $includes, array $excludes, array $arguments = [], array $frameworkOverlayIgnoredCodes = []): string
+    private function renderRuntimeConfig(string $phpVersion, array $sourcePaths, array $includes, array $excludes, array $arguments = [], array $frameworkOverlayIgnoredCodes = [], array $projectAnalyzerIgnores = []): string
     {
         $paths = $this->tomlArray($sourcePaths);
         $includesValue = $this->tomlArray($includes);
         $excludesValue = $this->tomlArray($excludes);
-        $ignoreBlock = $this->renderAnalyzerIgnoreBlock($this->runtimeAnalyzerIgnores($arguments, $frameworkOverlayIgnoredCodes));
+        $ignoreBlock = $this->renderAnalyzerIgnoreBlock($this->uniqueAnalyzerIgnores(array_merge(
+            $projectAnalyzerIgnores,
+            $this->runtimeAnalyzerIgnores($arguments, $frameworkOverlayIgnoredCodes),
+        )));
         $findUnusedDefinitions = in_array('--find-unused-definitions', $arguments, true) ? 'true' : 'false';
 
         return <<<TOML
@@ -656,6 +666,64 @@ TOML;
             static fn (string $value): string => str_replace('\"', '"', $value),
             $stringMatches[1],
         );
+    }
+
+    private function tomlAnalyzerIgnoreValue(string $config): array
+    {
+        $lines = preg_split('/\R/', $config);
+
+        if (! is_array($lines)) {
+            return [];
+        }
+
+        $body = '';
+        $collecting = false;
+
+        foreach ($lines as $line) {
+            if (! $collecting && preg_match('/^\s*ignore\s*=\s*\[(.*)$/', $line, $matches) === 1) {
+                $collecting = true;
+                $line = $matches[1];
+            }
+
+            if (! $collecting) {
+                continue;
+            }
+
+            $closingPosition = strpos($line, ']');
+
+            if ($closingPosition !== false) {
+                $body .= substr($line, 0, $closingPosition) . PHP_EOL;
+                break;
+            }
+
+            $body .= $line . PHP_EOL;
+        }
+
+        if (trim($body) === '') {
+            return [];
+        }
+
+        $ignores = [];
+        $entries = preg_split('/\R/', $body);
+
+        foreach (is_array($entries) ? $entries : [] as $entry) {
+            if (preg_match('/code\s*=\s*"([^"]+)".*in\s*=\s*"([^"]+)"/', $entry, $matches) === 1) {
+                $ignores[] = [
+                    'code' => $matches[1],
+                    'in' => $matches[2],
+                ];
+
+                continue;
+            }
+
+            preg_match_all('/"([^"]+)"/', $entry, $matches);
+
+            foreach ($matches[1] as $code) {
+                $ignores[] = $code;
+            }
+        }
+
+        return $this->uniqueAnalyzerIgnores($ignores);
     }
 
     private function tomlArray(array $values): string

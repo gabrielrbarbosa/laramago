@@ -197,12 +197,30 @@ final class UsesInternalFunctions
         $count = count(preg_split('/[;,\s]+/', $model->tags));
         $filled = array_filter(preg_split('/[;,\s]+/', $model->tags));
         $decodedAgain = json_decode(json_encode($model->payload), true);
+        $decodedWrapped = json_decode((json_encode($model->payload)), true);
+        $payloadDigest = md5(json_encode($model->payload));
+        $message = is_string($model->message) ? $model->message : json_encode($model->message);
+        $image = file_get_contents($model->path);
         $encodedFile = base64_encode(file_get_contents($model->path));
         $digest = md5(file_get_contents($model->path));
+        $path = strstr($model->path, '/img');
+        $suffixFromPath = ltrim($path, '/');
         $suffix = ltrim(strstr($model->path, '/img'), '/');
+        $blob = base64_decode($model->encoded);
+        $inflated = gzdecode(base64_decode($model->encoded));
+        $decrypted = openssl_decrypt(base64_decode($model->secret), 'AES-128-CBC', $model->key);
+        $color = imagecolorallocate($model->image, 255, 255, 255);
+        $terms = preg_split('/\s+/', $model->search);
+        $leaderboard = $model->redis->zrevrange('leaders', 0, -1, ['withscores' => true]);
         \Illuminate\Support\Facades\Storage::disk('local')->put($model->path, json_encode($model->payload));
         $storedImage = \Illuminate\Support\Facades\Storage::disk('r2')->get(strstr($model->path, '/img'));
         $encoding = mb_convert_encoding($model->body, 'UTF-8', mb_detect_encoding($model->body));
+        if ($model->deleted_at == null) {
+            $message .= ' deleted';
+        }
+        if ($model->offset != false) {
+            $message .= ' offset';
+        }
         $next = date(
             'Y-m-d',
             strtotime(
@@ -211,7 +229,7 @@ final class UsesInternalFunctions
             )
         );
 
-        return [$year, $decoded, $body, $id, $exif, $name, $parts, $count, $filled, $decodedAgain, $encodedFile, $digest, $suffix, $storedImage, $encoding, $next];
+        return [$year, $decoded, $body, $id, $exif, $name, $parts, $count, $filled, $decodedAgain, $decodedWrapped, $payloadDigest, $message, $image, $encodedFile, $digest, $suffixFromPath, $suffix, $blob, $inflated, $decrypted, $color, $terms, $leaderboard, $storedImage, $encoding, $next];
     }
 
     public function normalize(string $value): string
@@ -246,9 +264,22 @@ PHP);
             && str_contains($overlay, "count((preg_split('/[;,\\s]+/', \$model->tags) ?: []))")
             && str_contains($overlay, "array_filter((preg_split('/[;,\\s]+/', \$model->tags) ?: []))")
             && str_contains($overlay, 'json_decode((string) json_encode($model->payload), true)')
+            && str_contains($overlay, 'json_decode(((string) json_encode($model->payload)), true)')
+            && str_contains($overlay, 'md5((string) json_encode($model->payload))')
+            && str_contains($overlay, 'is_string($model->message) ? $model->message : (string) json_encode($model->message)')
+            && str_contains($overlay, '$image = (string) file_get_contents($model->path)')
             && str_contains($overlay, 'base64_encode((string) file_get_contents($model->path))')
             && str_contains($overlay, 'md5((string) file_get_contents($model->path))')
+            && str_contains($overlay, '$path = (string) strstr($model->path, \'/img\')')
             && str_contains($overlay, "ltrim((string) strstr(\$model->path, '/img'), '/')")
+            && str_contains($overlay, '$blob = (string) base64_decode($model->encoded)')
+            && str_contains($overlay, 'gzdecode((string) base64_decode($model->encoded))')
+            && str_contains($overlay, "openssl_decrypt((string) base64_decode(\$model->secret), 'AES-128-CBC', \$model->key)")
+            && str_contains($overlay, '$color = (int) imagecolorallocate($model->image, 255, 255, 255)')
+            && str_contains($overlay, "\$terms = (preg_split('/\\s+/', \$model->search) ?: [])")
+            && str_contains($overlay, "\$leaderboard = \$model->redis->zrevrange('leaders', 0, -1, ['withscores' => true]) ?: []")
+            && str_contains($overlay, '// @mago-ignore analysis:null-operand analysis:false-operand' . PHP_EOL . '        if ($model->deleted_at === null) {')
+            && str_contains($overlay, '// @mago-ignore analysis:null-operand analysis:false-operand' . PHP_EOL . '        if ($model->offset !== false) {')
             && str_contains($overlay, "\\Illuminate\\Support\\Facades\\Storage::disk('local')->put(\$model->path, (string) json_encode(\$model->payload))")
             && str_contains($overlay, "\\Illuminate\\Support\\Facades\\Storage::disk('r2')->get((string) strstr(\$model->path, '/img'))")
             && str_contains($overlay, "\$encoding = (string) mb_convert_encoding(\$model->body, 'UTF-8', (string) mb_detect_encoding(\$model->body))")
