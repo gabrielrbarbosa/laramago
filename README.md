@@ -144,7 +144,7 @@ Reads a PHPStan/Larastan NEON file and writes the equivalent Laramago `mago.toml
 
 By default it searches `phpstan.neon`, `phpstan.neon.dist`, `phpstan-ci.neon`, and `phpstan-parallel.neon`. Use `--phpstan-config=path/to/phpstan.neon` for a custom file.
 
-Add `--update-composer` to rewrite the common `phpstan`, `phpstan:ci`, and `phpstan:ci:debug` Composer scripts to Laramago commands and add a `laramago:baseline` script. Existing unrelated Composer scripts are preserved.
+Add `--update-composer` to rewrite the common `phpstan`, `phpstan:ci`, and `phpstan:ci:debug` Composer scripts to Laramago commands and add a `laramago:baseline` script. It also replaces direct PHPStan `analyse`/`analyze` commands in custom Composer scripts while preserving aliases such as `@phpstan` and unrelated scripts.
 
 ### `prepare`
 

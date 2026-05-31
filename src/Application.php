@@ -6,7 +6,7 @@ namespace Laramago;
 
 final class Application
 {
-    private const VERSION = '0.1.16';
+    private const VERSION = '0.1.17';
 
     private const CONFIG_FILE = 'mago.toml';
 
@@ -568,6 +568,7 @@ HELP);
             $scripts = [];
         }
 
+        $scripts = $this->replacePhpStanComposerScriptCommands($scripts, $analyzeScript, $debugScript, $baselineScript);
         $scripts['phpstan'] = [$analyzeScript];
         $scripts['phpstan:ci'] = [$analyzeScript];
         $scripts['phpstan:ci:debug'] = [$debugScript];
@@ -581,6 +582,75 @@ HELP);
         }
 
         return file_put_contents($composerPath, $encoded . PHP_EOL) !== false;
+    }
+
+    /**
+     * @param array<array-key, mixed> $scripts
+     * @return array<array-key, mixed>
+     */
+    private function replacePhpStanComposerScriptCommands(array $scripts, string $analyzeScript, string $debugScript, string $baselineScript): array
+    {
+        foreach ($scripts as $name => $script) {
+            $scriptName = is_string($name) ? $name : '';
+            $replacement = $this->laramagoScriptForComposerScript($scriptName, $analyzeScript, $debugScript, $baselineScript);
+
+            if (is_string($script)) {
+                $scripts[$name] = $this->replacePhpStanComposerCommand($script, $replacement, $baselineScript);
+                continue;
+            }
+
+            if (! is_array($script)) {
+                continue;
+            }
+
+            foreach ($script as $index => $command) {
+                if (is_string($command)) {
+                    $script[$index] = $this->replacePhpStanComposerCommand($command, $replacement, $baselineScript);
+                }
+            }
+
+            $scripts[$name] = $script;
+        }
+
+        return $scripts;
+    }
+
+    private function laramagoScriptForComposerScript(string $scriptName, string $analyzeScript, string $debugScript, string $baselineScript): string
+    {
+        $scriptName = strtolower($scriptName);
+
+        if (str_contains($scriptName, 'baseline')) {
+            return $baselineScript;
+        }
+
+        if (str_contains($scriptName, 'debug')) {
+            return $debugScript;
+        }
+
+        return $analyzeScript;
+    }
+
+    private function replacePhpStanComposerCommand(string $command, string $replacement, string $baselineScript): string
+    {
+        $trimmed = ltrim($command);
+
+        if ($trimmed === '' || str_starts_with($trimmed, '@')) {
+            return $command;
+        }
+
+        if (! $this->isPhpStanAnalyzeCommand($command)) {
+            return $command;
+        }
+
+        return str_contains($command, '--generate-baseline') ? $baselineScript : $replacement;
+    }
+
+    private function isPhpStanAnalyzeCommand(string $command): bool
+    {
+        return preg_match(
+            '/(?:^|\s)(?:\.\/)?(?:vendor\/bin\/)?phpstan(?:\.phar)?(?:\s+(?:(?:--?[A-Za-z0-9_-]+)(?:=\S+)?|\S+))*\s+(?:analyse|analyze)(?:\s|$)/',
+            $command,
+        ) === 1;
     }
 
     /**

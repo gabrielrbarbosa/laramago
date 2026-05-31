@@ -205,9 +205,21 @@ NEON);
         'scripts' => [
             'test' => [
                 '@phpstan',
+                '@static-analysis',
+                '@legacy-baseline',
             ],
             'phpstan' => [
                 'vendor/bin/phpstan analyse',
+            ],
+            'static-analysis' => 'XDEBUG_MODE=off vendor/bin/phpstan analyse --memory-limit=2G',
+            'strict:debug' => [
+                'vendor/bin/phpstan analyze -c phpstan-ci.neon --debug',
+            ],
+            'legacy-baseline' => [
+                'vendor/bin/phpstan analyse --generate-baseline',
+            ],
+            'unrelated' => [
+                'echo phpstan',
             ],
         ],
     ], JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR));
@@ -236,6 +248,26 @@ NEON);
 
     if (($composer['scripts']['test'][0] ?? null) !== '@phpstan') {
         fail('migrate-phpstan should preserve unrelated composer scripts');
+    }
+
+    if (($composer['scripts']['test'][1] ?? null) !== '@static-analysis' || ($composer['scripts']['test'][2] ?? null) !== '@legacy-baseline') {
+        fail('migrate-phpstan should preserve composer script aliases');
+    }
+
+    if (($composer['scripts']['static-analysis'] ?? null) !== 'vendor/bin/laramago analyze --phpstan-level=6 --reporting-format=count') {
+        fail('migrate-phpstan did not replace a custom direct PHPStan analyze script');
+    }
+
+    if (($composer['scripts']['strict:debug'][0] ?? null) !== 'vendor/bin/laramago analyze --phpstan-level=6 --reporting-format=short') {
+        fail('migrate-phpstan did not replace a custom debug PHPStan analyze script');
+    }
+
+    if (($composer['scripts']['legacy-baseline'][0] ?? null) !== 'vendor/bin/laramago baseline --phpstan-level=6') {
+        fail('migrate-phpstan did not replace a PHPStan baseline script');
+    }
+
+    if (($composer['scripts']['unrelated'][0] ?? null) !== 'echo phpstan') {
+        fail('migrate-phpstan should not replace non-analyze commands that merely mention phpstan');
     }
 
     if (($composer['scripts']['laramago:baseline'][0] ?? null) !== 'vendor/bin/laramago baseline --phpstan-level=6') {
