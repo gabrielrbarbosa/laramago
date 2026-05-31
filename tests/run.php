@@ -139,6 +139,7 @@ testLaravelEloquentModelTraitOverlayGeneration($project, $root);
 testLaravelJsonResourceDynamicMemberOverlayGeneration($project, $root);
 testLaravelFormRequestDynamicPropertyOverlayGeneration($project, $root);
 testAllowDynamicPropertiesOverlayGeneration($project, $root);
+testImplicitArrayAccumulatorOverlayGeneration($project, $root);
 testCaseInsensitiveOverlaySkipsSingleAliasFiles($project, $root);
 testLaravelRequestClassInstantiationOverlayGeneration($project, $root);
 testReflectionReturnTypeAndClassExistsOverlayGeneration($project, $root);

@@ -184,15 +184,15 @@ PHP);
             && str_contains($overlay, '$laramagoReturnType = $method->getReturnType();')
             && str_contains($overlay, '/** @var \\ReflectionNamedType|null $laramagoReturnType */')
             && str_contains($overlay, 'return $laramagoReturnType?->getName() === HasMany::class;')
-            && str_contains($overlay, '/** @var class-string $className */')
+            && str_contains($overlay, '// @mago-ignore analysis:unknown-class-instantiation' . PHP_EOL . '        return new $className();')
             && str_contains($overlay, 'return new $className();')
-            && str_contains($overlay, '/** @var class-string $templateClass */')
+            && str_contains($overlay, '// @mago-ignore analysis:unknown-class-instantiation' . PHP_EOL . '        $this->template = new $templateClass();')
             && str_contains($overlay, '$this->template = new $templateClass();')) {
             return;
         }
     }
 
-    fail('reflection return type and class_exists overlays were not generated');
+    fail('reflection return type and class_exists guarded overlays were not generated');
 }
 
 function testCaseInsensitiveOverlayRespectsExcludes(string $project, string $root): void

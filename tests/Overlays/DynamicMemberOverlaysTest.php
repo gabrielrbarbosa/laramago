@@ -424,3 +424,52 @@ PHP);
 
     fail('AllowDynamicProperties overlay did not expose dynamic property accessors');
 }
+
+function testImplicitArrayAccumulatorOverlayGeneration(string $project, string $root): void
+{
+    require_once $root . '/src/Application.php';
+
+    file_put_contents($project . '/app/UsesImplicitArrayAccumulator.php', <<<'PHP'
+<?php
+
+namespace App;
+
+final class UsesImplicitArrayAccumulator
+{
+    public function rules(): array
+    {
+        $rules['name'] = ['required'];
+        $rules['email'] = ['email'];
+
+        $existing = [];
+        $existing['id'] = ['integer'];
+
+        return $rules + $existing;
+    }
+}
+PHP);
+
+    $application = new Laramago\Application();
+    $method = new ReflectionMethod($application, 'phpStanPragmaSubstitutions');
+    $method->invoke($application, $project, [], []);
+
+    $map = json_decode((string) file_get_contents($project . '/.laramago/cache/phpstan-pragma-overlays.json'), true);
+
+    foreach (is_array($map) ? $map : [] as $entry) {
+        if (($entry['original'] ?? null) !== 'app/UsesImplicitArrayAccumulator.php' || ! is_string($entry['overlay'] ?? null)) {
+            continue;
+        }
+
+        $overlay = file_get_contents($project . '/' . $entry['overlay']);
+
+        if (is_string($overlay)
+            && str_contains($overlay, '/** @var array<array-key, mixed> $rules */')
+            && str_contains($overlay, '$rules = $rules ?? [];')
+            && substr_count($overlay, '$rules = $rules ?? [];') === 1
+            && ! str_contains($overlay, '$existing = $existing ?? [];')) {
+            return;
+        }
+    }
+
+    fail('implicit array accumulator overlay did not initialize first array writes');
+}

@@ -106,6 +106,7 @@ trait BuildsSourceCompatibilityOverlays
         $translated = $this->annotateLaravelForeachObjectRows($translated);
         $translated = $this->annotateLaravelNumericFallbackAssignments($translated);
         $translated = $this->annotateLaravelReduceObjectAccumulators($translated);
+        $translated = $this->annotateImplicitArrayAccumulatorVariables($translated);
         $translated = $this->annotateLaravelRequestParameters($translated);
         $translated = $this->rewriteLaravelRequestPropertyReads($translated, $projectRoot);
         $translated = $this->castLaravelRequestForeachSources($translated);
@@ -117,7 +118,7 @@ trait BuildsSourceCompatibilityOverlays
         $translated = $this->annotateDynamicMemberSelectorStrings($translated);
         $translated = $this->annotateLaravelFormRequestDynamicProperties($translated, $relativePath, $projectRoot);
         $translated = $this->annotateLaravelEloquentModelTraits($translated);
-        $translated = $this->annotateClassExistsGuardedInstantiations($translated);
+        $translated = $this->ignoreClassExistsGuardedInstantiations($translated);
         $translated = $this->annotateLaravelRequestClassInstantiations($translated);
         $translated = $this->annotateAllowDynamicPropertiesClasses($translated);
         $translated = $this->ignoreNullCoalescePropertyAccess($translated);
@@ -481,7 +482,7 @@ PHP;
         return $source;
     }
 
-    private function annotateClassExistsGuardedInstantiations(string $source): string
+    private function ignoreClassExistsGuardedInstantiations(string $source): string
     {
         if (! str_contains($source, 'class_exists(') || ! str_contains($source, 'new $')) {
             return $source;
@@ -491,7 +492,7 @@ PHP;
         $variables = array_values(array_unique($matches[1] ?? []));
 
         foreach ($variables as $variable) {
-            $source = $this->insertPlainClassStringAnnotationBeforeInstantiation(
+            $source = $this->insertMagoIgnoreBeforeInstantiation(
                 $source,
                 substr($variable, 1),
             );
@@ -500,11 +501,11 @@ PHP;
         return $source;
     }
 
-    private function insertPlainClassStringAnnotationBeforeInstantiation(string $source, string $variable): string
+    private function insertMagoIgnoreBeforeInstantiation(string $source, string $variable): string
     {
         return preg_replace_callback(
-            '/(^[ \t]*)(?!\/\*\*\s*@var\s+class-string(?:<[^>]+>)?\s+\$' . preg_quote($variable, '/') . '\s*\*\/\R)((?:(?:return\s+)|(?:\$[A-Za-z_][A-Za-z0-9_]*\s*=\s*)|(?:\$this->[A-Za-z_][A-Za-z0-9_]*\s*=\s*))new\s+\$' . preg_quote($variable, '/') . '\s*\()/m',
-            static fn (array $matches): string => $matches[1] . '/** @var class-string $' . $variable . ' */' . PHP_EOL . $matches[1] . $matches[2],
+            '/(^[ \t]*)(?!\/\/\s*@mago-ignore\s+analysis:unknown-class-instantiation\R)((?:(?:return\s+)|(?:\$[A-Za-z_][A-Za-z0-9_]*\s*=\s*)|(?:\$this->[A-Za-z_][A-Za-z0-9_]*\s*=\s*))new\s+\$' . preg_quote($variable, '/') . '\s*\()/m',
+            static fn (array $matches): string => $matches[1] . '// @mago-ignore analysis:unknown-class-instantiation' . PHP_EOL . $matches[1] . $matches[2],
             $source,
         ) ?? $source;
     }
@@ -2063,6 +2064,44 @@ PHP;
         );
 
         return is_string($translated) ? $translated : $source;
+    }
+
+    private function annotateImplicitArrayAccumulatorVariables(string $source): string
+    {
+        if (! str_contains($source, '[')) {
+            return $source;
+        }
+
+        $initialized = [];
+
+        return preg_replace_callback(
+            '/^([ \t]*)(\$([A-Za-z_][A-Za-z0-9_]*)\s*\[[^\r\n=]+\]\s*=(?!>))/m',
+            static function (array $matches) use ($source, &$initialized): string {
+                $offset = strpos($source, $matches[0]);
+                $variable = $matches[3];
+
+                if ($offset === false) {
+                    return $matches[0];
+                }
+
+                if (isset($initialized[$variable])) {
+                    return $matches[0];
+                }
+
+                $prefix = substr($source, 0, $offset);
+
+                if (preg_match('/(?:\$' . preg_quote($variable, '/') . '\s*=)|(?:[,(]\s*(?:[?\\\\A-Za-z0-9_|&]+\s+)?&?\$' . preg_quote($variable, '/') . '\b)|(?:@var\s+[^$]*\$' . preg_quote($variable, '/') . '\b)/', $prefix) === 1) {
+                    return $matches[0];
+                }
+
+                $initialized[$variable] = true;
+
+                return $matches[1] . '/** @var array<array-key, mixed> $' . $variable . ' */' . PHP_EOL
+                    . $matches[1] . '$' . $variable . ' = $' . $variable . ' ?? [];' . PHP_EOL
+                    . $matches[0];
+            },
+            $source,
+        ) ?? $source;
     }
 
     private function annotateLaravelNumericFallbackAssignments(string $source): string
