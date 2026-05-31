@@ -6,7 +6,7 @@ namespace Laramago;
 
 final class Application
 {
-    private const VERSION = '0.1.5';
+    private const VERSION = '0.1.6';
 
     private const CONFIG_FILE = 'mago.toml';
 
@@ -732,24 +732,38 @@ TOML;
             return [];
         }
 
-        $authModel = $this->detectAuthUserModel($projectRoot);
-
-        if ($authModel === null) {
-            return [];
-        }
-
-        $authModel = '\\' . ltrim($authModel, '\\');
         $overlays = [];
 
         $guardPath = $projectRoot . '/vendor/laravel/framework/src/Illuminate/Contracts/Auth/Guard.php';
         $authFacadePath = $projectRoot . '/vendor/laravel/framework/src/Illuminate/Support/Facades/Auth.php';
+        $hasFactoryPath = $projectRoot . '/vendor/laravel/framework/src/Illuminate/Database/Eloquent/Factories/HasFactory.php';
+        $scopePath = $projectRoot . '/vendor/laravel/framework/src/Illuminate/Database/Eloquent/Scope.php';
+        $fromCollectionPath = $projectRoot . '/vendor/maatwebsite/excel/src/Concerns/FromCollection.php';
 
-        if (is_file($guardPath)) {
-            $overlays[] = $this->writeFrameworkOverlay($projectRoot, 'Guard.php', $guardPath, $this->renderAuthGuardOverlay($authModel));
+        $authModel = $this->detectAuthUserModel($projectRoot);
+
+        if ($authModel !== null) {
+            $authModel = '\\' . ltrim($authModel, '\\');
+
+            if (is_file($guardPath)) {
+                $overlays[] = $this->writeFrameworkOverlay($projectRoot, 'Guard.php', $guardPath, $this->renderAuthGuardOverlay($authModel));
+            }
+
+            if (is_file($authFacadePath)) {
+                $overlays[] = $this->writeFrameworkOverlay($projectRoot, 'Auth.php', $authFacadePath, $this->renderAuthFacadeOverlay($authModel));
+            }
         }
 
-        if (is_file($authFacadePath)) {
-            $overlays[] = $this->writeFrameworkOverlay($projectRoot, 'Auth.php', $authFacadePath, $this->renderAuthFacadeOverlay($authModel));
+        if (is_file($hasFactoryPath)) {
+            $overlays[] = $this->writeFrameworkOverlay($projectRoot, 'HasFactory.php', $hasFactoryPath, $this->renderHasFactoryOverlay());
+        }
+
+        if (is_file($scopePath)) {
+            $overlays[] = $this->writeFrameworkOverlay($projectRoot, 'Scope.php', $scopePath, $this->renderScopeOverlay());
+        }
+
+        if (is_file($fromCollectionPath)) {
+            $overlays[] = $this->writeFrameworkOverlay($projectRoot, 'FromCollection.php', $fromCollectionPath, $this->renderFromCollectionOverlay());
         }
 
         $substitutions = [];
@@ -764,6 +778,95 @@ TOML;
         }
 
         return $substitutions;
+    }
+
+    private function renderScopeOverlay(): string
+    {
+        return <<<'PHP'
+<?php
+
+namespace Illuminate\Database\Eloquent;
+
+interface Scope
+{
+    public function apply(Builder $builder, Model $model);
+}
+PHP;
+    }
+
+    private function renderFromCollectionOverlay(): string
+    {
+        return <<<'PHP'
+<?php
+
+namespace Maatwebsite\Excel\Concerns;
+
+use Illuminate\Support\Enumerable;
+
+interface FromCollection
+{
+    public function collection(): Enumerable;
+}
+PHP;
+    }
+
+    private function renderHasFactoryOverlay(): string
+    {
+        return <<<'PHP'
+<?php
+
+namespace Illuminate\Database\Eloquent\Factories;
+
+use Illuminate\Database\Eloquent\Attributes\UseFactory;
+
+trait HasFactory
+{
+    /**
+     * @param (callable(array<string, mixed>, static|null): array<string, mixed>)|array<string, mixed>|int|null $count
+     * @param (callable(array<string, mixed>, static|null): array<string, mixed>)|array<string, mixed> $state
+     * @return \Illuminate\Database\Eloquent\Factories\Factory<static>
+     */
+    public static function factory($count = null, $state = [])
+    {
+        $factory = static::newFactory() ?? Factory::factoryForModel(static::class);
+
+        return $factory
+            ->count(is_numeric($count) ? $count : null)
+            ->state(is_callable($count) || is_array($count) ? $count : $state);
+    }
+
+    /**
+     * @return \Illuminate\Database\Eloquent\Factories\Factory<static>|null
+     */
+    protected static function newFactory()
+    {
+        if (isset(static::$factory)) {
+            return static::$factory::new();
+        }
+
+        return static::getUseFactoryAttribute() ?? null;
+    }
+
+    /**
+     * @return \Illuminate\Database\Eloquent\Factories\Factory<static>|null
+     */
+    protected static function getUseFactoryAttribute()
+    {
+        $attributes = (new \ReflectionClass(static::class))
+            ->getAttributes(UseFactory::class);
+
+        if ($attributes !== []) {
+            $factory = $attributes[0]->newInstance()->factoryClass::new();
+
+            $factory->guessModelNamesUsing(fn () => static::class);
+
+            return $factory;
+        }
+
+        return null;
+    }
+}
+PHP;
     }
 
     private function renderAuthGuardOverlay(string $authModel): string

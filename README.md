@@ -79,6 +79,8 @@ Generated overlays currently add:
 - `@property-read` entries for legacy `getFooAttribute()` accessors and `Attribute` accessors;
 - `@property-read` entries for Eloquent relations;
 - `@method static` entries for classic `scopeFoo()` local scopes and Laravel `#[Scope]` methods;
+- Laravel `HasFactory` return types without app-level generic boilerplate;
+- Laravel `Scope` and Laravel Excel `FromCollection` compatibility without app-level generic boilerplate;
 - auth guard and facade return types for the configured Laravel user model;
 - baseline and output path translation so generated overlay paths do not leak into application diagnostics.
 

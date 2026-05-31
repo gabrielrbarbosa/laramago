@@ -207,6 +207,9 @@ function testLaravelFrameworkOverlayGeneration(string $project, string $root): v
     require_once $root . '/src/Application.php';
 
     mkdir($project . '/config', 0777, true);
+    mkdir($project . '/vendor/maatwebsite/excel/src/Concerns', 0777, true);
+    mkdir($project . '/vendor/laravel/framework/src/Illuminate/Database/Eloquent', 0777, true);
+    mkdir($project . '/vendor/laravel/framework/src/Illuminate/Database/Eloquent/Factories', 0777, true);
     mkdir($project . '/vendor/laravel/framework/src/Illuminate/Contracts/Auth', 0777, true);
     mkdir($project . '/vendor/laravel/framework/src/Illuminate/Support/Facades', 0777, true);
 
@@ -228,16 +231,25 @@ PHP);
 
     file_put_contents($project . '/vendor/laravel/framework/src/Illuminate/Support/Facades/Auth.php', '<?php');
 
+    file_put_contents($project . '/vendor/laravel/framework/src/Illuminate/Database/Eloquent/Factories/HasFactory.php', '<?php');
+
+    file_put_contents($project . '/vendor/laravel/framework/src/Illuminate/Database/Eloquent/Scope.php', '<?php');
+
+    file_put_contents($project . '/vendor/maatwebsite/excel/src/Concerns/FromCollection.php', '<?php');
+
     $application = new Laramago\Application();
     $method = new ReflectionMethod($application, 'laravelFrameworkSubstitutions');
     $substitutions = $method->invoke($application, $project, []);
 
-    if (! is_array($substitutions) || count($substitutions) !== 4) {
+    if (! is_array($substitutions) || count($substitutions) !== 10) {
         fail('framework overlay generation returned unexpected substitutions');
     }
 
     $guardOverlay = file_get_contents($project . '/.laramago/cache/framework-overlays/Guard.php');
     $authOverlay = file_get_contents($project . '/.laramago/cache/framework-overlays/Auth.php');
+    $hasFactoryOverlay = file_get_contents($project . '/.laramago/cache/framework-overlays/HasFactory.php');
+    $scopeOverlay = file_get_contents($project . '/.laramago/cache/framework-overlays/Scope.php');
+    $fromCollectionOverlay = file_get_contents($project . '/.laramago/cache/framework-overlays/FromCollection.php');
 
     if (! is_string($guardOverlay) || ! str_contains($guardOverlay, '@return \\App\\Models\\Usuario\\Usuario|null')) {
         fail('guard overlay did not use the configured auth model');
@@ -249,6 +261,22 @@ PHP);
 
     if (str_contains($authOverlay, 'Laravel\\Ui\\UiServiceProvider')) {
         fail('auth facade overlay leaked optional vendor implementation details');
+    }
+
+    if (! is_string($hasFactoryOverlay) || ! str_contains($hasFactoryOverlay, '@return \\Illuminate\\Database\\Eloquent\\Factories\\Factory<static>')) {
+        fail('HasFactory overlay did not expose a static model factory return type');
+    }
+
+    if (str_contains($hasFactoryOverlay, '@template')) {
+        fail('HasFactory overlay still requires application models to pass a trait template parameter');
+    }
+
+    if (! is_string($scopeOverlay) || str_contains($scopeOverlay, '@template')) {
+        fail('Scope overlay still requires application scopes to pass a template parameter');
+    }
+
+    if (! is_string($fromCollectionOverlay) || str_contains($fromCollectionOverlay, '@template')) {
+        fail('FromCollection overlay still requires exports to pass template parameters');
     }
 
     $disabled = $method->invoke($application, $project, ['--no-laravel-framework-overlays']);
