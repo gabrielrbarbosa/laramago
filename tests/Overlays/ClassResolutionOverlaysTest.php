@@ -66,6 +66,61 @@ PHP);
     }
 }
 
+function testLaravelRequestClassInstantiationOverlayGeneration(string $project, string $root): void
+{
+    require_once $root . '/src/Application.php';
+
+    file_put_contents($project . '/app/RequestFactories.php', <<<'PHP'
+<?php
+
+namespace App;
+
+use Illuminate\Http\Request;
+use Knuckles\Scribe\Scribe;
+
+final class RequestFactories
+{
+    public function boot(): void
+    {
+        Scribe::instantiateFormRequestUsing(function (string $className) {
+            $formRequest = new $className();
+
+            return $formRequest;
+        });
+    }
+
+    public function fromReflection(?\ReflectionParameter $requestParameter): Request
+    {
+        $requestClass = $requestParameter?->getType()->getName() ?? Request::class;
+
+        return new $requestClass();
+    }
+}
+PHP);
+
+    $application = new Laramago\Application();
+    $method = new ReflectionMethod($application, 'phpStanPragmaSubstitutions');
+    $method->invoke($application, $project, [], []);
+
+    $map = json_decode((string) file_get_contents($project . '/.laramago/cache/phpstan-pragma-overlays.json'), true);
+
+    foreach (is_array($map) ? $map : [] as $entry) {
+        if (($entry['original'] ?? null) !== 'app/RequestFactories.php' || ! is_string($entry['overlay'] ?? null)) {
+            continue;
+        }
+
+        $overlay = file_get_contents($project . '/' . $entry['overlay']);
+
+        if (is_string($overlay)
+            && str_contains($overlay, '/** @var class-string<\\Illuminate\\Foundation\\Http\\FormRequest> $className */')
+            && str_contains($overlay, '/** @var class-string<\\Illuminate\\Http\\Request> $requestClass */')) {
+            return;
+        }
+    }
+
+    fail('Laravel request class instantiation overlay did not annotate request class strings');
+}
+
 function testCaseInsensitiveOverlayRespectsExcludes(string $project, string $root): void
 {
     require_once $root . '/src/Application.php';

@@ -140,6 +140,7 @@ testLaravelJsonResourceDynamicMemberOverlayGeneration($project, $root);
 testLaravelFormRequestDynamicPropertyOverlayGeneration($project, $root);
 testAllowDynamicPropertiesOverlayGeneration($project, $root);
 testCaseInsensitiveOverlaySkipsSingleAliasFiles($project, $root);
+testLaravelRequestClassInstantiationOverlayGeneration($project, $root);
 testCaseInsensitiveOverlayRespectsExcludes($project, $root);
 testTraitSelfCallOverlayGeneration($project, $root);
 testLaravelMetadataInferenceHelpers($root);

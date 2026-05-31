@@ -116,6 +116,7 @@ trait BuildsSourceCompatibilityOverlays
         $translated = $this->annotateDynamicMemberSelectorStrings($translated);
         $translated = $this->annotateLaravelFormRequestDynamicProperties($translated, $relativePath, $projectRoot);
         $translated = $this->annotateLaravelEloquentModelTraits($translated);
+        $translated = $this->annotateLaravelRequestClassInstantiations($translated);
         $translated = $this->annotateAllowDynamicPropertiesClasses($translated);
         $translated = $this->ignoreNullCoalescePropertyAccess($translated);
         $translated = $this->ignoreLaravelInstanceBuilderMagicCalls($translated);
@@ -428,6 +429,40 @@ PHP;
         }
 
         return $translated;
+    }
+
+    private function annotateLaravelRequestClassInstantiations(string $source): string
+    {
+        if (! str_contains($source, 'new $')) {
+            return $source;
+        }
+
+        if (str_contains($source, 'instantiateFormRequestUsing') && str_contains($source, 'new $className')) {
+            $source = $this->insertClassStringAnnotationBeforeInstantiation(
+                $source,
+                'className',
+                '\\Illuminate\\Foundation\\Http\\FormRequest',
+            );
+        }
+
+        if (str_contains($source, 'Request::class') && str_contains($source, 'new $requestClass')) {
+            $source = $this->insertClassStringAnnotationBeforeInstantiation(
+                $source,
+                'requestClass',
+                '\\Illuminate\\Http\\Request',
+            );
+        }
+
+        return $source;
+    }
+
+    private function insertClassStringAnnotationBeforeInstantiation(string $source, string $variable, string $class): string
+    {
+        return preg_replace_callback(
+            '/(^[ \t]*)(?!\/\*\*\s*@var\s+class-string<[^>]+>\s+\$' . preg_quote($variable, '/') . '\s*\*\/\R)((?:(?:return\s+)|(?:\$[A-Za-z_][A-Za-z0-9_]*\s*=\s*))new\s+\$' . preg_quote($variable, '/') . '\s*\()/m',
+            static fn (array $matches): string => $matches[1] . '/** @var class-string<' . $class . '> $' . $variable . ' */' . PHP_EOL . $matches[1] . $matches[2],
+            $source,
+        ) ?? $source;
     }
 
     private function matchingGenericCloseOffset(string $source, int $open): ?int
