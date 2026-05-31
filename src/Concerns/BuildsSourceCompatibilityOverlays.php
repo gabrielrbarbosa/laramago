@@ -50,6 +50,7 @@ trait BuildsSourceCompatibilityOverlays
                 $translated = $this->translatePhpStanListTypes($translated);
                 $translated = $this->removeObjectAccessStringInterpolations($translated);
                 $translated = $this->translateLaravelDateHelperCalls($translated);
+                $translated = $this->rewriteCarbonInstanceStaticCalls($translated);
                 $translated = $this->rewriteLaravelHttpClientWrapperReturnTypes($translated);
                 $translated = $this->annotateLaravelHttpClientWrapperAssignments($translated, $projectRoot);
                 $translated = $this->annotateLaravelCollectionMacroClosures($translated);
@@ -458,6 +459,21 @@ trait BuildsSourceCompatibilityOverlays
         }
 
         return false;
+    }
+
+    private function rewriteCarbonInstanceStaticCalls(string $source): string
+    {
+        return str_replace(
+            [
+                '\\Illuminate\\Support\\Carbon::now()->parse(',
+                '\\Illuminate\\Support\\Carbon::today()->parse(',
+            ],
+            [
+                '\\Illuminate\\Support\\Carbon::parse(',
+                '\\Illuminate\\Support\\Carbon::parse(',
+            ],
+            $source,
+        );
     }
 
     private function rewriteLaravelHttpClientWrapperReturnTypes(string $source): string
