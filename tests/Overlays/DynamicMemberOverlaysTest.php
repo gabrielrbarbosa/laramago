@@ -193,6 +193,9 @@ PHP);
 
         if (is_string($overlay)
             && str_contains($overlay, '@mixin \\Illuminate\\Database\\Eloquent\\Model')
+            && str_contains($overlay, '@method string getdeletedatcolumn()')
+            && str_contains($overlay, '@method string fromdatetime(mixed $value)')
+            && str_contains($overlay, '@method \\Illuminate\\Support\\Carbon freshtimestamp()')
             && str_contains($overlay, '// @mago-ignore analysis:possibly-non-existent-property')
             && str_contains($overlay, 'trait TouchesModelTimestamps')) {
             return;

@@ -711,7 +711,7 @@ PHP,
             }
 
             $seen[$alias] = true;
-            $lines[] = ' * @method mixed ' . $alias . '(mixed ...$arguments)';
+            $lines[] = $this->traitSelfCallMethodLine($alias);
         }
 
         if ($lines === []) {
@@ -719,6 +719,21 @@ PHP,
         }
 
         return $this->insertTraitDocblockLines($source, $traitMatches[1], $lines);
+    }
+
+    private function traitSelfCallMethodLine(string $alias): string
+    {
+        $knownEloquentMethods = [
+            'fromdatetime' => 'string ' . $alias . '(mixed $value)',
+            'freshtimestamp' => '\\Illuminate\\Support\\Carbon ' . $alias . '()',
+            'getdeletedatcolumn' => 'string ' . $alias . '()',
+            'getupdatedatcolumn' => 'string ' . $alias . '()',
+            'newmodelquery' => '\\Illuminate\\Database\\Eloquent\\Builder ' . $alias . '()',
+            'setkeysforsavequery' => '\\Illuminate\\Database\\Eloquent\\Builder ' . $alias . '(mixed $query)',
+            'syncoriginalattributes' => 'static ' . $alias . '(array|string|null $attributes = null)',
+        ];
+
+        return ' * @method ' . ($knownEloquentMethods[$alias] ?? 'mixed ' . $alias . '(mixed ...$arguments)');
     }
 
     private function insertTraitDocblockLines(string $source, string $shortTrait, array $lines): string
