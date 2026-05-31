@@ -54,6 +54,7 @@ trait BuildsSourceCompatibilityOverlays
                 $translated = $this->annotateLaravelHttpClientWrapperAssignments($translated, $projectRoot);
                 $translated = $this->annotateLaravelCollectionMacroClosures($translated);
                 $translated = $this->annotateLaravelCollectionStringCallbacks($translated);
+                $translated = $this->loosenLaravelCollectionArrowCallbackParameterTypes($translated);
                 $translated = $this->annotateLaravelExcelEventClosures($translated);
                 $translated = $this->annotateLaravelValidationRuleClosures($translated);
                 $translated = $this->annotateLaravelQueryBuilderClosures($translated);
@@ -865,6 +866,52 @@ trait BuildsSourceCompatibilityOverlays
             -1,
             $count,
             PREG_OFFSET_CAPTURE,
+        );
+
+        return is_string($translated) ? $translated : $source;
+    }
+
+    private function loosenLaravelCollectionArrowCallbackParameterTypes(string $source): string
+    {
+        if (! str_contains($source, 'fn') || ! str_contains($source, '->')) {
+            return $source;
+        }
+
+        $methods = [
+            'each',
+            'every',
+            'filter',
+            'first',
+            'flatMap',
+            'groupBy',
+            'keyBy',
+            'map',
+            'mapInto',
+            'mapSpread',
+            'mapToGroups',
+            'mapWithKeys',
+            'partition',
+            'reject',
+            'some',
+            'sortBy',
+            'sortByDesc',
+            'tap',
+            'transform',
+        ];
+        $methodPattern = implode('|', array_map(static fn (string $method): string => preg_quote($method, '/'), $methods));
+
+        $translated = preg_replace_callback(
+            '/(->\s*(?:' . $methodPattern . ')\s*\(\s*(?:static\s+)?fn\s*\(\s*)(\\\\?[A-Za-z_][A-Za-z0-9_\\\\]*(?:\s*&\s*\\\\?[A-Za-z_][A-Za-z0-9_\\\\]*)?)\s+(\$[A-Za-z_][A-Za-z0-9_]*)(\s*(?:,[^)]*)?\)\s*(?::\s*[^=]+)?=>)/m',
+            static function (array $matches): string {
+                $type = $matches[2];
+
+                if (in_array(ltrim(strtolower(str_replace(' ', '', $type)), '\\'), ['array', 'callable', 'iterable', 'mixed'], true)) {
+                    return $matches[0];
+                }
+
+                return $matches[1] . $matches[3] . $matches[4];
+            },
+            $source,
         );
 
         return is_string($translated) ? $translated : $source;

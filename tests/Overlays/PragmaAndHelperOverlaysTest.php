@@ -390,6 +390,56 @@ PHP);
     fail('Laravel collection item overlay did not annotate object-like callback parameters safely');
 }
 
+function testLaravelCollectionArrowCallbackOverlayGeneration(string $project, string $root): void
+{
+    require_once $root . '/src/Application.php';
+
+    file_put_contents($project . '/app/UsesCollectionArrowCallbacks.php', <<<'PHP'
+<?php
+
+namespace App;
+
+use App\Models\Order;
+
+final class UsesCollectionArrowCallbacks
+{
+    public function rows(): array
+    {
+        return Order::query()
+            ->get()
+            ->map(fn (Order $order): array => ['id' => $order->id])
+            ->filter(fn (array $row): bool => $row !== [])
+            ->map(fn (int $id): int => $id)
+            ->all();
+    }
+}
+PHP);
+
+    $application = new Laramago\Application();
+    $method = new ReflectionMethod($application, 'phpStanPragmaSubstitutions');
+    $method->invoke($application, $project, [], []);
+
+    $map = json_decode((string) file_get_contents($project . '/.laramago/cache/phpstan-pragma-overlays.json'), true);
+
+    foreach (is_array($map) ? $map : [] as $entry) {
+        if (($entry['original'] ?? null) !== 'app/UsesCollectionArrowCallbacks.php' || ! is_string($entry['overlay'] ?? null)) {
+            continue;
+        }
+
+        $overlay = file_get_contents($project . '/' . $entry['overlay']);
+
+        if (is_string($overlay)
+            && str_contains($overlay, '->map(fn ($order): array =>')
+            && str_contains($overlay, '->filter(fn (array $row): bool =>')
+            && str_contains($overlay, '->map(fn ($id): int =>')
+            && ! str_contains($overlay, 'fn (Order $order)')) {
+            return;
+        }
+    }
+
+    fail('Laravel collection arrow callback overlay did not loosen object parameter types');
+}
+
 function testLaravelForeachObjectRowOverlayGeneration(string $project, string $root): void
 {
     require_once $root . '/src/Application.php';
