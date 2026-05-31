@@ -35,7 +35,7 @@ Mago 1.29 does not expose a Composer-loaded analyzer extension API equivalent to
 composer require --dev laramago/laramago
 ```
 
-Laramago requires PHP 8.2 or newer and installs `carthage-software/mago` as its analyzer runtime.
+Laramago requires PHP 8.3 or newer, declares Laravel 13 compatibility through `illuminate/support:^13.0`, and installs `carthage-software/mago` as its analyzer runtime.
 
 ## Quick Start
 

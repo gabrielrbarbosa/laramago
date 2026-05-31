@@ -16,8 +16,9 @@
         "source": "https://github.com/gabrielrbarbosa/laramago"
     },
     "require": {
-        "php": "^8.2",
-        "carthage-software/mago": "^1.29"
+        "php": "^8.3",
+        "carthage-software/mago": "^1.29",
+        "illuminate/support": "^13.0"
     },
     "autoload": {
         "psr-4": {
