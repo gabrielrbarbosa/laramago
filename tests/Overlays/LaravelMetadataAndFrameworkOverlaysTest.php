@@ -843,7 +843,7 @@ PHP);
         fail('auth facade overlay leaked optional vendor implementation details');
     }
 
-    if (! is_string($eloquentBuilderOverlay) || ! str_contains($eloquentBuilderOverlay, '@method $this leftJoin(') || ! str_contains($eloquentBuilderOverlay, '@method $this select(mixed ...$columns)') || ! str_contains($eloquentBuilderOverlay, '@method $this selectRaw(mixed $expression, array $bindings = [])') || ! str_contains($eloquentBuilderOverlay, '@method $this withoutglobalscopes(') || ! str_contains($eloquentBuilderOverlay, '@mixin \\Illuminate\\Database\\Query\\Builder') || ! str_contains($eloquentBuilderOverlay, '@param  int|string|null|\\Closure  $perPage')) {
+    if (! is_string($eloquentBuilderOverlay) || ! str_contains($eloquentBuilderOverlay, '@method $this leftJoin(') || ! str_contains($eloquentBuilderOverlay, '@method $this select(mixed ...$columns)') || ! str_contains($eloquentBuilderOverlay, '@method $this selectRaw(mixed $expression, array $bindings = [])') || ! str_contains($eloquentBuilderOverlay, '@method $this withoutglobalscopes(') || ! str_contains($eloquentBuilderOverlay, '@mixin \\Illuminate\\Database\\Query\\Builder') || ! str_contains($eloquentBuilderOverlay, '@param  int|string|null|\\Closure  $perPage') || ! str_contains($eloquentBuilderOverlay, '@return TModel|null') || ! str_contains($eloquentBuilderOverlay, 'public function first($columns = [\'*\'])')) {
         fail('Eloquent builder overlay did not preserve source and add delegated chain methods');
     }
 

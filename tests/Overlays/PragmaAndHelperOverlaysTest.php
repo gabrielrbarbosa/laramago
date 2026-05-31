@@ -359,6 +359,59 @@ PHP);
     fail('Dynamic member selector overlay did not infer selector variables as strings');
 }
 
+function testEloquentModelArrayAccessAssignmentOverlayGeneration(string $project, string $root): void
+{
+    require_once $root . '/src/Application.php';
+
+    file_put_contents($project . '/app/UsesEloquentModelArrayAccess.php', <<<'PHP'
+<?php
+
+namespace App;
+
+use App\Models\Account;
+
+final class UsesEloquentModelArrayAccess
+{
+    public function show(): array
+    {
+        $account = Account::with(['status'])
+            ->whereNull('deleted_at')
+            ->first();
+
+        if (! $account) {
+            return [];
+        }
+
+        return [
+            'id' => $account['id'],
+            'name' => $account['name'],
+        ];
+    }
+}
+PHP);
+
+    $application = new Laramago\Application();
+    $method = new ReflectionMethod($application, 'phpStanPragmaSubstitutions');
+    $method->invoke($application, $project, [], []);
+
+    $map = json_decode((string) file_get_contents($project . '/.laramago/cache/phpstan-pragma-overlays.json'), true);
+
+    foreach (is_array($map) ? $map : [] as $entry) {
+        if (($entry['original'] ?? null) !== 'app/UsesEloquentModelArrayAccess.php' || ! is_string($entry['overlay'] ?? null)) {
+            continue;
+        }
+
+        $overlay = file_get_contents($project . '/' . $entry['overlay']);
+
+        if (is_string($overlay)
+            && str_contains($overlay, '/** @var \ArrayAccess<string, mixed>|null $account */')) {
+            return;
+        }
+    }
+
+    fail('Eloquent model array access overlay did not annotate first-result assignments');
+}
+
 function testLaravelNumericFallbackAssignmentOverlayGeneration(string $project, string $root): void
 {
     require_once $root . '/src/Application.php';

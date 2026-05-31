@@ -61,6 +61,7 @@ trait BuildsSourceCompatibilityOverlays
                 $translated = $this->annotateLaravelObserverModelParameters($translated, $relativePath, $observerModels);
                 $translated = $this->annotateLaravelJsonResourceDynamicMembers($translated, $relativePath);
                 $translated = $this->annotateLaravelCollectionItemObjectClosures($translated);
+                $translated = $this->annotateEloquentModelArrayAccessAssignments($translated);
                 $translated = $this->annotateDynamicMemberSelectorStrings($translated);
                 $translated = $this->annotateLaravelFormRequestDynamicProperties($translated, $relativePath, $projectRoot);
                 $translated = $this->annotateAllowDynamicPropertiesClasses($translated);
@@ -452,6 +453,35 @@ trait BuildsSourceCompatibilityOverlays
         }
 
         return $translated;
+    }
+
+    private function annotateEloquentModelArrayAccessAssignments(string $source): string
+    {
+        if (! str_contains($source, '::') || ! str_contains($source, '->first(') || ! str_contains($source, '[')) {
+            return $source;
+        }
+
+        $translated = preg_replace_callback(
+            '/^([ \t]*)(\$([A-Za-z_][A-Za-z0-9_]*)\s*=\s*[\\\\A-Z][A-Za-z0-9_\\\\]*::(?:(?!;).)*?->\s*first\s*\([^;]*\)\s*;)/ms',
+            static function (array $matches) use ($source): string {
+                $variable = $matches[3];
+
+                if (preg_match('/\$' . preg_quote($variable, '/') . '\s*\[[^\]]+\]/', $source) !== 1) {
+                    return $matches[0];
+                }
+
+                $prefix = substr($source, max(0, (int) strpos($source, $matches[0]) - 120), 120);
+
+                if (preg_match('/@var\s+[^$]*\$' . preg_quote($variable, '/') . '\b/', $prefix) === 1) {
+                    return $matches[0];
+                }
+
+                return $matches[1] . '/** @var \ArrayAccess<string, mixed>|null $' . $variable . ' */' . PHP_EOL . $matches[0];
+            },
+            $source,
+        );
+
+        return is_string($translated) ? $translated : $source;
     }
 
     private function annotateLaravelNumericFallbackAssignments(string $source): string

@@ -303,7 +303,7 @@ trait BuildsLaravelFrameworkOverlays
             $source,
         );
 
-        return $this->insertClassDocblockLines($source, 'Builder', [
+        $source = $this->insertClassDocblockLines($source, 'Builder', [
             ' * @method $this join(string $table, mixed $first, ?string $operator = null, mixed $second = null, string $type = "inner", bool $where = false)',
             ' * @method $this leftJoin(string $table, mixed $first, ?string $operator = null, mixed $second = null)',
             ' * @method $this rightJoin(string $table, mixed $first, ?string $operator = null, mixed $second = null)',
@@ -332,6 +332,23 @@ trait BuildsLaravelFrameworkOverlays
             ' * @method \Illuminate\Database\Query\Builder toBase()',
             ' * @method \Illuminate\Database\Query\Builder tobase()',
         ]);
+
+        if (! str_contains($source, 'function first(')) {
+            $source = $this->insertBeforeFinalClassBrace($source, <<<'PHP'
+
+    /**
+     * Execute the query and get the first result.
+     *
+     * @param  array|string  $columns
+     * @return TModel|null
+     */
+    public function first($columns = ['*'])
+    {
+    }
+PHP);
+        }
+
+        return $source;
     }
 
     private function renderAuthManagerOverlay(string $source, string $authModel): string
