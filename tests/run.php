@@ -70,6 +70,7 @@ testAnalysisIgnoresStaleRuntimeBaseline($project, $root);
 testPhpStanPragmaOverlayGeneration($project, $root);
 testLaravelDateHelperOverlayGeneration($project, $root);
 testLaravelCollectionMacroOverlayGeneration($project, $root);
+testLaravelRequestPropertyReadOverlayGeneration($project, $root);
 testCaseInsensitiveOverlaySkipsSingleAliasFiles($project, $root);
 testCaseInsensitiveOverlayRespectsExcludes($project, $root);
 testTraitSelfCallOverlayGeneration($project, $root);
@@ -703,6 +704,8 @@ function testLaravelDateHelperOverlayGeneration(string $project, string $root): 
 {
     require_once $root . '/src/Application.php';
 
+    mkdir($project . '/routes', 0777, true);
+
     file_put_contents($project . '/app/UsesDateHelpers.php', <<<'PHP'
 <?php
 
@@ -734,31 +737,50 @@ final class UsesDateHelpers
 }
 PHP);
 
+    file_put_contents($project . '/routes/console.php', <<<'PHP'
+<?php
+
+use Illuminate\Support\Facades\DB;
+
+DB::table('activity_log')->where('created_at', '<', now()->subYear())->delete();
+PHP);
+
     $application = new Laramago\Application();
     $method = new ReflectionMethod($application, 'phpStanPragmaSubstitutions');
-    $method->invoke($application, $project, [], []);
+    $method->invoke($application, $project, ['routes'], []);
 
     $map = json_decode((string) file_get_contents($project . '/.laramago/cache/phpstan-pragma-overlays.json'), true);
+    $foundAppOverlay = false;
+    $foundRoutesOverlay = false;
 
     foreach (is_array($map) ? $map : [] as $entry) {
-        if (($entry['original'] ?? null) !== 'app/UsesDateHelpers.php' || ! is_string($entry['overlay'] ?? null)) {
+        if (! is_string($entry['original'] ?? null) || ! is_string($entry['overlay'] ?? null)) {
             continue;
         }
 
         $overlay = file_get_contents($project . '/' . $entry['overlay']);
 
-        if (is_string($overlay)
+        if (($entry['original'] ?? null) === 'app/UsesDateHelpers.php'
+            && is_string($overlay)
             && str_contains($overlay, '\\Illuminate\\Support\\Carbon::now()->subDays(1)')
             && str_contains($overlay, '\\Illuminate\\Support\\Carbon::today()')
             && str_contains($overlay, '\\Illuminate\\Support\\Facades\\Response::make([\'ok\' => true], 202)->withHeaders')
             && str_contains($overlay, 'response()->json([\'ok\' => true])')
             && str_contains($overlay, '$this->now()')
             && str_contains($overlay, 'self::today()')) {
-            return;
+            $foundAppOverlay = true;
+        }
+
+        if (($entry['original'] ?? null) === 'routes/console.php'
+            && is_string($overlay)
+            && str_contains($overlay, '\\Illuminate\\Support\\Carbon::now()->subYear()')) {
+            $foundRoutesOverlay = true;
         }
     }
 
-    fail('Laravel date helper overlay did not rewrite global helper calls safely');
+    if (! $foundAppOverlay || ! $foundRoutesOverlay) {
+        fail('Laravel date helper overlay did not rewrite global helper calls safely');
+    }
 }
 
 function testLaravelCollectionMacroOverlayGeneration(string $project, string $root): void
@@ -804,6 +826,56 @@ PHP);
     }
 
     fail('Laravel collection macro overlay did not annotate closure $this safely');
+}
+
+function testLaravelRequestPropertyReadOverlayGeneration(string $project, string $root): void
+{
+    require_once $root . '/src/Application.php';
+
+    mkdir($project . '/app/Http/Controllers', 0777, true);
+
+    file_put_contents($project . '/app/Http/Controllers/SearchController.php', <<<'PHP'
+<?php
+
+namespace App\Http\Controllers;
+
+use Illuminate\Http\Request;
+
+class SearchController
+{
+    public function index(Request $request): mixed
+    {
+        $value = $request->search;
+        $hasSearch = isset($request->search);
+        $request->search = 'changed';
+
+        return [$value, $hasSearch];
+    }
+}
+PHP);
+
+    $application = new Laramago\Application();
+    $method = new ReflectionMethod($application, 'phpStanPragmaSubstitutions');
+    $method->invoke($application, $project, [], []);
+
+    $map = json_decode((string) file_get_contents($project . '/.laramago/cache/phpstan-pragma-overlays.json'), true);
+
+    foreach (is_array($map) ? $map : [] as $entry) {
+        if (($entry['original'] ?? null) !== 'app/Http/Controllers/SearchController.php' || ! is_string($entry['overlay'] ?? null)) {
+            continue;
+        }
+
+        $overlay = file_get_contents($project . '/' . $entry['overlay']);
+
+        if (is_string($overlay)
+            && str_contains($overlay, '$value = $request->input(\'search\');')
+            && str_contains($overlay, '$hasSearch = isset($request->search);')
+            && str_contains($overlay, '$request->search = \'changed\';')) {
+            return;
+        }
+    }
+
+    fail('Laravel request property read overlay did not rewrite dynamic input access safely');
 }
 
 function testCaseInsensitiveOverlaySkipsSingleAliasFiles(string $project, string $root): void
@@ -1351,6 +1423,14 @@ class Model
     public function loadCount($relations)
     {
     }
+
+    protected function increment($column, $amount = 1, array $extra = [])
+    {
+    }
+
+    protected function decrement($column, $amount = 1, array $extra = [])
+    {
+    }
 }
 PHP);
 
@@ -1387,6 +1467,13 @@ class Builder
     }
 
     public function distinct()
+    {
+    }
+
+    /**
+     * @param  SortDirection|'asc'|'desc'  $direction
+     */
+    public function orderBy($column, $direction = 'asc')
     {
     }
 }
@@ -1495,7 +1582,7 @@ PHP);
         fail('Eloquent builder overlay did not preserve source and add delegated chain methods');
     }
 
-    if (! is_string($eloquentModelOverlay) || ! str_contains($eloquentModelOverlay, 'public function loadMissing($relations, ...$additionalRelations)') || ! str_contains($eloquentModelOverlay, 'public static function withoutGlobalScopes(?array $scopes = null)') || ! str_contains($eloquentModelOverlay, 'public static function where(mixed $column, mixed $operator = null, mixed $value = null, string $boolean = \'and\')') || ! str_contains($eloquentModelOverlay, 'public static function select(mixed ...$columns)')) {
+    if (! is_string($eloquentModelOverlay) || ! str_contains($eloquentModelOverlay, 'public function loadMissing($relations, ...$additionalRelations)') || ! str_contains($eloquentModelOverlay, 'public function increment($column, $amount = 1, array $extra = [])') || ! str_contains($eloquentModelOverlay, 'public static function withoutGlobalScopes(?array $scopes = null)') || ! str_contains($eloquentModelOverlay, 'public static function where(mixed $column, mixed $operator = null, mixed $value = null, string $boolean = \'and\')') || ! str_contains($eloquentModelOverlay, 'public static function select(mixed ...$columns)')) {
         fail('Eloquent model overlay did not expose dynamic static builder delegation');
     }
 
@@ -1503,7 +1590,7 @@ PHP);
         fail('HasAttributes overlay did not expose variadic attribute selectors');
     }
 
-    if (! is_string($queryBuilderOverlay) || ! str_contains($queryBuilderOverlay, 'public function select($columns = [\'*\'], ...$additionalColumns)') || ! str_contains($queryBuilderOverlay, 'public function addSelect($column, ...$additionalColumns)') || ! str_contains($queryBuilderOverlay, 'public function distinct(...$columns)') || ! str_contains($queryBuilderOverlay, '@method $this whereintegernotinraw(')) {
+    if (! is_string($queryBuilderOverlay) || ! str_contains($queryBuilderOverlay, 'public function select($columns = [\'*\'], ...$additionalColumns)') || ! str_contains($queryBuilderOverlay, 'public function addSelect($column, ...$additionalColumns)') || ! str_contains($queryBuilderOverlay, 'public function distinct(...$columns)') || ! str_contains($queryBuilderOverlay, '@param  SortDirection|string  $direction') || ! str_contains($queryBuilderOverlay, '@method $this whereintegernotinraw(')) {
         fail('query builder overlay did not expose variadic column selectors');
     }
 

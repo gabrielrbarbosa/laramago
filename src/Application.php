@@ -6,7 +6,7 @@ namespace Laramago;
 
 final class Application
 {
-    private const VERSION = '0.1.39';
+    private const VERSION = '0.1.40';
 
     private const CONFIG_FILE = 'mago.toml';
 
@@ -1601,7 +1601,7 @@ TOML;
             $notificationSource = file_get_contents($notificationPath);
 
             if (is_string($notificationSource)) {
-                $overlays[] = $this->writeFrameworkOverlay($projectRoot, 'Notification.php', $notificationPath, $this->renderNotificationOverlay($notificationSource, $projectRoot));
+                $overlays[] = $this->writeFrameworkOverlay($projectRoot, 'Notification.php', $notificationPath, $this->renderNotificationOverlay($notificationSource, $projectRoot, $arguments));
             }
         }
 
@@ -1813,11 +1813,15 @@ PHP);
                 'public function load($relations)',
                 'public function loadMissing($relations)',
                 'public function loadCount($relations)',
+                'protected function increment($column, $amount = 1, array $extra = [])',
+                'protected function decrement($column, $amount = 1, array $extra = [])',
             ],
             [
                 'public function load($relations, ...$additionalRelations)',
                 'public function loadMissing($relations, ...$additionalRelations)',
                 'public function loadCount($relations, ...$additionalRelations)',
+                'public function increment($column, $amount = 1, array $extra = [])',
+                'public function decrement($column, $amount = 1, array $extra = [])',
             ],
             $source,
         );
@@ -1956,11 +1960,13 @@ PHP);
                 'public function select($columns = [\'*\'])',
                 'public function addSelect($column)',
                 'public function distinct()',
+                '@param  SortDirection|\'asc\'|\'desc\'  $direction',
             ],
             [
                 'public function select($columns = [\'*\'], ...$additionalColumns)',
                 'public function addSelect($column, ...$additionalColumns)',
                 'public function distinct(...$columns)',
+                '@param  SortDirection|string  $direction',
             ],
             $source,
         );
@@ -1997,9 +2003,12 @@ PHP);
         );
     }
 
-    private function renderNotificationOverlay(string $source, string $projectRoot): string
+    /**
+     * @param list<string> $arguments
+     */
+    private function renderNotificationOverlay(string $source, string $projectRoot, array $arguments): string
     {
-        $members = $this->notificationDynamicMembers($projectRoot);
+        $members = $this->notificationDynamicMembers($projectRoot, $arguments);
         $declarations = [];
 
         foreach ($members['methods'] as $method) {
@@ -2016,16 +2025,17 @@ PHP);
     }
 
     /**
+     * @param list<string> $arguments
      * @return array{methods: list<string>, properties: list<string>}
      */
-    private function notificationDynamicMembers(string $projectRoot): array
+    private function notificationDynamicMembers(string $projectRoot, array $arguments): array
     {
         $methods = [];
         $properties = [];
         $seenFiles = [];
         $config = $this->projectConfigValues($projectRoot);
 
-        foreach ($config['paths'] as $path) {
+        foreach ($this->sourceOverlayPaths($projectRoot, $arguments, $config['paths']) as $path) {
             foreach ($this->sourcePhpFiles($projectRoot, $path) as $file) {
                 if (isset($seenFiles[$file])) {
                     continue;
@@ -2283,7 +2293,7 @@ PHP;
         $config = $this->projectConfigValues($projectRoot);
         $excludes = $config['excludes'];
 
-        foreach ($config['paths'] as $path) {
+        foreach ($this->sourceOverlayPaths($projectRoot, $arguments, $config['paths']) as $path) {
             foreach ($this->sourcePhpFiles($projectRoot, $path) as $file) {
                 if (isset($seenFiles[$file]) || isset($skippedOriginalPaths[$file])) {
                     continue;
@@ -2302,7 +2312,7 @@ PHP;
                     continue;
                 }
 
-                $translated = $this->annotateLaravelCollectionMacroClosures($this->translateLaravelDateHelperCalls($this->translatePhpStanPragmas($source)));
+                $translated = $this->rewriteLaravelRequestPropertyReads($this->annotateLaravelCollectionMacroClosures($this->translateLaravelDateHelperCalls($this->translatePhpStanPragmas($source))));
                 $minimumAliases = $translated === $source ? 2 : 1;
                 $overlay = $this->insertTraitSelfCallMethods($this->insertCaseInsensitiveMethodAliases($translated, $caseInsensitiveAliasCandidates, $minimumAliases));
 
@@ -2327,6 +2337,38 @@ PHP;
         file_put_contents($projectRoot . '/' . self::PHPSTAN_PRAGMA_OVERLAY_MAP, json_encode($pathMap, JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR));
 
         return $substitutions;
+    }
+
+    /**
+     * @param list<string> $arguments
+     * @param list<string> $configuredPaths
+     * @return list<string>
+     */
+    private function sourceOverlayPaths(string $projectRoot, array $arguments, array $configuredPaths): array
+    {
+        $paths = [];
+
+        foreach ($configuredPaths as $path) {
+            $paths[$this->normalizeProjectPath($path)] = true;
+        }
+
+        foreach ($this->stripLaramagoOptions($arguments) as $argument) {
+            if ($argument === '' || str_starts_with($argument, '-')) {
+                continue;
+            }
+
+            $path = $this->normalizeProjectPath($argument);
+
+            if ($path === '' || str_starts_with($path, '/') || str_starts_with($path, '../')) {
+                continue;
+            }
+
+            if (is_file($projectRoot . '/' . $path) || is_dir($projectRoot . '/' . $path)) {
+                $paths[$path] = true;
+            }
+        }
+
+        return array_values(array_filter(array_keys($paths), static fn (string $path): bool => $path !== ''));
     }
 
     /**
@@ -2520,6 +2562,34 @@ PHP;
         );
 
         return is_string($translated) ? $translated : $source;
+    }
+
+    private function rewriteLaravelRequestPropertyReads(string $source): string
+    {
+        $lines = preg_split('/(\R)/', $source, -1, PREG_SPLIT_DELIM_CAPTURE);
+
+        if (! is_array($lines)) {
+            return $source;
+        }
+
+        $translated = '';
+
+        for ($index = 0; $index < count($lines); $index += 2) {
+            $line = (string) $lines[$index];
+            $lineEnding = (string) ($lines[$index + 1] ?? '');
+
+            if (! str_contains($line, 'isset(')) {
+                $line = preg_replace_callback(
+                    '/\$request\s*->\s*([A-Za-z_][A-Za-z0-9_]*)\b(?!\s*(?:\(|=|\+=|-=|\*=|\/=|%=|\.=|\?\?=|\+\+|--))/',
+                    static fn (array $matches): string => '$request->input(\'' . $matches[1] . '\')',
+                    $line,
+                ) ?? $line;
+            }
+
+            $translated .= $line . $lineEnding;
+        }
+
+        return $translated;
     }
 
     /**
