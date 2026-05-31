@@ -362,7 +362,115 @@ trait BuildsLaravelFrameworkOverlays
 PHP);
         }
 
+        foreach ($this->eloquentBuilderForwardedMethods() as $method => $code) {
+            if (! str_contains($source, 'function ' . $method . '(')) {
+                $source = $this->insertBeforeFinalClassBrace($source, $code);
+            }
+        }
+
         return $source;
+    }
+
+    private function eloquentBuilderForwardedMethods(): array
+    {
+        return [
+            'orderBy' => <<<'PHP'
+
+    /**
+     * Laramago overlay for forwarded query builder ordering.
+     *
+     * @return \Illuminate\Database\Eloquent\Builder<TModel>
+     */
+    public function orderBy(mixed $column, mixed $direction = 'asc'): \Illuminate\Database\Eloquent\Builder
+    {
+        return $this;
+    }
+PHP,
+            'orderByDesc' => <<<'PHP'
+
+    /**
+     * Laramago overlay for forwarded query builder ordering.
+     *
+     * @return \Illuminate\Database\Eloquent\Builder<TModel>
+     */
+    public function orderByDesc(mixed $column): \Illuminate\Database\Eloquent\Builder
+    {
+        return $this;
+    }
+PHP,
+            'selectRaw' => <<<'PHP'
+
+    /**
+     * Laramago overlay for forwarded query builder raw selects.
+     *
+     * @return \Illuminate\Database\Eloquent\Builder<TModel>
+     */
+    public function selectRaw(mixed $expression, array $bindings = []): \Illuminate\Database\Eloquent\Builder
+    {
+        return $this;
+    }
+PHP,
+            'groupBy' => <<<'PHP'
+
+    /**
+     * Laramago overlay for forwarded query builder grouping.
+     *
+     * @return \Illuminate\Database\Eloquent\Builder<TModel>
+     */
+    public function groupBy(array|string ...$groups): \Illuminate\Database\Eloquent\Builder
+    {
+        return $this;
+    }
+PHP,
+            'skip' => <<<'PHP'
+
+    /**
+     * Laramago overlay for forwarded query builder offsets.
+     *
+     * @return \Illuminate\Database\Eloquent\Builder<TModel>
+     */
+    public function skip(mixed $value): \Illuminate\Database\Eloquent\Builder
+    {
+        return $this;
+    }
+PHP,
+            'take' => <<<'PHP'
+
+    /**
+     * Laramago overlay for forwarded query builder limits.
+     *
+     * @return \Illuminate\Database\Eloquent\Builder<TModel>
+     */
+    public function take(mixed $value): \Illuminate\Database\Eloquent\Builder
+    {
+        return $this;
+    }
+PHP,
+            'offset' => <<<'PHP'
+
+    /**
+     * Laramago overlay for forwarded query builder offsets.
+     *
+     * @return \Illuminate\Database\Eloquent\Builder<TModel>
+     */
+    public function offset(mixed $value): \Illuminate\Database\Eloquent\Builder
+    {
+        return $this;
+    }
+PHP,
+            'limit' => <<<'PHP'
+
+    /**
+     * Laramago overlay for forwarded query builder limits.
+     *
+     * @return \Illuminate\Database\Eloquent\Builder<TModel>
+     */
+    public function limit(mixed $value): \Illuminate\Database\Eloquent\Builder
+    {
+        return $this;
+    }
+PHP,
+        ];
     }
 
     private function renderAuthManagerOverlay(string $source, string $authModel): string
