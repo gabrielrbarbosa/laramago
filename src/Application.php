@@ -501,7 +501,7 @@ HELP);
      */
     private function analysisHasSourceFiles(string $projectRoot, array $arguments, bool $emitFailure = true): bool
     {
-        if (in_array('--list-codes', $arguments, true)) {
+        if (in_array('--list-codes', $arguments, true) || in_array('--stdin-input', $arguments, true)) {
             return true;
         }
 

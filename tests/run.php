@@ -112,6 +112,7 @@ testProjectClassDiscoveryUsesConfiguredSourcePaths($project, $root);
 testAnalysisIgnoresStaleRuntimeBaseline($project, $root);
 testAnalyzeFailsWhenConfiguredSourcesAreEmpty($project, $binary);
 testCodesCommandDoesNotRequireConfiguredSources($project, $binary);
+testStdinInputDoesNotRequireConfiguredSources($project, $root);
 testPhpStanLevelAnalyzeRunsEndToEnd($project, $binary);
 testPhpStanPragmaOverlayGeneration($project, $root);
 testLaravelDateHelperOverlayGeneration($project, $root);

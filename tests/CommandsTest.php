@@ -881,6 +881,43 @@ TOML);
     }
 }
 
+function testStdinInputDoesNotRequireConfiguredSources(string $project, string $root): void
+{
+    require_once $root . '/src/Application.php';
+
+    $emptyProject = $project . '/empty-stdin-project';
+    mkdir($emptyProject . '/app', 0777, true);
+    file_put_contents($emptyProject . '/composer.json', json_encode([
+        'require' => [
+            'php' => '^8.5',
+        ],
+    ], JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR));
+    file_put_contents($emptyProject . '/mago.toml', <<<'TOML'
+version = "1"
+php-version = "8.5.0"
+
+[source]
+workspace = "."
+paths = ["app"]
+includes = ["vendor"]
+excludes = []
+
+[source.glob]
+literal-separator = true
+TOML);
+
+    $application = new Laramago\Application();
+    $method = new ReflectionMethod($application, 'analysisHasSourceFiles');
+
+    if ($method->invoke($application, $emptyProject, ['--stdin-input', 'app/Unsaved.php'], false) !== true) {
+        fail('stdin-input should bypass the empty-source analysis guard for editor integrations');
+    }
+
+    if ($method->invoke($application, $emptyProject, ['app/Unsaved.php'], false) !== false) {
+        fail('non-stdin virtual paths should not bypass the empty-source analysis guard');
+    }
+}
+
 function testPhpStanLevelAnalyzeRunsEndToEnd(string $project, string $binary): void
 {
     $fixture = $project . '/level-fixture';
