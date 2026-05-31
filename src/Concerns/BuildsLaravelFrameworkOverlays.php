@@ -31,6 +31,7 @@ trait BuildsLaravelFrameworkOverlays
         $queryBuilderPath = $projectRoot . '/vendor/laravel/framework/src/Illuminate/Database/Query/Builder.php';
         $controllerMiddlewareOptionsPath = $projectRoot . '/vendor/laravel/framework/src/Illuminate/Routing/ControllerMiddlewareOptions.php';
         $requestPath = $projectRoot . '/vendor/laravel/framework/src/Illuminate/Http/Request.php';
+        $interactsWithInputPath = $projectRoot . '/vendor/laravel/framework/src/Illuminate/Http/Concerns/InteractsWithInput.php';
         $resourceCollectionPath = $projectRoot . '/vendor/laravel/framework/src/Illuminate/Http/Resources/Json/ResourceCollection.php';
         $anonymousResourceCollectionPath = $projectRoot . '/vendor/laravel/framework/src/Illuminate/Http/Resources/Json/AnonymousResourceCollection.php';
         $abstractPaginatorPath = $projectRoot . '/vendor/laravel/framework/src/Illuminate/Pagination/AbstractPaginator.php';
@@ -175,6 +176,14 @@ trait BuildsLaravelFrameworkOverlays
 
             if (is_string($requestSource)) {
                 $overlays[] = $this->writeFrameworkOverlay($projectRoot, 'Request.php', $requestPath, $this->renderRequestOverlay($requestSource));
+            }
+        }
+
+        if (is_file($interactsWithInputPath)) {
+            $interactsWithInputSource = file_get_contents($interactsWithInputPath);
+
+            if (is_string($interactsWithInputSource)) {
+                $overlays[] = $this->writeFrameworkOverlay($projectRoot, 'InteractsWithInput.php', $interactsWithInputPath, $this->renderInteractsWithInputOverlay($interactsWithInputSource));
             }
         }
 
@@ -887,6 +896,21 @@ PHP);
     {
     }
 PHP);
+    }
+
+    private function renderInteractsWithInputOverlay(string $source): string
+    {
+        return str_replace(
+            [
+                '     * @return array|\Illuminate\Http\UploadedFile|\Illuminate\Http\UploadedFile[]|null',
+                '    public function file($key = null, $default = null)',
+            ],
+            [
+                '     * @return ($key is null ? array<string, mixed> : \Illuminate\Http\UploadedFile|null)',
+                '    public function file($key = null, $default = null): array|\Illuminate\Http\UploadedFile|null',
+            ],
+            $source,
+        );
     }
 
     private function renderNotificationOverlay(string $source, string $projectRoot, array $arguments): string

@@ -217,6 +217,7 @@ function testLaravelFrameworkOverlayGeneration(string $project, string $root): v
     mkdir($project . '/vendor/laravel/framework/src/Illuminate/Contracts/Pagination', 0777, true);
     mkdir($project . '/vendor/laravel/framework/src/Illuminate/Foundation', 0777, true);
     mkdir($project . '/vendor/laravel/framework/src/Illuminate/Http/Client', 0777, true);
+    mkdir($project . '/vendor/laravel/framework/src/Illuminate/Http/Concerns', 0777, true);
     mkdir($project . '/vendor/laravel/framework/src/Illuminate/Http/Resources/Json', 0777, true);
     mkdir($project . '/vendor/laravel/framework/src/Illuminate/Notifications', 0777, true);
     mkdir($project . '/vendor/laravel/framework/src/Illuminate/Pagination', 0777, true);
@@ -669,6 +670,26 @@ class Request
 }
 PHP);
 
+    file_put_contents($project . '/vendor/laravel/framework/src/Illuminate/Http/Concerns/InteractsWithInput.php', <<<'PHP'
+<?php
+
+namespace Illuminate\Http\Concerns;
+
+trait InteractsWithInput
+{
+    /**
+     * Retrieve a file from the request.
+     *
+     * @param  string|null  $key
+     * @param  mixed  $default
+     * @return array|\Illuminate\Http\UploadedFile|\Illuminate\Http\UploadedFile[]|null
+     */
+    public function file($key = null, $default = null)
+    {
+    }
+}
+PHP);
+
     file_put_contents($project . '/vendor/laravel/framework/src/Illuminate/Http/Resources/Json/ResourceCollection.php', <<<'PHP'
 <?php
 
@@ -719,7 +740,7 @@ PHP);
     $method = new ReflectionMethod($application, 'laravelFrameworkSubstitutions');
     $substitutions = $method->invoke($application, $project, []);
 
-    if (! is_array($substitutions) || count($substitutions) !== 58) {
+    if (! is_array($substitutions) || count($substitutions) !== 60) {
         fail('framework overlay generation returned unexpected substitutions');
     }
 
@@ -743,6 +764,7 @@ PHP);
     $queryBuilderOverlay = file_get_contents($project . '/.laramago/cache/framework-overlays/QueryBuilder.php');
     $controllerMiddlewareOptionsOverlay = file_get_contents($project . '/.laramago/cache/framework-overlays/ControllerMiddlewareOptions.php');
     $requestOverlay = file_get_contents($project . '/.laramago/cache/framework-overlays/Request.php');
+    $interactsWithInputOverlay = file_get_contents($project . '/.laramago/cache/framework-overlays/InteractsWithInput.php');
     $resourceCollectionOverlay = file_get_contents($project . '/.laramago/cache/framework-overlays/ResourceCollection.php');
     $anonymousResourceCollectionOverlay = file_get_contents($project . '/.laramago/cache/framework-overlays/AnonymousResourceCollection.php');
     $abstractPaginatorOverlay = file_get_contents($project . '/.laramago/cache/framework-overlays/AbstractPaginator.php');
@@ -843,6 +865,10 @@ PHP);
 
     if (! is_string($requestOverlay) || ! str_contains($requestOverlay, 'public function __set(string $key, mixed $value): void')) {
         fail('Request overlay did not expose dynamic request writes');
+    }
+
+    if (! is_string($interactsWithInputOverlay) || ! str_contains($interactsWithInputOverlay, '@return ($key is null ? array<string, mixed> : \\Illuminate\\Http\\UploadedFile|null)') || ! str_contains($interactsWithInputOverlay, 'public function file($key = null, $default = null): array|\\Illuminate\\Http\\UploadedFile|null')) {
+        fail('InteractsWithInput overlay did not expose keyed request files as UploadedFile instances');
     }
 
     if (! is_string($resourceCollectionOverlay) || ! str_contains($resourceCollectionOverlay, '@method array all()') || ! str_contains($resourceCollectionOverlay, '@mixin \\Illuminate\\Support\\Collection<array-key, mixed>')) {

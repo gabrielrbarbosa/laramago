@@ -117,6 +117,10 @@ final class RequestInputController
             $selected[] = $column;
         }
 
+        foreach ($request->input('files') as $file) {
+            $selected[] = $file;
+        }
+
         return [$selected ?? [], $model];
     }
 }
@@ -137,6 +141,7 @@ PHP);
 
         if (is_string($overlay)
             && str_contains($overlay, '/** @var array<array-key, mixed> $columns */')
+            && str_contains($overlay, "foreach ((array) \$request->input('files') as \$file)")
             && ! str_contains($overlay, '/** @var array<array-key, mixed> $model */')) {
             return;
         }

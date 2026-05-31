@@ -56,6 +56,7 @@ trait BuildsSourceCompatibilityOverlays
                 $translated = $this->annotateLaravelNumericFallbackAssignments($translated);
                 $translated = $this->annotateLaravelRequestParameters($translated);
                 $translated = $this->rewriteLaravelRequestPropertyReads($translated, $projectRoot);
+                $translated = $this->castLaravelRequestForeachSources($translated);
                 $translated = $this->annotateLaravelRequestInputArrayVariables($translated);
                 $translated = $this->annotateLaravelObserverModelParameters($translated, $relativePath, $observerModels);
                 $translated = $this->annotateLaravelJsonResourceDynamicMembers($translated, $relativePath);
@@ -669,6 +670,24 @@ trait BuildsSourceCompatibilityOverlays
 
                 return $matches[1] . '/** @var array<array-key, mixed> $' . $variable . ' */' . PHP_EOL . $matches[0];
             },
+            $source,
+        );
+
+        return is_string($translated) ? $translated : $source;
+    }
+
+    private function castLaravelRequestForeachSources(string $source): string
+    {
+        if (! str_contains($source, 'foreach') || (! str_contains($source, '->input(') && ! str_contains($source, '->all(') && ! str_contains($source, '->validated('))) {
+            return $source;
+        }
+
+        $requestSource = '(?:\\$[A-Za-z_][A-Za-z0-9_]*|\\$this\\s*->\\s*[A-Za-z_][A-Za-z0-9_]*|request\\(\\))';
+        $requestCall = $requestSource . '\\s*->\\s*(?:input|all|validated)\\s*\\([^)]*\\)';
+
+        $translated = preg_replace_callback(
+            '/foreach\s*\(\s*(?!\(array\)\s*)(' . $requestCall . ')\s+as\b/m',
+            static fn (array $matches): string => 'foreach ((array) ' . $matches[1] . ' as',
             $source,
         );
 
