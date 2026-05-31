@@ -48,6 +48,7 @@ trait BuildsSourceCompatibilityOverlays
                 $translated = $this->translatePhpStanPragmas($source);
                 $translated = $this->translateLarastanPseudoTypes($translated);
                 $translated = $this->translatePhpStanListTypes($translated);
+                $translated = $this->removeObjectAccessStringInterpolations($translated);
                 $translated = $this->translateLaravelDateHelperCalls($translated);
                 $translated = $this->rewriteLaravelHttpClientWrapperReturnTypes($translated);
                 $translated = $this->annotateLaravelHttpClientWrapperAssignments($translated, $projectRoot);
@@ -288,6 +289,83 @@ trait BuildsSourceCompatibilityOverlays
         }
 
         return null;
+    }
+
+    private function removeObjectAccessStringInterpolations(string $source): string
+    {
+        $tokens = token_get_all($source);
+        $translated = '';
+        $count = count($tokens);
+
+        for ($index = 0; $index < $count; $index++) {
+            $token = $tokens[$index];
+
+            if (! is_array($token) || $token[0] !== T_CURLY_OPEN) {
+                $translated .= is_array($token) ? $token[1] : $token;
+
+                continue;
+            }
+
+            $close = $this->stringInterpolationCloseTokenIndex($tokens, $index);
+
+            if ($close === null || ! $this->stringInterpolationContainsObjectMethodCall($tokens, $index, $close)) {
+                $translated .= is_array($token) ? $token[1] : $token;
+
+                continue;
+            }
+
+            $index = $close;
+        }
+
+        return $translated;
+    }
+
+    private function stringInterpolationCloseTokenIndex(array $tokens, int $open): ?int
+    {
+        $depth = 1;
+        $count = count($tokens);
+
+        for ($index = $open + 1; $index < $count; $index++) {
+            $token = $tokens[$index];
+
+            if ($token === '{') {
+                $depth++;
+
+                continue;
+            }
+
+            if ($token !== '}') {
+                continue;
+            }
+
+            $depth--;
+
+            if ($depth === 0) {
+                return $index;
+            }
+        }
+
+        return null;
+    }
+
+    private function stringInterpolationContainsObjectMethodCall(array $tokens, int $open, int $close): bool
+    {
+        for ($index = $open + 1; $index < $close; $index++) {
+            $token = $tokens[$index];
+
+            if (! is_array($token) || ! in_array($token[0], [T_OBJECT_OPERATOR, T_NULLSAFE_OBJECT_OPERATOR], true)) {
+                continue;
+            }
+
+            $method = $this->nextMeaningfulTokenIndex($tokens, $index + 1);
+            $openParenthesis = $method === null ? null : $this->nextMeaningfulTokenIndex($tokens, $method + 1);
+
+            if ($method !== null && $openParenthesis !== null && is_array($tokens[$method]) && $tokens[$method][0] === T_STRING && $tokens[$openParenthesis] === '(') {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private function translateLaravelDateHelperCalls(string $source): string

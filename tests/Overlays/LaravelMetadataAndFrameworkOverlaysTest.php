@@ -827,6 +827,28 @@ namespace Illuminate\Http\Concerns;
 trait InteractsWithInput
 {
     /**
+     * Retrieve a query string item from the request.
+     *
+     * @param  string|null  $key
+     * @param  string|array|null  $default
+     * @return string|array|null
+     */
+    public function query($key = null, $default = null)
+    {
+    }
+
+    /**
+     * Retrieve a request payload item from the request.
+     *
+     * @param  string|null  $key
+     * @param  string|array|null  $default
+     * @return string|array|null
+     */
+    public function post($key = null, $default = null)
+    {
+    }
+
+    /**
      * Retrieve a file from the request.
      *
      * @param  string|null  $key
@@ -993,7 +1015,7 @@ PHP);
         fail('application contract overlay did not expose production environment helper');
     }
 
-    if (! is_string($supportCarbonOverlay) || ! str_contains($supportCarbonOverlay, '@method float diffinseconds(') || ! str_contains($supportCarbonOverlay, '@method $this startofmonth(')) {
+    if (! is_string($supportCarbonOverlay) || ! str_contains($supportCarbonOverlay, '@method float diffinseconds(') || ! str_contains($supportCarbonOverlay, '@method $this startofmonth(') || ! str_contains($supportCarbonOverlay, '@method $this locale(string $locale')) {
         fail('support Carbon overlay did not expose lowercase Carbon method aliases');
     }
 
@@ -1057,7 +1079,7 @@ PHP);
         fail('Request overlay did not expose safe input helper and dynamic request writes');
     }
 
-    if (! is_string($interactsWithInputOverlay) || ! str_contains($interactsWithInputOverlay, '@return ($key is null ? array<string, mixed> : \\Illuminate\\Http\\UploadedFile|null)') || ! str_contains($interactsWithInputOverlay, 'public function file($key = null, $default = null): array|\\Illuminate\\Http\\UploadedFile|null')) {
+    if (! is_string($interactsWithInputOverlay) || ! str_contains($interactsWithInputOverlay, '@param mixed $default') || ! str_contains($interactsWithInputOverlay, '@return mixed') || ! str_contains($interactsWithInputOverlay, '@return ($key is null ? array<string, mixed> : \\Illuminate\\Http\\UploadedFile|null)') || ! str_contains($interactsWithInputOverlay, 'public function file($key = null, $default = null): array|\\Illuminate\\Http\\UploadedFile|null')) {
         fail('InteractsWithInput overlay did not expose keyed request files as UploadedFile instances');
     }
 

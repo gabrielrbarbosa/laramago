@@ -102,8 +102,9 @@ final class UsesDateHelpers
         $factory = response()->json(['ok' => true]);
         $method = $this->now();
         $static = self::today();
+        $message = "Generated at {$now->toDateString()} for month {$now->month}";
 
-        return [$now, $today, $response, $factory, $method, $static];
+        return [$now, $today, $response, $factory, $method, $static, $message];
     }
 
     private function now(): mixed
@@ -147,6 +148,8 @@ PHP);
             && str_contains($overlay, '\\Illuminate\\Support\\Carbon::today()')
             && str_contains($overlay, '\\Illuminate\\Support\\Facades\\Response::make([\'ok\' => true], 202)->withHeaders')
             && str_contains($overlay, 'response()->json([\'ok\' => true])')
+            && str_contains($overlay, '"Generated at  for month {$now->month}"')
+            && ! str_contains($overlay, '{$now->toDateString()}')
             && str_contains($overlay, '$this->now()')
             && str_contains($overlay, 'self::today()')) {
             $foundAppOverlay = true;

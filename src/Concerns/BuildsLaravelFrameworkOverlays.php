@@ -920,6 +920,7 @@ PHP);
             ' * @method $this endofmonth()',
             ' * @method $this firstofmonth(mixed $dayOfWeek = null)',
             ' * @method $this lastofmonth(mixed $dayOfWeek = null)',
+            ' * @method $this locale(string $locale, string ...$fallbackLocales)',
             ' * @method mixed weekday(?int $value = null)',
             ' * @method string todatetimestring(string $unitPrecision = "second")',
             ' * @method string toiso8601string()',
@@ -1306,6 +1307,19 @@ PHP;
 
     private function renderInteractsWithInputOverlay(string $source): string
     {
+        $source = preg_replace(
+            '/(^[ \t]*\*\s*)@param\s+string\|array\|null\s+\$default$/m',
+            '$1@param mixed $default',
+            $source,
+        ) ?? $source;
+
+        $source = preg_replace(
+            '/(^[ \t]*\*\s*)@return\s+string\|array\|null$/m',
+            '$1@return mixed',
+            $source,
+            2,
+        ) ?? $source;
+
         $source = preg_replace(
             '/^([ \t]*\*\s*)@return[^\r\n]*(?:UploadedFile[^\r\n]*)$/m',
             '$1@return ($key is null ? array<string, mixed> : \Illuminate\Http\UploadedFile|null)',
