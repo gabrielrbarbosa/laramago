@@ -75,6 +75,7 @@ testRaceSafeCacheDirectoryOperations($project, $root);
 testProjectLockSerializesCacheCommands($project, $binary);
 testProjectClassDiscoveryUsesConfiguredSourcePaths($project, $root);
 testAnalysisIgnoresStaleRuntimeBaseline($project, $root);
+testPhpStanLevelAnalyzeRunsEndToEnd($project, $binary);
 testPhpStanPragmaOverlayGeneration($project, $root);
 testLaravelDateHelperOverlayGeneration($project, $root);
 testLaravelHttpClientWrapperReturnTypeOverlayGeneration($project, $root);

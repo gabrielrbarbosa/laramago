@@ -608,3 +608,89 @@ function testAnalysisIgnoresStaleRuntimeBaseline(string $project, string $root):
         fail('analysis should remove stale runtime baselines when no project baseline is configured');
     }
 }
+
+function testPhpStanLevelAnalyzeRunsEndToEnd(string $project, string $binary): void
+{
+    $fixture = $project . '/level-fixture';
+
+    mkdir($fixture . '/app/Http/Controllers', 0777, true);
+    mkdir($fixture . '/vendor/Illuminate/Http', 0777, true);
+
+    file_put_contents($fixture . '/composer.json', json_encode([
+        'require' => [
+            'php' => '^8.5',
+        ],
+        'autoload' => [
+            'psr-4' => [
+                'App\\' => 'app/',
+            ],
+        ],
+    ], JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR));
+
+    file_put_contents($fixture . '/mago.toml', <<<'TOML'
+version = "1"
+php-version = "8.5.0"
+
+[source]
+workspace = "."
+paths = ["app"]
+includes = ["vendor"]
+excludes = []
+
+[source.glob]
+literal-separator = true
+TOML);
+
+    file_put_contents($fixture . '/vendor/Illuminate/Http/Request.php', <<<'PHP'
+<?php
+
+namespace Illuminate\Http;
+
+class Request
+{
+    public function input(string $key, mixed $default = null): mixed
+    {
+        return $default;
+    }
+}
+PHP);
+
+    file_put_contents($fixture . '/app/Http/Controllers/ReportController.php', <<<'PHP'
+<?php
+
+namespace App\Http\Controllers;
+
+use Illuminate\Http\Request;
+
+final class ReportController
+{
+    public function index(Request $request): array
+    {
+        $columns = $request->input('columns');
+
+        foreach ($columns as $column) {
+            $selected[] = $column;
+        }
+
+        return $selected ?? [];
+    }
+
+    public function strictReturn(): int
+    {
+        return false;
+    }
+}
+PHP);
+
+    $strictResult = captureRun([PHP_BINARY, $binary, 'analyze', '--project=' . $fixture, '--reporting-format=count']);
+
+    if ($strictResult['exitCode'] === 0 || ! str_contains($strictResult['output'], 'error:')) {
+        fail('native strict analysis should still report real issues in the end-to-end fixture');
+    }
+
+    $levelResult = captureRun([PHP_BINARY, $binary, 'analyze', '--project=' . $fixture, '--phpstan-level=6', '--reporting-format=count']);
+
+    if ($levelResult['exitCode'] !== 0 || ! str_contains($levelResult['output'], 'No issues found.')) {
+        fail('PHPStan level 6 analysis should pass the end-to-end migration fixture');
+    }
+}
