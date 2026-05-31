@@ -114,6 +114,17 @@ trait MigratesPhpStan
         return $this->neonNestedListValues($source, 'excludePaths', ['analyse', 'analyseAndScan']);
     }
 
+    private function phpStanDiscoveryIncludes(string $source): array
+    {
+        $includes = [];
+
+        foreach (['scanDirectories', 'scanFiles', 'bootstrapFiles', 'stubFiles'] as $key) {
+            $includes = array_merge($includes, $this->neonListValue($source, $key));
+        }
+
+        return $this->normalizePhpStanIncludePaths($includes);
+    }
+
     private function neonNestedListValues(string $source, string $key, array $nestedKeys): array
     {
         $lines = preg_split('/\R/', $source);
@@ -200,19 +211,243 @@ trait MigratesPhpStan
         return array_values(array_unique($normalized));
     }
 
+    private function normalizePhpStanIncludePaths(array $paths): array
+    {
+        $normalized = [];
+
+        foreach ($paths as $path) {
+            $path = trim(str_replace('\\', '/', $path));
+
+            if ($path === '' || str_starts_with($path, '%')) {
+                continue;
+            }
+
+            $path = preg_replace('#^\./#', '', $path) ?? $path;
+            $path = rtrim($path, '/');
+
+            if ($path === 'vendor' || str_starts_with($path, 'vendor/')) {
+                continue;
+            }
+
+            if (str_ends_with($path, '/*')) {
+                $path = substr($path, 0, -2) . '/**';
+            }
+
+            $normalized[] = $path;
+        }
+
+        return array_values(array_unique($normalized));
+    }
+
     private function phpStanIgnoredAnalyzerCodes(string $source): array
     {
-        preg_match_all('/\bidentifier\s*:\s*([A-Za-z0-9_.-]+)/', $source, $matches);
+        $ignores = $this->phpStanIgnoredAnalyzerIgnores($source);
 
         $codes = [];
 
-        foreach ($matches[1] as $identifier) {
-            foreach ($this->phpStanIdentifierAnalyzerCodes($identifier) as $code) {
-                $codes[$code] = true;
+        foreach ($ignores as $ignore) {
+            if (is_string($ignore)) {
+                $codes[$ignore] = true;
             }
         }
 
         return array_keys($codes);
+    }
+
+    /**
+     * @return list<string|array{code: string, in: string}>
+     */
+    private function phpStanIgnoredAnalyzerIgnores(string $source): array
+    {
+        $globalCodes = [];
+        $scopedIgnores = [];
+        $entries = $this->phpStanIgnoreErrorEntries($source);
+
+        if ($entries === []) {
+            preg_match_all('/\bidentifier\s*:\s*[\'"]?([A-Za-z0-9_.-]+)[\'"]?/', $source, $matches);
+
+            $entries = array_map(static fn (string $identifier): array => ['identifier: ' . $identifier], $matches[1]);
+        }
+
+        foreach ($entries as $entry) {
+            $identifier = $this->phpStanIgnoreErrorIdentifier($entry);
+
+            if ($identifier === null) {
+                continue;
+            }
+
+            $paths = $this->normalizePhpStanIgnorePaths($this->phpStanIgnoreErrorPaths($entry));
+
+            foreach ($this->phpStanIdentifierAnalyzerCodes($identifier) as $code) {
+                if ($paths === []) {
+                    $globalCodes[$code] = true;
+                    continue;
+                }
+
+                foreach ($paths as $path) {
+                    $scopedIgnores[] = [
+                        'code' => $code,
+                        'in' => $path,
+                    ];
+                }
+            }
+        }
+
+        return $this->uniqueAnalyzerIgnores(array_merge(array_keys($globalCodes), $scopedIgnores));
+    }
+
+    /**
+     * @return list<list<string>>
+     */
+    private function phpStanIgnoreErrorEntries(string $source): array
+    {
+        $lines = preg_split('/\R/', $source);
+
+        if (! is_array($lines)) {
+            return [];
+        }
+
+        $entries = [];
+        $current = [];
+        $inIgnoreErrors = false;
+        $ignoreErrorsIndent = 0;
+        $entryIndent = null;
+
+        foreach ($lines as $line) {
+            if (! $inIgnoreErrors && preg_match('/^(\s*)ignoreErrors\s*:\s*$/', $line, $matches) === 1) {
+                $inIgnoreErrors = true;
+                $ignoreErrorsIndent = strlen($matches[1]);
+                continue;
+            }
+
+            if (! $inIgnoreErrors) {
+                continue;
+            }
+
+            if (trim($line) === '') {
+                continue;
+            }
+
+            $lineIndent = strlen($line) - strlen(ltrim($line));
+
+            if ($lineIndent <= $ignoreErrorsIndent) {
+                break;
+            }
+
+            if (
+                preg_match('/^\s*-\s*(.*)$/', $line, $matches) === 1
+                && ($entryIndent === null || $lineIndent <= $entryIndent)
+            ) {
+                if ($current !== []) {
+                    $entries[] = $current;
+                }
+
+                $entryIndent = $lineIndent;
+                $current = [$matches[1]];
+                continue;
+            }
+
+            if ($current !== []) {
+                $current[] = trim($line);
+            }
+        }
+
+        if ($current !== []) {
+            $entries[] = $current;
+        }
+
+        return $entries;
+    }
+
+    /**
+     * @param list<string> $entry
+     */
+    private function phpStanIgnoreErrorIdentifier(array $entry): ?string
+    {
+        foreach ($entry as $line) {
+            if (preg_match('/\bidentifier\s*:\s*[\'"]?([A-Za-z0-9_.-]+)[\'"]?/', $line, $matches) === 1) {
+                return $matches[1];
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @param list<string> $entry
+     *
+     * @return list<string>
+     */
+    private function phpStanIgnoreErrorPaths(array $entry): array
+    {
+        $paths = [];
+        $inPaths = false;
+
+        foreach ($entry as $line) {
+            $trimmed = trim($line);
+
+            if (preg_match('/\bpath\s*:\s*[\'"]?([^\'"#\s]+)[\'"]?/', $trimmed, $matches) === 1) {
+                $paths[] = $matches[1];
+                $inPaths = false;
+                continue;
+            }
+
+            if (preg_match('/\bpaths\s*:\s*\[([^\]]*)]/', $trimmed, $matches) === 1) {
+                preg_match_all('/[\'"]?([^\'",\s]+)[\'"]?/', $matches[1], $valueMatches);
+                $paths = array_merge($paths, $valueMatches[1]);
+                $inPaths = false;
+                continue;
+            }
+
+            if (preg_match('/\bpaths\s*:\s*$/', $trimmed) === 1) {
+                $inPaths = true;
+                continue;
+            }
+
+            if (! $inPaths) {
+                continue;
+            }
+
+            if (preg_match('/^-\s*[\'"]?([^\'"#]+)[\'"]?/', $trimmed, $matches) === 1) {
+                $paths[] = $matches[1];
+                continue;
+            }
+
+            if (preg_match('/^[A-Za-z0-9_.-]+\s*:/', $trimmed) === 1) {
+                $inPaths = false;
+            }
+        }
+
+        return array_values(array_filter(array_map('trim', $paths), static fn (string $path): bool => $path !== ''));
+    }
+
+    /**
+     * @param list<string> $paths
+     *
+     * @return list<string>
+     */
+    private function normalizePhpStanIgnorePaths(array $paths): array
+    {
+        $normalized = [];
+
+        foreach ($paths as $path) {
+            $path = trim(str_replace('\\', '/', $path));
+
+            if ($path === '' || str_starts_with($path, '%')) {
+                continue;
+            }
+
+            $path = preg_replace('#^\./#', '', $path) ?? $path;
+            $path = rtrim($path, '/');
+
+            if (str_ends_with($path, '/*')) {
+                $path = substr($path, 0, -2) . '/**';
+            }
+
+            $normalized[] = $path;
+        }
+
+        return array_values(array_unique($normalized));
     }
 
     private function phpStanIdentifierAnalyzerCodes(string $identifier): array

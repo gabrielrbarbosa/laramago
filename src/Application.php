@@ -174,9 +174,9 @@ final class Application
         $config = $this->renderProjectConfig(
             $this->detectPhpVersion($projectRoot),
             $this->normalizePhpStanPaths($paths),
-            ['vendor'],
+            array_values(array_unique(array_merge(['vendor'], $this->phpStanDiscoveryIncludes($source)))),
             $this->normalizePhpStanPaths($excludes),
-            $this->phpStanIgnoredAnalyzerCodes($source),
+            $this->phpStanIgnoredAnalyzerIgnores($source),
         );
 
         if (file_put_contents($configPath, $config) === false) {

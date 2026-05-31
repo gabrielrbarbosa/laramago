@@ -15,6 +15,17 @@ Laramago is a Composer package that gives Laravel applications a practical migra
 
 The goal is simple: keep the developer workflow that teams already use for static analysis, but run it on Mago's fast analyzer without baking one project's strictness level into the package.
 
+## Migration Snapshot
+
+The first production migration target is a private Laravel application, so repository names, paths, classes, and domain details are intentionally omitted here.
+
+| Run | Result |
+| --- | --- |
+| Plain Mago 1.29 with the application's source config | 28,980 errors and 10,004 warnings |
+| Laramago with the matching PHPStan/Larastan level gate | No reported issues |
+
+The gap is mostly Laravel framework magic, Eloquent metadata, PHPStan pragma compatibility, excluded legacy symbols, and PHPStan/Larastan level semantics. Laramago's job is to make those migration concerns explicit and reusable, so teams can evaluate the real remaining analyzer findings instead of sorting through framework noise.
+
 ## Status
 
 Mago 1.29 does not expose a Composer-loaded analyzer extension API equivalent to PHPStan's extension system. That means Laramago is not a direct port of every Larastan internal rule. Instead, it provides the production-safe replacement layer that can be built on top of Mago today:
@@ -109,7 +120,7 @@ Laramago does not exclude application paths by default. Add `--exclude=path/**` 
 
 ### `migrate-phpstan`
 
-Reads a PHPStan/Larastan NEON file and writes the equivalent Laramago `mago.toml` source settings. It imports common `parameters.paths`, flat `parameters.excludePaths`, nested `parameters.excludePaths.analyse` / `parameters.excludePaths.analyseAndScan`, and detects numeric or `max` levels so it can print the matching explicit `--phpstan-level` migration command.
+Reads a PHPStan/Larastan NEON file and writes the equivalent Laramago `mago.toml` source settings. It imports common `parameters.paths`, type-discovery inputs such as `scanDirectories`, `scanFiles`, `bootstrapFiles`, and `stubFiles`, flat `parameters.excludePaths`, nested `parameters.excludePaths.analyse` / `parameters.excludePaths.analyseAndScan`, scoped `ignoreErrors` identifiers, and numeric or `max` levels so it can print the matching explicit `--phpstan-level` migration command.
 
 By default it searches `phpstan.neon`, `phpstan.neon.dist`, `phpstan-ci.neon`, and `phpstan-parallel.neon`. Use `--phpstan-config=path/to/phpstan.neon` for a custom file.
 

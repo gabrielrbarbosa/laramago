@@ -70,6 +70,7 @@ testOutputPathTranslation($project, $root);
 testRuntimeConfigGeneration($project, $root);
 testNativeMagoBinaryIsPreferred($project, $root);
 testPhpStanMigration($project, $root, $binary);
+testPhpStanMigrationPreservesScopedIgnoreErrors($project, $binary);
 testExcludedSymbolStubGeneration($project, $root);
 testRaceSafeCacheDirectoryOperations($project, $root);
 testProjectLockSerializesCacheCommands($project, $binary);

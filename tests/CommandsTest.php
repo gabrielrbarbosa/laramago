@@ -272,6 +272,14 @@ parameters:
     paths:
         - app/
     level: 6
+    scanDirectories:
+        - database/factories
+    scanFiles:
+        - app/helpers.php
+    bootstrapFiles:
+        - bootstrap/static-analysis.php
+    stubFiles:
+        - stubs/legacy.php
     ignoreErrors:
         - identifier: argument.type
         - identifier: method.notFound
@@ -326,6 +334,10 @@ NEON);
 
     if (! is_string($config) || ! str_contains($config, 'paths = ["app"]')) {
         fail('migrate-phpstan did not preserve PHPStan source paths');
+    }
+
+    if (! str_contains($config, 'includes = ["vendor", "database/factories", "app/helpers.php", "bootstrap/static-analysis.php", "stubs/legacy.php"]')) {
+        fail('migrate-phpstan did not preserve PHPStan scan/bootstrap/stub discovery paths');
     }
 
     if (! str_contains($config, 'excludes = ["app/Legacy/**", "app/Services/NotaFiscal/**"]')) {
@@ -431,6 +443,51 @@ NEON);
 
     if ($unsupportedIgnores !== []) {
         fail('unsupported PHPStan levels should not enable compatibility ignores');
+    }
+}
+
+function testPhpStanMigrationPreservesScopedIgnoreErrors(string $project, string $binary): void
+{
+    file_put_contents($project . '/phpstan.neon', <<<'NEON'
+parameters:
+    paths:
+        - app/
+    ignoreErrors:
+        -
+            identifier: return.type
+            path: app/Legacy/Returns/*
+        -
+            identifier: property.notFound
+            paths:
+                - app/Legacy/Models/*
+                - app/Imported/Models/*
+NEON);
+
+    $exitCode = run([PHP_BINARY, $binary, 'migrate-phpstan', '--project=' . $project, '--force']);
+
+    if ($exitCode !== 0) {
+        fail('migrate-phpstan scoped ignore command failed');
+    }
+
+    $config = file_get_contents($project . '/mago.toml');
+
+    foreach ([
+        '{ code = "invalid-return-statement", in = "app/Legacy/Returns/**" }',
+        '{ code = "non-existent-property", in = "app/Legacy/Models/**" }',
+        '{ code = "non-existent-property", in = "app/Imported/Models/**" }',
+    ] as $expectedIgnore) {
+        if (! is_string($config) || ! str_contains($config, $expectedIgnore)) {
+            fail('migrate-phpstan did not preserve scoped ignoreErrors entry: ' . $expectedIgnore);
+        }
+    }
+
+    foreach ([
+        '  "invalid-return-statement",',
+        '  "non-existent-property",',
+    ] as $unexpectedGlobalIgnore) {
+        if (is_string($config) && str_contains($config, $unexpectedGlobalIgnore)) {
+            fail('migrate-phpstan should not globalize scoped ignoreErrors entry: ' . $unexpectedGlobalIgnore);
+        }
     }
 }
 
