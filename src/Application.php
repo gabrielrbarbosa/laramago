@@ -6,7 +6,7 @@ namespace Laramago;
 
 final class Application
 {
-    private const VERSION = '0.1.24';
+    private const VERSION = '0.1.25';
 
     private const CONFIG_FILE = 'mago.toml';
 
@@ -324,7 +324,7 @@ final class Application
         if (is_file($projectRoot . '/' . self::BASELINE_FILE)) {
             $this->line('OK   laramago-analyzer-baseline.toml exists.');
         } else {
-            $this->line('WARN laramago-analyzer-baseline.toml is missing. Run `vendor/bin/laramago baseline` for existing projects.');
+            $this->line('OK   No Laramago baseline configured; analysis will run without one.');
         }
 
         if (! is_file($projectRoot . '/bootstrap/app.php')) {

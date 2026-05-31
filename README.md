@@ -65,7 +65,7 @@ vendor/bin/laramago analyze --phpstan-level=6 --reporting-format=count
 
 The `--phpstan-level=6` profile keeps Laramago's default analysis strict, while filtering Mago diagnostics that are outside a typical Larastan/PHPStan level 6 migration gate.
 
-For existing applications, create a baseline when Mago reports issues that are not part of the migration scope yet:
+For existing applications, create a baseline only when Mago reports issues that are not part of the migration scope yet:
 
 ```bash
 vendor/bin/laramago baseline --phpstan-level=6
@@ -77,7 +77,7 @@ Then run analysis normally:
 vendor/bin/laramago analyze --phpstan-level=6
 ```
 
-When `laramago-analyzer-baseline.toml` exists, `laramago analyze` automatically passes it to Mago. Laramago also writes a generated runtime config to `.laramago/cache/mago.toml` and passes that file to Mago, so application repositories only need to keep project-specific source settings in `mago.toml`.
+When `laramago-analyzer-baseline.toml` exists, `laramago analyze` automatically passes it to Mago. When no baseline exists, analysis runs unbaselined. Laramago also writes a generated runtime config to `.laramago/cache/mago.toml` and passes that file to Mago, so application repositories only need to keep project-specific source settings in `mago.toml`.
 
 ## Laravel Model Overlays
 
@@ -203,12 +203,13 @@ composer install --no-interaction --prefer-dist
 vendor/bin/laramago analyze --phpstan-level=6 --reporting-format=count
 ```
 
-Commit these files:
+Commit this file:
 
 ```text
 mago.toml
-laramago-analyzer-baseline.toml
 ```
+
+Commit `laramago-analyzer-baseline.toml` only if your migration still needs a baseline.
 
 Ignore generated cache files:
 

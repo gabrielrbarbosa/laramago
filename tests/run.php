@@ -57,6 +57,7 @@ if ($doctorExitCode !== $expectedDoctorExitCode) {
     fail('doctor command returned an unexpected exit code');
 }
 
+testDoctorTreatsMissingBaselineAsOptional($project, $binary);
 testBaselinePathTranslation($project, $root);
 testOutputPathTranslation($project, $root);
 testRuntimeConfigGeneration($project, $root);
@@ -83,10 +84,51 @@ function run(array $command): int
     return proc_close($process);
 }
 
+/**
+ * @param list<string> $command
+ * @return array{exitCode: int, output: string}
+ */
+function captureRun(array $command): array
+{
+    $process = proc_open($command, [
+        0 => STDIN,
+        1 => ['pipe', 'w'],
+        2 => ['pipe', 'w'],
+    ], $pipes);
+
+    if (! is_resource($process)) {
+        return ['exitCode' => 1, 'output' => ''];
+    }
+
+    $stdout = stream_get_contents($pipes[1]);
+    $stderr = stream_get_contents($pipes[2]);
+    fclose($pipes[1]);
+    fclose($pipes[2]);
+
+    return [
+        'exitCode' => proc_close($process),
+        'output' => (is_string($stdout) ? $stdout : '') . (is_string($stderr) ? $stderr : ''),
+    ];
+}
+
 function fail(string $message): never
 {
     fwrite(STDERR, $message . PHP_EOL);
     exit(1);
+}
+
+function testDoctorTreatsMissingBaselineAsOptional(string $project, string $binary): void
+{
+    $result = captureRun([PHP_BINARY, $binary, 'doctor', '--project=' . $project]);
+    $output = $result['output'];
+
+    if (str_contains($output, 'WARN laramago-analyzer-baseline.toml is missing')) {
+        fail('doctor should not warn when a project runs without a baseline');
+    }
+
+    if (! str_contains($output, 'OK   No Laramago baseline configured; analysis will run without one.')) {
+        fail('doctor did not explain that a missing baseline is valid');
+    }
 }
 
 function testBaselinePathTranslation(string $project, string $root): void
