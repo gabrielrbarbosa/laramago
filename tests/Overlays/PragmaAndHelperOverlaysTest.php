@@ -443,9 +443,9 @@ PHP);
         $overlay = file_get_contents($project . '/' . $entry['overlay']);
 
         if (is_string($overlay)
-            && str_contains($overlay, '/** @var \Illuminate\Database\Query\Builder $sub */')
-            && str_contains($overlay, '/** @var \Illuminate\Database\Query\Builder $query */')
-            && str_contains($overlay, '/** @var \Illuminate\Database\Query\Builder $nested */')
+            && str_contains($overlay, '/** @var \Illuminate\Database\Eloquent\Builder|\Illuminate\Database\Query\Builder $sub */')
+            && str_contains($overlay, '/** @var \Illuminate\Database\Eloquent\Builder|\Illuminate\Database\Query\Builder $query */')
+            && str_contains($overlay, '/** @var \Illuminate\Database\Eloquent\Builder|\Illuminate\Database\Query\Builder $nested */')
             && str_contains($overlay, '/** @var \Illuminate\Database\Query\JoinClause $join */')) {
             return;
         }

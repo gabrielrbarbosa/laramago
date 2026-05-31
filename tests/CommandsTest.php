@@ -112,7 +112,7 @@ function testRuntimeConfigGeneration(string $project, string $root): void
         fail('runtime config should keep strict unused definition checks by default');
     }
 
-    foreach (['"mixed-operand"', '"mixed-array-access"'] as $expectedDefaultIgnore) {
+    foreach (['"mixed-operand"', '"mixed-argument"', '"mixed-method-access"', '"mixed-property-access"', '"mixed-array-access"', '"possibly-null-property-access"', '"possible-method-access-on-null"', '"possibly-null-argument"'] as $expectedDefaultIgnore) {
         if (! str_contains($config, $expectedDefaultIgnore)) {
             fail('runtime config missed a default Laravel dynamic data compatibility ignore: ' . $expectedDefaultIgnore);
         }
@@ -162,7 +162,7 @@ PHP);
         }
     }
 
-    if (str_contains($config, '"mixed-argument"')) {
+    if (str_contains($config, '"invalid-argument"')) {
         fail('runtime config should not include PHPStan level ignores unless explicitly requested');
     }
 

@@ -472,7 +472,7 @@ trait BuildsSourceCompatibilityOverlays
 
         $translated = preg_replace_callback(
             '/(->\s*(?:' . $methodPattern . ')\s*\((?:(?!\{).)*?function\s*\(\s*\$([A-Za-z_][A-Za-z0-9_]*)\s*\)(?:\s*use\s*\([^)]*\))?\s*(?::\s*[^{]+)?\{)(?!\s*\/\*\*\s*@var\s+[^*]*\$[A-Za-z_][A-Za-z0-9_]*)/ms',
-            static fn (array $matches): string => $matches[1] . PHP_EOL . '                /** @var \Illuminate\Database\Query\Builder $' . $matches[2] . ' */',
+            static fn (array $matches): string => $matches[1] . PHP_EOL . '                /** @var \Illuminate\Database\Eloquent\Builder|\Illuminate\Database\Query\Builder $' . $matches[2] . ' */',
             $source,
         );
 

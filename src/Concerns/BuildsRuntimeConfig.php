@@ -305,7 +305,13 @@ TOML;
 
         $ignores = array_merge($this->phpStanCompatibilityIgnores($arguments), $frameworkOverlayIgnores, [
             'mixed-operand',
+            'mixed-argument',
+            'mixed-method-access',
+            'mixed-property-access',
             'mixed-array-access',
+            'possibly-null-property-access',
+            'possible-method-access-on-null',
+            'possibly-null-argument',
             [
                 'code' => 'unused-pragma',
                 'in' => self::MODEL_OVERLAY_DIR . '/',
