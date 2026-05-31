@@ -6,7 +6,7 @@ namespace Laramago;
 
 final class Application
 {
-    private const VERSION = '0.1.32';
+    private const VERSION = '0.1.33';
 
     private const CONFIG_FILE = 'mago.toml';
 
@@ -1414,6 +1414,7 @@ TOML;
 
         $guardPath = $projectRoot . '/vendor/laravel/framework/src/Illuminate/Contracts/Auth/Guard.php';
         $authFacadePath = $projectRoot . '/vendor/laravel/framework/src/Illuminate/Support/Facades/Auth.php';
+        $eloquentBuilderPath = $projectRoot . '/vendor/laravel/framework/src/Illuminate/Database/Eloquent/Builder.php';
         $hasFactoryPath = $projectRoot . '/vendor/laravel/framework/src/Illuminate/Database/Eloquent/Factories/HasFactory.php';
         $scopePath = $projectRoot . '/vendor/laravel/framework/src/Illuminate/Database/Eloquent/Scope.php';
         $fromCollectionPath = $projectRoot . '/vendor/maatwebsite/excel/src/Concerns/FromCollection.php';
@@ -1429,6 +1430,14 @@ TOML;
 
             if (is_file($authFacadePath)) {
                 $overlays[] = $this->writeFrameworkOverlay($projectRoot, 'Auth.php', $authFacadePath, $this->renderAuthFacadeOverlay($authModel));
+            }
+        }
+
+        if (is_file($eloquentBuilderPath)) {
+            $eloquentBuilderSource = file_get_contents($eloquentBuilderPath);
+
+            if (is_string($eloquentBuilderSource)) {
+                $overlays[] = $this->writeFrameworkOverlay($projectRoot, 'Builder.php', $eloquentBuilderPath, $this->renderEloquentBuilderOverlay($eloquentBuilderSource));
             }
         }
 
@@ -1456,6 +1465,19 @@ TOML;
         }
 
         return $substitutions;
+    }
+
+    private function renderEloquentBuilderOverlay(string $source): string
+    {
+        return $this->insertClassDocblockLines($source, 'Builder', [
+            ' * @method $this join(string $table, mixed $first, ?string $operator = null, mixed $second = null, string $type = "inner", bool $where = false)',
+            ' * @method $this leftJoin(string $table, mixed $first, ?string $operator = null, mixed $second = null)',
+            ' * @method $this rightJoin(string $table, mixed $first, ?string $operator = null, mixed $second = null)',
+            ' * @method $this crossJoin(string $table, mixed $first = null, ?string $operator = null, mixed $second = null)',
+            ' * @method $this groupBy(array|string ...$groups)',
+            ' * @method $this having(string $column, ?string $operator = null, mixed $value = null, string $boolean = "and")',
+            ' * @method $this orHaving(string $column, ?string $operator = null, mixed $value = null)',
+        ]);
     }
 
     private function renderScopeOverlay(): string
@@ -2037,6 +2059,14 @@ PHP;
         }
 
         $docblock = '/**' . PHP_EOL . implode(PHP_EOL, $lines) . PHP_EOL . ' */' . PHP_EOL;
+        return $this->insertClassDocblockLines($source, $shortClass, $lines, $docblock);
+    }
+
+    /**
+     * @param list<string> $lines
+     */
+    private function insertClassDocblockLines(string $source, string $shortClass, array $lines, ?string $newDocblock = null): string
+    {
         $pattern = '/^(?:(?:abstract|final|readonly)\s+)*class\s+' . preg_quote($shortClass, '/') . '\b/m';
 
         if (preg_match($pattern, $source, $matches, PREG_OFFSET_CAPTURE) !== 1) {
@@ -2052,7 +2082,9 @@ PHP;
             return substr($source, 0, $existingDocblock['offset']) . $mergedDocblock . substr($source, $declarationOffset);
         }
 
-        return substr($source, 0, $declarationOffset) . $docblock . substr($source, $declarationOffset);
+        $newDocblock ??= '/**' . PHP_EOL . implode(PHP_EOL, $lines) . PHP_EOL . ' */' . PHP_EOL;
+
+        return substr($source, 0, $declarationOffset) . $newDocblock . substr($source, $declarationOffset);
     }
 
     /**
@@ -2070,6 +2102,13 @@ PHP;
             ' * @method static \\Illuminate\\Database\\Eloquent\\Builder<static> whereNull(string|array $columns, string $boolean = "and", bool $not = false)',
             ' * @method static \\Illuminate\\Database\\Eloquent\\Builder<static> whereNotNull(string|array $columns)',
             ' * @method static \\Illuminate\\Database\\Eloquent\\Builder<static> whereDate(string $column, mixed $operator, mixed $value = null, string $boolean = "and")',
+            ' * @method static \\Illuminate\\Database\\Eloquent\\Builder<static> join(string $table, mixed $first, ?string $operator = null, mixed $second = null, string $type = "inner", bool $where = false)',
+            ' * @method static \\Illuminate\\Database\\Eloquent\\Builder<static> leftJoin(string $table, mixed $first, ?string $operator = null, mixed $second = null)',
+            ' * @method static \\Illuminate\\Database\\Eloquent\\Builder<static> rightJoin(string $table, mixed $first, ?string $operator = null, mixed $second = null)',
+            ' * @method static \\Illuminate\\Database\\Eloquent\\Builder<static> crossJoin(string $table, mixed $first = null, ?string $operator = null, mixed $second = null)',
+            ' * @method static \\Illuminate\\Database\\Eloquent\\Builder<static> groupBy(array|string ...$groups)',
+            ' * @method static \\Illuminate\\Database\\Eloquent\\Builder<static> having(string $column, ?string $operator = null, mixed $value = null, string $boolean = "and")',
+            ' * @method static \\Illuminate\\Database\\Eloquent\\Builder<static> orHaving(string $column, ?string $operator = null, mixed $value = null)',
             ' * @method static \\Illuminate\\Database\\Eloquent\\Builder<static> with(array|string $relations)',
             ' * @method static \\Illuminate\\Database\\Eloquent\\Builder<static> withCount(array|string $relations)',
             ' * @method static \\Illuminate\\Database\\Eloquent\\Builder<static> select(array|string $columns = ["*"])',

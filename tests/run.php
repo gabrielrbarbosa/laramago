@@ -789,6 +789,8 @@ PHP;
         '@property-read \\Illuminate\\Database\\Eloquent\\Collection<int, \\App\\Models\\Order> $orders',
         '@method static \\Illuminate\\Database\\Eloquent\\Builder<static> where(mixed $column, mixed $operator = null, mixed $value = null, string $boolean = "and")',
         '@method static \\Illuminate\\Database\\Eloquent\\Builder<static> whereIn(string $column, mixed $values, string $boolean = "and", bool $not = false)',
+        '@method static \\Illuminate\\Database\\Eloquent\\Builder<static> leftJoin(string $table, mixed $first, ?string $operator = null, mixed $second = null)',
+        '@method static \\Illuminate\\Database\\Eloquent\\Builder<static> groupBy(array|string ...$groups)',
         '@method static \\Illuminate\\Database\\Eloquent\\Builder<static> withCount(array|string $relations)',
         '@method static \\Illuminate\\Database\\Eloquent\\Builder<static> orderBy(string $column, string $direction = "asc")',
         '@method static static|null create(array $attributes = null)',
@@ -849,6 +851,21 @@ PHP);
 
     file_put_contents($project . '/vendor/laravel/framework/src/Illuminate/Support/Facades/Auth.php', '<?php');
 
+    file_put_contents($project . '/vendor/laravel/framework/src/Illuminate/Database/Eloquent/Builder.php', <<<'PHP'
+<?php
+
+namespace Illuminate\Database\Eloquent;
+
+/**
+ * @template TModel of \Illuminate\Database\Eloquent\Model
+ *
+ * @mixin \Illuminate\Database\Query\Builder
+ */
+class Builder
+{
+}
+PHP);
+
     file_put_contents($project . '/vendor/laravel/framework/src/Illuminate/Database/Eloquent/Factories/HasFactory.php', '<?php');
 
     file_put_contents($project . '/vendor/laravel/framework/src/Illuminate/Database/Eloquent/Scope.php', '<?php');
@@ -859,12 +876,13 @@ PHP);
     $method = new ReflectionMethod($application, 'laravelFrameworkSubstitutions');
     $substitutions = $method->invoke($application, $project, []);
 
-    if (! is_array($substitutions) || count($substitutions) !== 10) {
+    if (! is_array($substitutions) || count($substitutions) !== 12) {
         fail('framework overlay generation returned unexpected substitutions');
     }
 
     $guardOverlay = file_get_contents($project . '/.laramago/cache/framework-overlays/Guard.php');
     $authOverlay = file_get_contents($project . '/.laramago/cache/framework-overlays/Auth.php');
+    $eloquentBuilderOverlay = file_get_contents($project . '/.laramago/cache/framework-overlays/Builder.php');
     $hasFactoryOverlay = file_get_contents($project . '/.laramago/cache/framework-overlays/HasFactory.php');
     $scopeOverlay = file_get_contents($project . '/.laramago/cache/framework-overlays/Scope.php');
     $fromCollectionOverlay = file_get_contents($project . '/.laramago/cache/framework-overlays/FromCollection.php');
@@ -879,6 +897,10 @@ PHP);
 
     if (str_contains($authOverlay, 'Laravel\\Ui\\UiServiceProvider')) {
         fail('auth facade overlay leaked optional vendor implementation details');
+    }
+
+    if (! is_string($eloquentBuilderOverlay) || ! str_contains($eloquentBuilderOverlay, '@method $this leftJoin(') || ! str_contains($eloquentBuilderOverlay, '@mixin \\Illuminate\\Database\\Query\\Builder')) {
+        fail('Eloquent builder overlay did not preserve source and add delegated chain methods');
     }
 
     if (! is_string($hasFactoryOverlay) || ! str_contains($hasFactoryOverlay, '@return \\Illuminate\\Database\\Eloquent\\Factories\\Factory<static>')) {
