@@ -65,6 +65,8 @@ testPhpStanMigration($project, $root, $binary);
 testExcludedSymbolStubGeneration($project, $root);
 testRaceSafeCacheDirectoryOperations($project, $root);
 testProjectClassDiscoveryUsesConfiguredSourcePaths($project, $root);
+testAnalysisIgnoresStaleRuntimeBaseline($project, $root);
+testLaravelMetadataInferenceHelpers($root);
 testModelDocblockIncludesLaravelMagic($root);
 testLaravelFrameworkOverlayGeneration($project, $root);
 
@@ -522,6 +524,78 @@ PHP);
 
     if (! in_array('app/Models/ReadonlyModel.php', $files, true)) {
         fail('project class discovery missed a readonly class');
+    }
+}
+
+function testAnalysisIgnoresStaleRuntimeBaseline(string $project, string $root): void
+{
+    require_once $root . '/src/Application.php';
+
+    @unlink($project . '/laramago-analyzer-baseline.toml');
+    if (! is_dir($project . '/.laramago/cache')) {
+        mkdir($project . '/.laramago/cache', 0777, true);
+    }
+    file_put_contents($project . '/.laramago/cache/analyzer-baseline.toml', "file = \"stale.php\"\n");
+
+    $application = new Laramago\Application();
+    $method = new ReflectionMethod($application, 'defaultAnalyzeFlags');
+    $flags = $method->invoke($application, $project, [], true);
+
+    if ($flags !== ['--ignore-baseline']) {
+        fail('analysis should explicitly ignore baselines when no project baseline is configured');
+    }
+
+    if (is_file($project . '/.laramago/cache/analyzer-baseline.toml')) {
+        fail('analysis should remove stale runtime baselines when no project baseline is configured');
+    }
+}
+
+function testLaravelMetadataInferenceHelpers(string $root): void
+{
+    if (! class_exists('Illuminate\\Database\\Eloquent\\Model')) {
+        eval('namespace Illuminate\\Database\\Eloquent; class Model {} class Collection {}');
+    }
+
+    if (! class_exists('Illuminate\\Database\\Eloquent\\Relations\\Relation')) {
+        eval('namespace Illuminate\\Database\\Eloquent\\Relations; class Relation {} class HasManyThrough extends Relation {} class MorphTo extends Relation {}');
+    }
+
+    if (! class_exists('App\\Models\\Order')) {
+        eval('namespace App\\Models; class Order extends \\Illuminate\\Database\\Eloquent\\Model {}');
+    }
+
+    if (! enum_exists('LaramagoMetadataStatus')) {
+        eval('enum LaramagoMetadataStatus: string { case Draft = "draft"; }');
+    }
+
+    require_once $root . '/resources/laravel-model-metadata.php';
+
+    $propertyCases = [
+        ['immutable_datetime', 'datetime', false, '\\Carbon\\CarbonImmutable'],
+        ['encrypted:array', 'json', true, 'array|null'],
+        ['collection', 'json', false, '\\Illuminate\\Support\\Collection'],
+        ['Illuminate\\Database\\Eloquent\\Casts\\AsArrayObject', 'json', false, '\\ArrayObject'],
+        ['LaramagoMetadataStatus', 'varchar', false, '\\LaramagoMetadataStatus'],
+    ];
+
+    foreach ($propertyCases as [$cast, $databaseType, $nullable, $expected]) {
+        $actual = propertyType($cast, $databaseType, $nullable);
+
+        if ($actual !== $expected) {
+            fail("property type inference returned {$actual}; expected {$expected}");
+        }
+    }
+
+    $hasManyThrough = relationType('Illuminate\\Database\\Eloquent\\Relations\\HasManyThrough', 'App\\Models\\Order');
+
+    if ($hasManyThrough !== '\\Illuminate\\Database\\Eloquent\\Collection<int, \\App\\Models\\Order>') {
+        fail('HasManyThrough relation type inference returned an unexpected type');
+    }
+
+    $morphTo = relationType('Illuminate\\Database\\Eloquent\\Relations\\MorphTo', 'App\\Models\\Order');
+
+    if ($morphTo !== '\\Illuminate\\Database\\Eloquent\\Model|null') {
+        fail('MorphTo relation type inference returned an unexpected type');
     }
 }
 

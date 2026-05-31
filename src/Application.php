@@ -6,7 +6,7 @@ namespace Laramago;
 
 final class Application
 {
-    private const VERSION = '0.1.27';
+    private const VERSION = '0.1.28';
 
     private const CONFIG_FILE = 'mago.toml';
 
@@ -1909,8 +1909,18 @@ PHP;
             }
         }
 
-        if ($hasBaselineOption || ! is_file($projectRoot . '/' . self::BASELINE_FILE)) {
+        if ($hasBaselineOption) {
             return [];
+        }
+
+        if (! is_file($projectRoot . '/' . self::BASELINE_FILE)) {
+            $runtimeBaseline = $projectRoot . '/' . self::RUNTIME_BASELINE_FILE;
+
+            if (is_file($runtimeBaseline)) {
+                @unlink($runtimeBaseline);
+            }
+
+            return ['--ignore-baseline'];
         }
 
         if ($usesOverlays && $this->translateBaselinePaths($projectRoot, overlayToOriginal: false, source: self::BASELINE_FILE, target: self::RUNTIME_BASELINE_FILE)) {

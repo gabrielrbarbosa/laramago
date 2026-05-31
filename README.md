@@ -87,7 +87,7 @@ During `analyze`, `baseline`, and `verify-baseline`, Laramago:
 
 1. boots the Laravel application;
 2. discovers Eloquent models in the configured project source paths, including `app/Models` and domain/module model folders;
-3. reads database columns, casts, accessors, local scopes, and public relation methods;
+3. reads database columns, Laravel casts, enum casts, accessors, local scopes, and public relation methods;
 4. reads `config/auth.php` to detect the application auth user model;
 5. reads Composer `autoload` and `autoload-dev` PSR-4/classmap paths for type discovery outside analyzed source paths;
 6. writes generated files to `.laramago/cache/model-overlays` and `.laramago/cache/framework-overlays`;
@@ -99,9 +99,9 @@ The application source tree is not modified.
 
 Generated overlays currently add:
 
-- `@property` entries for database columns with cast-aware types;
+- `@property` entries for database columns with cast-aware types, including encrypted casts, collection/array object casts, date casts, and enum casts;
 - `@property-read` entries for legacy `getFooAttribute()` accessors and `Attribute` accessors;
-- `@property-read` entries for Eloquent relations;
+- `@property-read` entries for Eloquent relations, including through, polymorphic, and many-to-many collection relations;
 - `@method static` entries for common static Eloquent model calls such as `create`, `firstOrFail`, `find`, and `findOrFail`;
 - merged generated metadata with existing model class PHPDoc, so project annotations such as `@mixin`, `@method`, `@property`, and generic hints stay visible;
 - `createToken` return types for models using Laravel Sanctum's `HasApiTokens` trait;

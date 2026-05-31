@@ -4,71 +4,93 @@ declare(strict_types=1);
 
 use Illuminate\Contracts\Console\Kernel;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
+use Illuminate\Database\Eloquent\Casts\AsArrayObject;
+use Illuminate\Database\Eloquent\Casts\AsCollection;
+use Illuminate\Database\Eloquent\Casts\AsStringable;
 use Illuminate\Database\Eloquent\Attributes\Scope;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasManyThrough;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Database\Eloquent\Relations\HasOneThrough;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\Relations\MorphOne;
+use Illuminate\Database\Eloquent\Relations\MorphTo;
+use Illuminate\Database\Eloquent\Relations\MorphedByMany;
+use Illuminate\Database\Eloquent\Relations\MorphToMany;
 use Illuminate\Database\Eloquent\Relations\Relation;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Carbon;
 use Laravel\Sanctum\HasApiTokens;
 
-$projectRoot = $argv[1] ?? null;
-$classesPath = $argv[2] ?? null;
-
-if (! is_string($projectRoot) || ! is_string($classesPath)) {
-    fwrite(STDERR, "Usage: laravel-model-metadata.php <project-root> <classes-json>\n");
-    exit(1);
+if (realpath((string) ($argv[0] ?? '')) === __FILE__) {
+    exit(laramagoModelMetadataMain($argv));
 }
 
-chdir($projectRoot);
+/**
+ * @param list<string> $argv
+ */
+function laramagoModelMetadataMain(array $argv): int
+{
+    $projectRoot = $argv[1] ?? null;
+    $classesPath = $argv[2] ?? null;
 
-require $projectRoot . '/vendor/autoload.php';
+    if (! is_string($projectRoot) || ! is_string($classesPath)) {
+        fwrite(STDERR, "Usage: laravel-model-metadata.php <project-root> <classes-json>\n");
 
-$app = require $projectRoot . '/bootstrap/app.php';
-$app->make(Kernel::class)->bootstrap();
-
-$classes = json_decode((string) file_get_contents($classesPath), true, 512, JSON_THROW_ON_ERROR);
-$models = [];
-
-foreach ($classes as $entry) {
-    if (! is_array($entry) || ! isset($entry['class'], $entry['file'])) {
-        continue;
+        return 1;
     }
 
-    $class = $entry['class'];
-    $file = $entry['file'];
+    chdir($projectRoot);
 
-    if (! is_string($class) || ! is_string($file)) {
-        continue;
-    }
+    require $projectRoot . '/vendor/autoload.php';
 
-    try {
-        if (! class_exists($class) || ! is_subclass_of($class, Model::class)) {
+    $app = require $projectRoot . '/bootstrap/app.php';
+    $app->make(Kernel::class)->bootstrap();
+
+    $classes = json_decode((string) file_get_contents($classesPath), true, 512, JSON_THROW_ON_ERROR);
+    $models = [];
+
+    foreach ($classes as $entry) {
+        if (! is_array($entry) || ! isset($entry['class'], $entry['file'])) {
             continue;
         }
 
-        $model = new $class();
-        $models[] = [
-            'class' => $class,
-            'shortClass' => (new ReflectionClass($class))->getShortName(),
-            'file' => $file,
-            'properties' => modelProperties($model),
-            'accessors' => modelAccessors($class),
-            'relations' => modelRelations($class, $model),
-            'scopes' => modelScopes($class),
-            'usesSanctumApiTokens' => classUsesTrait($class, HasApiTokens::class),
-        ];
-    } catch (Throwable) {
-        continue;
-    }
-}
+        $class = $entry['class'];
+        $file = $entry['file'];
 
-echo json_encode($models, JSON_THROW_ON_ERROR);
+        if (! is_string($class) || ! is_string($file)) {
+            continue;
+        }
+
+        try {
+            if (! class_exists($class) || ! is_subclass_of($class, Model::class)) {
+                continue;
+            }
+
+            $model = new $class();
+            $models[] = [
+                'class' => $class,
+                'shortClass' => (new ReflectionClass($class))->getShortName(),
+                'file' => $file,
+                'properties' => modelProperties($model),
+                'accessors' => modelAccessors($class),
+                'relations' => modelRelations($class, $model),
+                'scopes' => modelScopes($class),
+                'usesSanctumApiTokens' => classUsesTrait($class, HasApiTokens::class),
+            ];
+        } catch (Throwable) {
+            continue;
+        }
+    }
+
+    echo json_encode($models, JSON_THROW_ON_ERROR);
+
+    return 0;
+}
 
 /**
  * @return list<array{name: string, type: string}>
@@ -121,16 +143,35 @@ function modelProperties(Model $model): array
 
 function propertyType(mixed $cast, string $databaseType, bool $nullable): string
 {
-    $cast = is_string($cast) ? strtolower($cast) : null;
+    $cast = is_string($cast) ? trim($cast) : null;
+    $castParts = $cast === null ? [] : explode(':', $cast, 2);
+    $castClass = isset($castParts[0]) ? ltrim($castParts[0], '\\') : null;
+    $castType = $castClass === null ? null : strtolower($castClass);
+    $castArgument = isset($castParts[1]) ? strtolower(trim($castParts[1])) : null;
     $databaseType = strtolower($databaseType);
 
+    if ($castType === 'encrypted' && $castArgument !== null) {
+        $castType = match ($castArgument) {
+            'array', 'json' => 'array',
+            'collection' => 'collection',
+            'object' => 'object',
+            default => 'string',
+        };
+    }
+
     $type = match (true) {
-        in_array($cast, ['int', 'integer'], true) => 'int',
-        in_array($cast, ['real', 'float', 'double', 'decimal'], true) => 'float',
-        in_array($cast, ['bool', 'boolean'], true) => 'bool',
-        in_array($cast, ['array', 'json'], true) => 'array',
-        in_array($cast, ['collection'], true) => EloquentCollection::class,
-        str_contains((string) $cast, 'date') => Carbon::class,
+        in_array($castType, ['int', 'integer'], true) => 'int',
+        in_array($castType, ['real', 'float', 'double', 'decimal'], true) => 'float',
+        in_array($castType, ['bool', 'boolean'], true) => 'bool',
+        in_array($castType, ['array', 'json'], true) => 'array',
+        in_array($castType, ['object'], true) => '\\stdClass',
+        in_array($castType, ['collection', strtolower(Collection::class), strtolower(AsCollection::class)], true) => Collection::class,
+        in_array($castType, ['arrayobject', strtolower(AsArrayObject::class)], true) => '\\ArrayObject',
+        $castType === strtolower(AsStringable::class) => '\\Illuminate\\Support\\Stringable',
+        $castType === 'date' || $castType === 'datetime' || $castType === 'timestamp' => Carbon::class,
+        $castType === 'immutable_date' || $castType === 'immutable_datetime' => '\\Carbon\\CarbonImmutable',
+        $castClass !== null && enum_exists($castClass) => '\\' . $castClass,
+        in_array($castType, ['string', 'encrypted', 'hashed'], true) => 'string',
         str_contains($databaseType, 'int') => 'int',
         str_contains($databaseType, 'decimal') || str_contains($databaseType, 'double') || str_contains($databaseType, 'float') => 'float',
         str_contains($databaseType, 'bool') => 'bool',
@@ -271,11 +312,15 @@ function relationType(string $relationClass, string $relatedClass): string
 {
     $relatedClass = '\\' . ltrim($relatedClass, '\\');
 
-    if (is_a($relationClass, BelongsTo::class, true) || is_a($relationClass, HasOne::class, true) || is_a($relationClass, MorphOne::class, true)) {
+    if (is_a($relationClass, MorphTo::class, true)) {
+        return '\\' . Model::class . '|null';
+    }
+
+    if (is_a($relationClass, BelongsTo::class, true) || is_a($relationClass, HasOne::class, true) || is_a($relationClass, HasOneThrough::class, true) || is_a($relationClass, MorphOne::class, true)) {
         return $relatedClass . '|null';
     }
 
-    if (is_a($relationClass, HasMany::class, true) || is_a($relationClass, BelongsToMany::class, true) || is_a($relationClass, MorphMany::class, true)) {
+    if (is_a($relationClass, HasMany::class, true) || is_a($relationClass, HasManyThrough::class, true) || is_a($relationClass, BelongsToMany::class, true) || is_a($relationClass, MorphMany::class, true) || is_a($relationClass, MorphToMany::class, true) || is_a($relationClass, MorphedByMany::class, true)) {
         return '\\' . EloquentCollection::class . '<int, ' . $relatedClass . '>';
     }
 
