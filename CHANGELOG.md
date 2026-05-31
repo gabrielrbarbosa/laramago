@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.2.1
+
+- Hardened Mago option parsing so separate option values, such as reporting formats, are not mistaken for source paths when building overlays.
+- Added Eloquent relation scope overlay parity so local scopes discovered on application models are also available on relationship query chains.
+
 ## v0.2.0
 
 - Added `laramago compare` to run raw Mago and Laramago side by side during migrations.
