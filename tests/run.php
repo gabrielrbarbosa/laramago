@@ -42,6 +42,12 @@ if ($clearExitCode !== 0) {
     fail('clear command failed');
 }
 
+$doctorExitCode = run([PHP_BINARY, $binary, 'doctor', '--project=' . $project]);
+
+if ($doctorExitCode !== 1) {
+    fail('doctor command should fail when Mago is unavailable in the test project');
+}
+
 testBaselinePathTranslation($project, $root);
 testOutputPathTranslation($project, $root);
 

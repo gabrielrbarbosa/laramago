@@ -32,6 +32,7 @@ final class Application
             'analyze' => $this->analyze($arguments),
             'baseline' => $this->baseline($arguments),
             'verify-baseline' => $this->verifyBaseline($arguments),
+            'doctor' => $this->doctor($arguments),
             'clear' => $this->clear($arguments),
             'count' => $this->analyze(array_merge(['--reporting-format=count'], $arguments)),
             'codes' => $this->analyze(array_merge(['--list-codes'], $arguments)),
@@ -204,6 +205,56 @@ final class Application
         return 0;
     }
 
+    /**
+     * @param list<string> $arguments
+     */
+    private function doctor(array $arguments): int
+    {
+        $projectRoot = $this->projectRoot($arguments);
+        $failed = false;
+
+        $this->line("Project: {$projectRoot}");
+
+        if ($this->findMagoBinary($projectRoot) === null) {
+            $this->line('FAIL Mago binary was not found.');
+            $failed = true;
+        } else {
+            $this->line('OK   Mago binary is available.');
+        }
+
+        if (is_file($projectRoot . '/' . self::CONFIG_FILE)) {
+            $this->line('OK   mago.toml exists.');
+        } else {
+            $this->line('FAIL mago.toml is missing. Run `vendor/bin/laramago init`.');
+            $failed = true;
+        }
+
+        if (is_file($projectRoot . '/' . self::BASELINE_FILE)) {
+            $this->line('OK   laramago-analyzer-baseline.toml exists.');
+        } else {
+            $this->line('WARN laramago-analyzer-baseline.toml is missing. Run `vendor/bin/laramago baseline` for existing projects.');
+        }
+
+        if (! is_file($projectRoot . '/bootstrap/app.php')) {
+            $this->line('WARN Laravel bootstrap file was not found; model overlays will be skipped.');
+
+            return $failed ? 1 : 0;
+        }
+
+        $this->line('OK   Laravel bootstrap file exists.');
+
+        if (! is_dir($projectRoot . '/app/Models')) {
+            $this->line('WARN app/Models was not found; model overlays will be skipped.');
+
+            return $failed ? 1 : 0;
+        }
+
+        $substitutions = $this->laravelModelSubstitutions($projectRoot, $arguments);
+        $this->line('OK   Prepared ' . (int) (count($substitutions) / 2) . ' Laravel model overlays.');
+
+        return $failed ? 1 : 0;
+    }
+
     private function help(): int
     {
         $this->line(<<<'HELP'
@@ -215,7 +266,9 @@ Usage:
   laramago analyze [mago analyze options] [path ...]
   laramago baseline [--force]
   laramago verify-baseline
+  laramago doctor
   laramago count [path ...]
+  laramago codes [path ...]
   laramago clear
 
 The analyze command automatically uses laramago-analyzer-baseline.toml and Laravel model overlays when available.

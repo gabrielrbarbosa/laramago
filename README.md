@@ -76,6 +76,7 @@ vendor/bin/laramago prepare
 vendor/bin/laramago analyze [mago analyze options] [path ...]
 vendor/bin/laramago baseline [--force]
 vendor/bin/laramago verify-baseline
+vendor/bin/laramago doctor
 vendor/bin/laramago count [path ...]
 vendor/bin/laramago codes [path ...]
 vendor/bin/laramago clear
@@ -100,6 +101,10 @@ Generates `laramago-analyzer-baseline.toml`. With model overlays enabled, the co
 ### `verify-baseline`
 
 Runs Mago baseline verification using the same Laramago runtime mapping as `analyze`.
+
+### `doctor`
+
+Checks whether Mago is installed, `mago.toml` exists, the baseline exists, Laravel can be detected, and model overlays can be prepared.
 
 ### `clear`
 
