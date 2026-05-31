@@ -918,6 +918,39 @@ TOML);
     }
 }
 
+function testStagedInputDoesNotRequireConfiguredSources(string $project, string $root): void
+{
+    require_once $root . '/src/Application.php';
+
+    $emptyProject = $project . '/empty-staged-project';
+    mkdir($emptyProject . '/app', 0777, true);
+    file_put_contents($emptyProject . '/composer.json', json_encode([
+        'require' => [
+            'php' => '^8.5',
+        ],
+    ], JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR));
+    file_put_contents($emptyProject . '/mago.toml', <<<'TOML'
+version = "1"
+php-version = "8.5.0"
+
+[source]
+workspace = "."
+paths = ["app"]
+includes = ["vendor"]
+excludes = []
+
+[source.glob]
+literal-separator = true
+TOML);
+
+    $application = new Laramago\Application();
+    $method = new ReflectionMethod($application, 'analysisHasSourceFiles');
+
+    if ($method->invoke($application, $emptyProject, ['--staged'], false) !== true) {
+        fail('staged analysis should bypass the empty-source analysis guard for pre-commit integrations');
+    }
+}
+
 function testPhpStanLevelAnalyzeRunsEndToEnd(string $project, string $binary): void
 {
     $fixture = $project . '/level-fixture';
