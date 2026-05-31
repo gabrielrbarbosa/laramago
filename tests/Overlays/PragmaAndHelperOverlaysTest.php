@@ -240,7 +240,7 @@ PHP);
         if (is_string($overlay)
             && str_contains($overlay, '/** @var object $row */')
             && str_contains($overlay, '/** @var object $entry */')
-            && str_contains($overlay, '/** @var array<array-key, mixed> $payload */')
+            && ! str_contains($overlay, '/** @var array<array-key, mixed> $payload */')
             && ! str_contains($overlay, '/** @var object $value */')) {
             return;
         }
@@ -299,7 +299,7 @@ PHP);
         if (is_string($overlay)
             && str_contains($overlay, '/** @var object $row */')
             && str_contains($overlay, '/** @var object $entry */')
-            && str_contains($overlay, '/** @var array<array-key, mixed> $payload */')
+            && ! str_contains($overlay, '/** @var array<array-key, mixed> $payload */')
             && ! str_contains($overlay, '/** @var object $scalar */')) {
             return;
         }
@@ -426,6 +426,25 @@ final class UsesQueryBuilderClosures
             $join->on('accounts.id', '=', 'users.account_id');
         });
     }
+
+    public function chainedCollection(mixed $builder): mixed
+    {
+        return $builder
+            ->where('active', true)
+            ->get()
+            ->mapWithKeys(function ($item): array {
+                return [$item->status => $item->total];
+            });
+    }
+
+    public function chainedWhen(mixed $builder): mixed
+    {
+        return $builder
+            ->join('users', 'users.id', '=', 'posts.user_id')
+            ->when(true, function ($query): mixed {
+                return $query->where('users.active', true);
+            });
+    }
 }
 PHP);
 
@@ -446,59 +465,14 @@ PHP);
             && str_contains($overlay, '/** @var \Illuminate\Database\Eloquent\Builder|\Illuminate\Database\Query\Builder $sub */')
             && str_contains($overlay, '/** @var \Illuminate\Database\Eloquent\Builder|\Illuminate\Database\Query\Builder $query */')
             && str_contains($overlay, '/** @var \Illuminate\Database\Eloquent\Builder|\Illuminate\Database\Query\Builder $nested */')
-            && str_contains($overlay, '/** @var \Illuminate\Database\Query\JoinClause $join */')) {
+            && str_contains($overlay, '/** @var \Illuminate\Database\Query\JoinClause $join */')
+            && ! str_contains($overlay, '/** @var \Illuminate\Database\Eloquent\Builder|\Illuminate\Database\Query\Builder $item */')
+            && ! str_contains($overlay, '/** @var \Illuminate\Database\Query\JoinClause $query */')) {
             return;
         }
     }
 
     fail('Laravel query builder closure overlay did not annotate nested builder callbacks');
-}
-
-function testLaravelBuilderLikeMixedPropertyOverlayGeneration(string $project, string $root): void
-{
-    require_once $root . '/src/Application.php';
-
-    file_put_contents($project . '/app/UsesBuilderProperty.php', <<<'PHP'
-<?php
-
-namespace App;
-
-final class UsesBuilderProperty
-{
-    private mixed $query;
-    private mixed $payload;
-
-    public function handle(): mixed
-    {
-        $this->query->where('active', true)->orderBy('id')->paginate(15);
-        $this->payload = ['active' => true];
-
-        return $this->query;
-    }
-}
-PHP);
-
-    $application = new Laramago\Application();
-    $method = new ReflectionMethod($application, 'phpStanPragmaSubstitutions');
-    $method->invoke($application, $project, [], []);
-
-    $map = json_decode((string) file_get_contents($project . '/.laramago/cache/phpstan-pragma-overlays.json'), true);
-
-    foreach (is_array($map) ? $map : [] as $entry) {
-        if (($entry['original'] ?? null) !== 'app/UsesBuilderProperty.php' || ! is_string($entry['overlay'] ?? null)) {
-            continue;
-        }
-
-        $overlay = file_get_contents($project . '/' . $entry['overlay']);
-
-        if (is_string($overlay)
-            && str_contains($overlay, 'private \\Illuminate\\Database\\Query\\Builder|\\Illuminate\\Database\\Eloquent\\Builder $query;')
-            && str_contains($overlay, 'private mixed $payload;')) {
-            return;
-        }
-    }
-
-    fail('Laravel builder-like mixed property overlay did not narrow query builder properties safely');
 }
 
 function testLaravelObserverModelOverlayGeneration(string $project, string $root): void

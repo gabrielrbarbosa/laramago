@@ -60,7 +60,6 @@ trait BuildsSourceCompatibilityOverlays
                 $translated = $this->annotateLaravelJsonResourceDynamicMembers($translated, $relativePath);
                 $translated = $this->annotateLaravelCollectionItemObjectClosures($translated);
                 $translated = $this->annotateLaravelFormRequestDynamicProperties($translated, $relativePath, $projectRoot);
-                $translated = $this->typeLaravelBuilderLikeMixedProperties($translated);
                 $minimumAliases = $translated === $source ? 2 : 1;
                 $overlay = $this->insertTraitSelfCallMethods($this->insertCaseInsensitiveMethodAliases($translated, $caseInsensitiveAliasCandidates, $minimumAliases));
 
@@ -342,16 +341,11 @@ trait BuildsSourceCompatibilityOverlays
                     $bodyPreview = substr($bodyPreview, 0, $closureEnd);
                 }
 
-                $usesObjectAccess = str_contains($bodyPreview, '$' . $variable . '->');
-                $usesArrayAccess = str_contains($bodyPreview, '$' . $variable . '[');
-
-                if (! $usesObjectAccess && ! $usesArrayAccess) {
+                if (! str_contains($bodyPreview, '$' . $variable . '->')) {
                     return $matched;
                 }
 
-                $type = $usesObjectAccess ? 'object' : 'array<array-key, mixed>';
-
-                return $matches[1][0] . '$' . $variable . $matches[3][0] . PHP_EOL . '                /** @var ' . $type . ' $' . $variable . ' */';
+                return $matches[1][0] . '$' . $variable . $matches[3][0] . PHP_EOL . '                /** @var object $' . $variable . ' */';
             },
             $source,
             -1,
@@ -381,16 +375,11 @@ trait BuildsSourceCompatibilityOverlays
                     $bodyPreview = substr($bodyPreview, 0, $loopEnd);
                 }
 
-                $usesObjectAccess = str_contains($bodyPreview, '$' . $variable . '->');
-                $usesArrayAccess = str_contains($bodyPreview, '$' . $variable . '[');
-
-                if (! $usesObjectAccess && ! $usesArrayAccess) {
+                if (! str_contains($bodyPreview, '$' . $variable . '->')) {
                     return $matched;
                 }
 
-                $type = $usesObjectAccess ? 'object' : 'array<array-key, mixed>';
-
-                return $matched . PHP_EOL . '                /** @var ' . $type . ' $' . $variable . ' */';
+                return $matched . PHP_EOL . '                /** @var object $' . $variable . ' */';
             },
             $source,
             -1,
@@ -471,7 +460,7 @@ trait BuildsSourceCompatibilityOverlays
         $methodPattern = implode('|', array_map(static fn (string $method): string => preg_quote($method, '/'), $methods));
 
         $translated = preg_replace_callback(
-            '/(->\s*(?:' . $methodPattern . ')\s*\((?:(?!\{).)*?function\s*\(\s*\$([A-Za-z_][A-Za-z0-9_]*)\s*\)(?:\s*use\s*\([^)]*\))?\s*(?::\s*[^{]+)?\{)(?!\s*\/\*\*\s*@var\s+[^*]*\$[A-Za-z_][A-Za-z0-9_]*)/ms',
+            '/(->\s*(?:' . $methodPattern . ')\s*\((?:(?!->|[;{]).)*?function\s*\(\s*\$([A-Za-z_][A-Za-z0-9_]*)\s*\)(?:\s*use\s*\([^)]*\))?\s*(?::\s*[^{]+)?\{)(?!\s*\/\*\*\s*@var\s+[^*]*\$[A-Za-z_][A-Za-z0-9_]*)/ms',
             static fn (array $matches): string => $matches[1] . PHP_EOL . '                /** @var \Illuminate\Database\Eloquent\Builder|\Illuminate\Database\Query\Builder $' . $matches[2] . ' */',
             $source,
         );
@@ -497,7 +486,7 @@ trait BuildsSourceCompatibilityOverlays
         $methodPattern = implode('|', array_map(static fn (string $method): string => preg_quote($method, '/'), $methods));
 
         $translated = preg_replace_callback(
-            '/(->\s*(?:' . $methodPattern . ')\s*\((?:(?!\{).)*?function\s*\(\s*\$([A-Za-z_][A-Za-z0-9_]*)\s*\)(?:\s*use\s*\([^)]*\))?\s*(?::\s*[^{]+)?\{)(?!\s*\/\*\*\s*@var\s+[^*]*\$[A-Za-z_][A-Za-z0-9_]*)/ms',
+            '/(->\s*(?:' . $methodPattern . ')\s*\((?:(?!->|[;{]).)*?function\s*\(\s*\$([A-Za-z_][A-Za-z0-9_]*)\s*\)(?:\s*use\s*\([^)]*\))?\s*(?::\s*[^{]+)?\{)(?!\s*\/\*\*\s*@var\s+[^*]*\$[A-Za-z_][A-Za-z0-9_]*)/ms',
             static fn (array $matches): string => $matches[1] . PHP_EOL . '                /** @var \Illuminate\Database\Query\JoinClause $' . $matches[2] . ' */',
             $source,
         );
@@ -909,31 +898,6 @@ PHP);
         }
 
         return $source;
-    }
-
-    private function typeLaravelBuilderLikeMixedProperties(string $source): string
-    {
-        if (! str_contains($source, ' mixed $') || ! str_contains($source, '$this->')) {
-            return $source;
-        }
-
-        if (preg_match_all('/\$this->([A-Za-z_][A-Za-z0-9_]*)\s*->\s*(where|orWhere|whereIn|orWhereIn|whereBetween|orWhereBetween|whereRaw|orWhereRaw|join|leftJoin|rightJoin|crossJoin|select|selectRaw|addSelect|orderBy|orderByRaw|groupBy|having|paginate|simplePaginate|cursorPaginate|get|first|count|sum|exists)\s*\(/', $source, $matches) === 0) {
-            return $source;
-        }
-
-        $builderProperties = array_fill_keys($matches[1], true);
-
-        return preg_replace_callback(
-            '/^([ \t]*(?:public|protected|private)\s+(?:readonly\s+)?(?:static\s+)?)mixed(\s+\$([A-Za-z_][A-Za-z0-9_]*)(?:\s*=[^;\r\n]*)?;)/m',
-            static function (array $matches) use ($builderProperties): string {
-                if (! isset($builderProperties[$matches[3]])) {
-                    return $matches[0];
-                }
-
-                return $matches[1] . '\\Illuminate\\Database\\Query\\Builder|\\Illuminate\\Database\\Eloquent\\Builder' . $matches[2];
-            },
-            $source,
-        ) ?? $source;
     }
 
     private function usedTraitDeclaredProperties(string $projectRoot, string $source): array

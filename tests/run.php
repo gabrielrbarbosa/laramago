@@ -83,7 +83,6 @@ testLaravelForeachObjectRowOverlayGeneration($project, $root);
 testLaravelNumericFallbackAssignmentOverlayGeneration($project, $root);
 testLaravelExcelEventOverlayGeneration($project, $root);
 testLaravelQueryBuilderClosureOverlayGeneration($project, $root);
-testLaravelBuilderLikeMixedPropertyOverlayGeneration($project, $root);
 testLaravelObserverModelOverlayGeneration($project, $root);
 testLaravelRequestPropertyReadOverlayGeneration($project, $root);
 testLaravelRequestInputArrayVariableOverlayGeneration($project, $root);
