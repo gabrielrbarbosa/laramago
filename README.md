@@ -23,7 +23,7 @@ Mago 1.29 does not expose a Composer-loaded analyzer extension API equivalent to
 - generated Eloquent PHPDoc overlays from real application model metadata;
 - generated Laravel framework overlays for application-specific auth model types;
 - generated symbol stubs for excluded legacy application paths, so references stay resolvable without analyzing those files;
-- automatic baseline usage for existing projects;
+- optional baseline usage for teams that want to track warning/help-level cleanup separately;
 - path translation so diagnostics point back to application files instead of generated cache files;
 - Composer commands that can replace existing `phpstan` scripts;
 - a small public surface that can absorb native Mago extension hooks when Mago exposes them.
@@ -44,7 +44,13 @@ Generate the project source configuration:
 vendor/bin/laramago init
 ```
 
-Create a baseline for the current codebase:
+For most legacy Laravel applications, the Larastan-compatible preset should be enough for CI without a baseline:
+
+```bash
+vendor/bin/laramago analyze --reporting-format=count
+```
+
+If you want to suppress warning/help-level cleanup while you migrate gradually, create a baseline:
 
 ```bash
 vendor/bin/laramago baseline
@@ -204,7 +210,7 @@ Laramago owns the compatibility policy. During `analyze`, `baseline`, and `verif
 - Laravel linter integration enabled;
 - Pint-compatible formatter defaults;
 - analyzer settings suitable for legacy Laravel applications;
-- Larastan/PHPStan-compatibility analyzer codes for legacy Laravel projects, including the broad PHPStan categories commonly ignored in level 6 Larastan configs;
+- Larastan/PHPStan-compatibility analyzer codes for legacy Laravel projects, including the broad PHPStan categories commonly ignored or not emitted in level 6 Larastan configs;
 - excluded-path symbol stubs added to runtime includes when project excludes are present;
 - the project source settings copied from the committed `mago.toml`.
 

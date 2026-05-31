@@ -158,7 +158,19 @@ function testRuntimeConfigGeneration(string $project, string $root): void
         fail('runtime config did not preserve project source settings');
     }
 
-    foreach (['"mixed-argument"', '"invalid-argument"', '"invalid-iterator"', '"mixed-array-access"', '"mixed-array-assignment"', '"mixed-property-access"', '"non-existent-property"', '"too-many-arguments"'] as $expected) {
+    foreach ([
+        '"mixed-argument"',
+        '"invalid-argument"',
+        '"invalid-iterator"',
+        '"mixed-array-access"',
+        '"mixed-array-assignment"',
+        '"mixed-property-access"',
+        '"non-existent-class"',
+        '"non-existent-property"',
+        '"null-operand"',
+        '"undefined-variable"',
+        '"too-many-arguments"',
+    ] as $expected) {
         if (! str_contains($config, $expected)) {
             fail('runtime config missed an app-wide mixed compatibility ignore: ' . $expected);
         }
