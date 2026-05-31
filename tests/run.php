@@ -197,7 +197,21 @@ parameters:
         - app/Services/NotaFiscal/*
 NEON);
 
-    $exitCode = run([PHP_BINARY, $binary, 'migrate-phpstan', '--project=' . $project, '--force']);
+    file_put_contents($project . '/composer.json', json_encode([
+        'require' => [
+            'php' => '^8.5',
+        ],
+        'scripts' => [
+            'test' => [
+                '@phpstan',
+            ],
+            'phpstan' => [
+                'vendor/bin/phpstan analyse',
+            ],
+        ],
+    ], JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR));
+
+    $exitCode = run([PHP_BINARY, $binary, 'migrate-phpstan', '--project=' . $project, '--force', '--update-composer']);
 
     if ($exitCode !== 0) {
         fail('migrate-phpstan command failed');
@@ -211,6 +225,20 @@ NEON);
 
     if (! str_contains($config, 'excludes = ["app/Legacy/**", "app/Services/NotaFiscal/**"]')) {
         fail('migrate-phpstan did not normalize PHPStan exclude paths');
+    }
+
+    $composer = json_decode((string) file_get_contents($project . '/composer.json'), true);
+
+    if (! is_array($composer) || ($composer['scripts']['phpstan'][0] ?? null) !== 'vendor/bin/laramago analyze --phpstan-level=6 --reporting-format=count') {
+        fail('migrate-phpstan did not update the phpstan composer script');
+    }
+
+    if (($composer['scripts']['test'][0] ?? null) !== '@phpstan') {
+        fail('migrate-phpstan should preserve unrelated composer scripts');
+    }
+
+    if (($composer['scripts']['laramago:baseline'][0] ?? null) !== 'vendor/bin/laramago baseline --phpstan-level=6') {
+        fail('migrate-phpstan did not add the baseline composer script');
     }
 
     $application = new Laramago\Application();

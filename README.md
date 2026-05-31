@@ -121,7 +121,7 @@ vendor/bin/laramago analyze --no-laravel-framework-overlays
 
 ```bash
 vendor/bin/laramago init [--force] [--source=app] [--exclude=path/**]
-vendor/bin/laramago migrate-phpstan [--force] [--phpstan-config=phpstan.neon]
+vendor/bin/laramago migrate-phpstan [--force] [--phpstan-config=phpstan.neon] [--update-composer]
 vendor/bin/laramago prepare
 vendor/bin/laramago analyze [--phpstan-level=6] [mago analyze options] [path ...]
 vendor/bin/laramago baseline [--force] [--phpstan-level=6]
@@ -143,6 +143,8 @@ Laramago does not exclude application paths by default. Add `--exclude=path/**` 
 Reads a PHPStan/Larastan NEON file and writes the equivalent Laramago `mago.toml` source settings. It imports common `parameters.paths`, `parameters.excludePaths`, and detects level 6 so it can print the matching explicit `--phpstan-level=6` migration command.
 
 By default it searches `phpstan.neon`, `phpstan.neon.dist`, `phpstan-ci.neon`, and `phpstan-parallel.neon`. Use `--phpstan-config=path/to/phpstan.neon` for a custom file.
+
+Add `--update-composer` to rewrite the common `phpstan`, `phpstan:ci`, and `phpstan:ci:debug` Composer scripts to Laramago commands and add a `laramago:baseline` script. Existing unrelated Composer scripts are preserved.
 
 ### `prepare`
 

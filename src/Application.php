@@ -6,7 +6,7 @@ namespace Laramago;
 
 final class Application
 {
-    private const VERSION = '0.1.14';
+    private const VERSION = '0.1.15';
 
     private const CONFIG_FILE = 'mago.toml';
 
@@ -157,10 +157,18 @@ final class Application
 
         $this->line("Read {$phpStanConfig}");
         $this->line("Wrote {$configPath}");
-        $this->line('Suggested script: vendor/bin/laramago analyze' . $levelFlag . ' --reporting-format=count');
+        $analyzeScript = 'vendor/bin/laramago analyze' . $levelFlag . ' --reporting-format=count';
+        $debugScript = 'vendor/bin/laramago analyze' . $levelFlag . ' --reporting-format=short';
+        $baselineScript = 'vendor/bin/laramago baseline' . $levelFlag;
+
+        if (in_array('--update-composer', $arguments, true) && $this->updateComposerScripts($projectRoot, $analyzeScript, $debugScript, $baselineScript)) {
+            $this->line('Updated composer.json scripts.');
+        }
+
+        $this->line('Suggested script: ' . $analyzeScript);
 
         if ($levelFlag !== '') {
-            $this->line('Suggested baseline: vendor/bin/laramago baseline' . $levelFlag);
+            $this->line('Suggested baseline: ' . $baselineScript);
         } elseif ($level !== null) {
             $this->line("Detected PHPStan level {$level}; use Mago report/fail-level flags or a baseline to choose equivalent strictness.");
         }
@@ -350,7 +358,7 @@ Laramago
 
 Usage:
   laramago init [--force] [--source=app] [--exclude=path/**]
-  laramago migrate-phpstan [--force] [--phpstan-config=phpstan.neon]
+  laramago migrate-phpstan [--force] [--phpstan-config=phpstan.neon] [--update-composer]
   laramago prepare
   laramago analyze [--phpstan-level=6] [--no-laravel-model-overlays] [--no-laravel-framework-overlays] [mago analyze options] [path ...]
   laramago baseline [--force] [--phpstan-level=6]
@@ -528,6 +536,51 @@ HELP);
         }
 
         return array_values(array_unique($normalized));
+    }
+
+    private function updateComposerScripts(string $projectRoot, string $analyzeScript, string $debugScript, string $baselineScript): bool
+    {
+        $composerPath = $projectRoot . '/composer.json';
+
+        if (! is_file($composerPath)) {
+            return false;
+        }
+
+        $source = file_get_contents($composerPath);
+
+        if (! is_string($source)) {
+            return false;
+        }
+
+        try {
+            $composer = json_decode($source, true, 512, JSON_THROW_ON_ERROR);
+        } catch (\JsonException) {
+            return false;
+        }
+
+        if (! is_array($composer)) {
+            return false;
+        }
+
+        $scripts = $composer['scripts'] ?? [];
+
+        if (! is_array($scripts)) {
+            $scripts = [];
+        }
+
+        $scripts['phpstan'] = [$analyzeScript];
+        $scripts['phpstan:ci'] = [$analyzeScript];
+        $scripts['phpstan:ci:debug'] = [$debugScript];
+        $scripts['laramago:baseline'] = [$baselineScript];
+        $composer['scripts'] = $scripts;
+
+        $encoded = json_encode($composer, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
+
+        if (! is_string($encoded)) {
+            return false;
+        }
+
+        return file_put_contents($composerPath, $encoded . PHP_EOL) !== false;
     }
 
     /**
