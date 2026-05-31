@@ -6,7 +6,7 @@ namespace Laramago;
 
 final class Application
 {
-    private const VERSION = '0.1.30';
+    private const VERSION = '0.1.31';
 
     private const CONFIG_FILE = 'mago.toml';
 
@@ -1077,10 +1077,16 @@ TOML;
      */
     private function runtimeAnalyzerIgnores(array $arguments): array
     {
-        return array_merge($this->phpStanCompatibilityIgnores($arguments), [[
-            'code' => 'unused-pragma',
-            'in' => self::PHPSTAN_PRAGMA_OVERLAY_DIR . '/',
-        ]]);
+        return array_merge($this->phpStanCompatibilityIgnores($arguments), [
+            [
+                'code' => 'unused-pragma',
+                'in' => self::MODEL_OVERLAY_DIR . '/',
+            ],
+            [
+                'code' => 'unused-pragma',
+                'in' => self::PHPSTAN_PRAGMA_OVERLAY_DIR . '/',
+            ],
+        ]);
     }
 
     /**
@@ -2056,17 +2062,54 @@ PHP;
     {
         return [
             ' * @method static \\Illuminate\\Database\\Eloquent\\Builder<static> query()',
+            ' * @method static \\Illuminate\\Database\\Eloquent\\Builder<static> newQuery()',
             ' * @method static \\Illuminate\\Database\\Eloquent\\Builder<static> where(mixed $column, mixed $operator = null, mixed $value = null, string $boolean = "and")',
+            ' * @method static \\Illuminate\\Database\\Eloquent\\Builder<static> orWhere(mixed $column, mixed $operator = null, mixed $value = null)',
+            ' * @method static \\Illuminate\\Database\\Eloquent\\Builder<static> whereIn(string $column, mixed $values, string $boolean = "and", bool $not = false)',
+            ' * @method static \\Illuminate\\Database\\Eloquent\\Builder<static> whereNotIn(string $column, mixed $values)',
+            ' * @method static \\Illuminate\\Database\\Eloquent\\Builder<static> whereNull(string|array $columns, string $boolean = "and", bool $not = false)',
+            ' * @method static \\Illuminate\\Database\\Eloquent\\Builder<static> whereNotNull(string|array $columns)',
+            ' * @method static \\Illuminate\\Database\\Eloquent\\Builder<static> whereDate(string $column, mixed $operator, mixed $value = null, string $boolean = "and")',
             ' * @method static \\Illuminate\\Database\\Eloquent\\Builder<static> with(array|string $relations)',
             ' * @method static \\Illuminate\\Database\\Eloquent\\Builder<static> withCount(array|string $relations)',
+            ' * @method static \\Illuminate\\Database\\Eloquent\\Builder<static> select(array|string $columns = ["*"])',
+            ' * @method static \\Illuminate\\Database\\Eloquent\\Builder<static> orderBy(string $column, string $direction = "asc")',
+            ' * @method static \\Illuminate\\Database\\Eloquent\\Builder<static> latest(string|null $column = null)',
+            ' * @method static \\Illuminate\\Database\\Eloquent\\Builder<static> oldest(string|null $column = null)',
+            ' * @method static \\Illuminate\\Database\\Eloquent\\Builder<static> limit(int $value)',
+            ' * @method static \\Illuminate\\Database\\Eloquent\\Builder<static> take(int $value)',
+            ' * @method static \\Illuminate\\Database\\Eloquent\\Builder<static> offset(int $value)',
+            ' * @method static \\Illuminate\\Database\\Eloquent\\Builder<static> skip(int $value)',
             ' * @method static static|null create(array $attributes = null)',
+            ' * @method static static|null forceCreate(array $attributes)',
+            ' * @method static static|null first(array|string $columns = ["*"])',
             ' * @method static static|null firstOrFail(array|string $columns = ["*"])',
+            ' * @method static static|null firstWhere(mixed $column, mixed $operator = null, mixed $value = null, string $boolean = "and")',
+            ' * @method static static|null firstOrCreate(array $attributes = null, array $values = null)',
+            ' * @method static static|null updateOrCreate(array $attributes, array $values = null)',
+            ' * @method static static|null sole(array|string $columns = ["*"])',
+            ' * @method static \\Illuminate\\Database\\Eloquent\\Collection all(array|string $columns = ["*"])',
             ' * @method static static|null find(mixed $id, array|string $columns = ["*"])',
             ' * @method static static|null findOrFail(mixed $id, array|string $columns = ["*"])',
             ' * @method static \\Illuminate\\Database\\Eloquent\\Collection get(array|string $columns = ["*"])',
             ' * @method static \\Illuminate\\Support\\Collection pluck(string $column, mixed $key = null)',
+            ' * @method static \\Illuminate\\LazyCollection cursor()',
+            ' * @method static bool chunk(int $count, callable $callback)',
+            ' * @method static bool each(callable $callback, int $count = 1000)',
             ' * @method static mixed value(string $column)',
+            ' * @method static mixed valueOrFail(string $column)',
             ' * @method static int count(string $columns = "*")',
+            ' * @method static mixed sum(string $column)',
+            ' * @method static mixed avg(string $column)',
+            ' * @method static mixed min(string $column)',
+            ' * @method static mixed max(string $column)',
+            ' * @method static bool exists()',
+            ' * @method static bool doesntExist()',
+            ' * @method static int delete()',
+            ' * @method static int destroy(mixed $ids)',
+            ' * @method static bool insert(array $values)',
+            ' * @method static int upsert(array $values, array|string $uniqueBy, array|null $update = null)',
+            ' * @method static void truncate()',
         ];
     }
 

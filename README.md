@@ -105,7 +105,7 @@ Generated overlays currently add:
 - `@property` entries for database columns with cast-aware types, including encrypted casts, collection/array object casts, date casts, and enum casts;
 - `@property-read` entries for legacy `getFooAttribute()` accessors and `Attribute` accessors;
 - `@property-read` entries for Eloquent relations, including through, polymorphic, and many-to-many collection relations;
-- `@method static` entries for common Eloquent builder calls such as `where`, `with`, `withCount`, `get`, `pluck`, `count`, `create`, `find`, and `findOrFail`;
+- `@method static` entries for common Eloquent builder chains and terminals such as `where`, `whereIn`, `with`, `withCount`, `select`, `orderBy`, `first`, `firstOrCreate`, `updateOrCreate`, `get`, `pluck`, `exists`, `count`, `insert`, `delete`, `find`, and `findOrFail`;
 - merged generated metadata with existing model class PHPDoc, so project annotations such as `@mixin`, `@method`, `@property`, and generic hints stay visible;
 - `createToken` return types for models using Laravel Sanctum's `HasApiTokens` trait;
 - `@method static` entries for classic `scopeFoo()` local scopes and Laravel `#[Scope]` methods;
@@ -115,6 +115,7 @@ Generated overlays currently add:
 - Composer autoload and autoload-dev type discovery for application namespaces that live outside the analyzed source paths;
 - excluded-path symbol discovery so `exclude` can omit legacy code from analysis without turning referenced classes into false missing-class errors;
 - PHPStan suppression pragma compatibility for `@phpstan-ignore`, `@phpstan-ignore-next-line`, and `@phpstan-ignore-line` comments through generated temporary overlays;
+- path-scoped suppression of unused generated Mago pragmas inside overlays, so PHPStan compatibility comments do not create new analyzer noise after Laramago resolves the original issue;
 - baseline and output path translation so generated overlay paths do not leak into application diagnostics.
 
 Disable overlays when you want raw Mago behavior:

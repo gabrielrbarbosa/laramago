@@ -232,6 +232,10 @@ function testRuntimeConfigGeneration(string $project, string $root): void
         fail('runtime config should keep strict unused definition checks by default');
     }
 
+    if (! str_contains($config, '{ code = "unused-pragma", in = ".laramago/cache/model-overlays/" }')) {
+        fail('runtime config should ignore unused generated model overlay pragmas');
+    }
+
     if (! str_contains($config, '{ code = "unused-pragma", in = ".laramago/cache/phpstan-pragma-overlays/" }')) {
         fail('runtime config should ignore unused generated PHPStan pragma compatibility overlays');
     }
@@ -756,12 +760,19 @@ PHP;
         '@property-read string|null $image_url',
         '@property-read \\Illuminate\\Database\\Eloquent\\Collection<int, \\App\\Models\\Order> $orders',
         '@method static \\Illuminate\\Database\\Eloquent\\Builder<static> where(mixed $column, mixed $operator = null, mixed $value = null, string $boolean = "and")',
+        '@method static \\Illuminate\\Database\\Eloquent\\Builder<static> whereIn(string $column, mixed $values, string $boolean = "and", bool $not = false)',
         '@method static \\Illuminate\\Database\\Eloquent\\Builder<static> withCount(array|string $relations)',
+        '@method static \\Illuminate\\Database\\Eloquent\\Builder<static> orderBy(string $column, string $direction = "asc")',
         '@method static static|null create(array $attributes = null)',
+        '@method static static|null first(array|string $columns = ["*"])',
         '@method static static|null firstOrFail(array|string $columns = ["*"])',
+        '@method static static|null firstOrCreate(array $attributes = null, array $values = null)',
+        '@method static static|null updateOrCreate(array $attributes, array $values = null)',
         '@method static static|null findOrFail(mixed $id, array|string $columns = ["*"])',
         '@method static \\Illuminate\\Database\\Eloquent\\Collection get(array|string $columns = ["*"])',
         '@method static \\Illuminate\\Support\\Collection pluck(string $column, mixed $key = null)',
+        '@method static bool exists()',
+        '@method static bool insert(array $values)',
         '@method \\Laravel\\Sanctum\\NewAccessToken createToken(string $name, array $abilities = ["*"], ?\\DateTimeInterface $expiresAt = null)',
         '@method static \\Illuminate\\Database\\Eloquent\\Builder<static> active(bool $onlyVisible = null)',
         '@mixin \\Illuminate\\Database\\Eloquent\\Builder<Product>',
