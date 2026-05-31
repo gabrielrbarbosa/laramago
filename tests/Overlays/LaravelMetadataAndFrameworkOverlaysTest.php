@@ -98,6 +98,12 @@ use Illuminate\Database\Eloquent\Model;
  */
 class Product extends Model
 {
+    private static function normalize(string $value): string
+    {
+        $value = iconv('UTF-8', 'ASCII//TRANSLIT', $value);
+
+        return preg_replace('/[^A-Z0-9 ]/', '', $value);
+    }
 }
 PHP;
 
@@ -168,6 +174,15 @@ PHP;
 
     if (str_contains($overlay, '@method static int delete()')) {
         fail('model docblock overlay should not shadow the instance delete method');
+    }
+
+    $compatibilityMethod = new ReflectionMethod($application, 'applySourceCompatibilityOverlayTransforms');
+    $compatibilityOverlay = $compatibilityMethod->invoke($application, $overlay, sys_get_temp_dir(), [], 'app/Models/Product.php', []);
+
+    if (! is_string($compatibilityOverlay)
+        || ! str_contains($compatibilityOverlay, '$value = (string) iconv(\'UTF-8\', \'ASCII//TRANSLIT\', $value);')
+        || ! str_contains($compatibilityOverlay, 'return (string) preg_replace(\'/[^A-Z0-9 ]/\', \'\', $value);')) {
+        fail('model overlays should receive source compatibility rewrites before analysis');
     }
 
     if (strpos($overlay, '@mixin \\Illuminate\\Database\\Eloquent\\Builder<Product>') > strpos($overlay, '@laramago-generated')) {

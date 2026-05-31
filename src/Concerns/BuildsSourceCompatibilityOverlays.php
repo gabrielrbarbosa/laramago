@@ -45,40 +45,7 @@ trait BuildsSourceCompatibilityOverlays
                     continue;
                 }
 
-                $translated = $this->translatePhpStanPragmas($source);
-                $translated = $this->translateLarastanPseudoTypes($translated);
-                $translated = $this->translatePhpStanListTypes($translated);
-                $translated = $this->translateLaravelCarbonImports($translated);
-                $translated = $this->removeObjectAccessStringInterpolations($translated);
-                $translated = $this->translateLaravelDateHelperCalls($translated);
-                $translated = $this->rewriteCarbonInstanceStaticCalls($translated);
-                $translated = $this->normalizeStringableInternalFunctionArguments($translated);
-                $translated = $this->ignoreFalseReturningInternalFunctionPipelines($translated);
-                $translated = $this->rewriteLaravelHttpClientWrapperReturnTypes($translated);
-                $translated = $this->annotateLaravelHttpClientWrapperAssignments($translated, $projectRoot);
-                $translated = $this->annotateLaravelCollectionMacroClosures($translated);
-                $translated = $this->annotateLaravelCollectionStringCallbacks($translated);
-                $translated = $this->loosenLaravelCollectionArrowCallbackParameterTypes($translated);
-                $translated = $this->loosenLaravelCollectionClosureCallbackParameterTypes($translated);
-                $translated = $this->annotateLaravelExcelEventClosures($translated);
-                $translated = $this->annotateLaravelValidationRuleClosures($translated);
-                $translated = $this->annotateLaravelQueryBuilderClosures($translated);
-                $translated = $this->annotateLaravelJoinClauseClosures($translated);
-                $translated = $this->annotateLaravelForeachObjectRows($translated);
-                $translated = $this->annotateLaravelNumericFallbackAssignments($translated);
-                $translated = $this->annotateLaravelRequestParameters($translated);
-                $translated = $this->rewriteLaravelRequestPropertyReads($translated, $projectRoot);
-                $translated = $this->castLaravelRequestForeachSources($translated);
-                $translated = $this->annotateLaravelRequestInputArrayVariables($translated);
-                $translated = $this->annotateLaravelObserverModelParameters($translated, $relativePath, $observerModels);
-                $translated = $this->annotateLaravelJsonResourceDynamicMembers($translated, $relativePath);
-                $translated = $this->annotateLaravelCollectionItemObjectClosures($translated);
-                $translated = $this->annotateEloquentModelArrayAccessAssignments($translated);
-                $translated = $this->annotateDynamicMemberSelectorStrings($translated);
-                $translated = $this->annotateLaravelFormRequestDynamicProperties($translated, $relativePath, $projectRoot);
-                $translated = $this->annotateAllowDynamicPropertiesClasses($translated);
-                $translated = $this->ignoreNullCoalescePropertyAccess($translated);
-                $translated = $this->ignoreLaravelInstanceBuilderMagicCalls($translated);
+                $translated = $this->applySourceCompatibilityOverlayTransforms($source, $projectRoot, $arguments, $relativePath, $observerModels);
                 $minimumAliases = $translated === $source ? 2 : 1;
                 $overlay = $this->insertTraitSelfCallMethods($this->insertCaseInsensitiveMethodAliases($translated, $caseInsensitiveAliasCandidates, $minimumAliases));
 
@@ -103,6 +70,47 @@ trait BuildsSourceCompatibilityOverlays
         file_put_contents($projectRoot . '/' . self::PHPSTAN_PRAGMA_OVERLAY_MAP, json_encode($pathMap, JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR));
 
         return $substitutions;
+    }
+
+    private function applySourceCompatibilityOverlayTransforms(string $source, string $projectRoot, array $arguments, string $relativePath, array $observerModels = []): string
+    {
+        $translated = $this->translatePhpStanPragmas($source);
+        $translated = $this->translateLarastanPseudoTypes($translated);
+        $translated = $this->translatePhpStanListTypes($translated);
+        $translated = $this->translateLaravelCarbonImports($translated);
+        $translated = $this->removeObjectAccessStringInterpolations($translated);
+        $translated = $this->translateLaravelDateHelperCalls($translated);
+        $translated = $this->rewriteCarbonInstanceStaticCalls($translated);
+        $translated = $this->normalizeStringableInternalFunctionArguments($translated);
+        $translated = $this->normalizeFalseReturningInternalFunctionResults($translated);
+        $translated = $this->ignoreFalseReturningInternalFunctionPipelines($translated);
+        $translated = $this->rewriteLaravelHttpClientWrapperReturnTypes($translated);
+        $translated = $this->annotateLaravelHttpClientWrapperAssignments($translated, $projectRoot);
+        $translated = $this->annotateLaravelCollectionMacroClosures($translated);
+        $translated = $this->annotateLaravelCollectionStringCallbacks($translated);
+        $translated = $this->loosenLaravelCollectionArrowCallbackParameterTypes($translated);
+        $translated = $this->loosenLaravelCollectionClosureCallbackParameterTypes($translated);
+        $translated = $this->annotateLaravelExcelEventClosures($translated);
+        $translated = $this->annotateLaravelValidationRuleClosures($translated);
+        $translated = $this->annotateLaravelQueryBuilderClosures($translated);
+        $translated = $this->annotateLaravelJoinClauseClosures($translated);
+        $translated = $this->annotateLaravelForeachObjectRows($translated);
+        $translated = $this->annotateLaravelNumericFallbackAssignments($translated);
+        $translated = $this->annotateLaravelRequestParameters($translated);
+        $translated = $this->rewriteLaravelRequestPropertyReads($translated, $projectRoot);
+        $translated = $this->castLaravelRequestForeachSources($translated);
+        $translated = $this->annotateLaravelRequestInputArrayVariables($translated);
+        $translated = $this->annotateLaravelObserverModelParameters($translated, $relativePath, $observerModels);
+        $translated = $this->annotateLaravelJsonResourceDynamicMembers($translated, $relativePath);
+        $translated = $this->annotateLaravelCollectionItemObjectClosures($translated);
+        $translated = $this->annotateEloquentModelArrayAccessAssignments($translated);
+        $translated = $this->annotateDynamicMemberSelectorStrings($translated);
+        $translated = $this->annotateLaravelFormRequestDynamicProperties($translated, $relativePath, $projectRoot);
+        $translated = $this->annotateAllowDynamicPropertiesClasses($translated);
+        $translated = $this->ignoreNullCoalescePropertyAccess($translated);
+        $translated = $this->ignoreLaravelInstanceBuilderMagicCalls($translated);
+
+        return $translated;
     }
 
     private function sourceOverlayPaths(string $projectRoot, array $arguments, array $configuredPaths): array
@@ -525,6 +533,101 @@ trait BuildsSourceCompatibilityOverlays
         );
 
         return is_string($translated) ? $translated : $source;
+    }
+
+    private function normalizeFalseReturningInternalFunctionResults(string $source): string
+    {
+        if (
+            ! str_contains($source, 'iconv(')
+            && ! str_contains($source, 'mb_detect_encoding(')
+            && ! str_contains($source, 'preg_replace(')
+            && ! str_contains($source, 'preg_split(')
+            && ! str_contains($source, 'json_encode(')
+            && ! str_contains($source, 'file_get_contents(')
+            && ! str_contains($source, 'strstr(')
+        ) {
+            return $source;
+        }
+
+        $translated = preg_replace(
+            '/=\s*(?!\(string\)\s*)iconv\(/',
+            '= (string) iconv(',
+            $source,
+        ) ?? $source;
+
+        $translated = preg_replace(
+            '/mb_convert_encoding\(([^;\r\n]*?,\s*[^,\r\n]+,\s*)(?!\(string\)\s*)mb_detect_encoding\(/',
+            'mb_convert_encoding($1(string) mb_detect_encoding(',
+            $translated,
+        ) ?? $translated;
+
+        $translated = preg_replace(
+            '/(\breturn\s+)(?!\(string\)\s*)preg_replace\(/',
+            '$1(string) preg_replace(',
+            $translated,
+        ) ?? $translated;
+
+        $translated = preg_replace(
+            '/(=\s*)(?!\(string\)\s*)preg_replace\(/',
+            '$1(string) preg_replace(',
+            $translated,
+        ) ?? $translated;
+
+        $translated = preg_replace(
+            '/(array_map\([^,\r\n]+,\s*)(?!\()preg_split\((.+)\)(\s*\))/',
+            '$1(preg_split($2) ?: [])$3',
+            $translated,
+        ) ?? $translated;
+
+        $translated = preg_replace(
+            '/(array_filter|array_keys|count)\(\s*(?!\()preg_split\((.+)\)(\s*\))/',
+            '$1((preg_split($2) ?: [])$3',
+            $translated,
+        ) ?? $translated;
+
+        $translated = preg_replace(
+            '/json_decode\(\s*(?!\(string\))json_encode\(/',
+            'json_decode((string) json_encode(',
+            $translated,
+        ) ?? $translated;
+
+        $translated = preg_replace(
+            '/->put\(([^;\r\n]+,\s*)(?!\(string\))json_encode\(/',
+            '->put($1(string) json_encode(',
+            $translated,
+        ) ?? $translated;
+
+        $translated = preg_replace(
+            '/->info\(\s*(?!\(string\))json_encode\(/',
+            '->info((string) json_encode(',
+            $translated,
+        ) ?? $translated;
+
+        $translated = preg_replace(
+            '/base64_encode\(\s*(?!\(string\))file_get_contents\(/',
+            'base64_encode((string) file_get_contents(',
+            $translated,
+        ) ?? $translated;
+
+        $translated = preg_replace(
+            '/md5\(\s*(?!\(string\))file_get_contents\(/',
+            'md5((string) file_get_contents(',
+            $translated,
+        ) ?? $translated;
+
+        $translated = preg_replace(
+            '/ltrim\(\s*(?!\(string\))strstr\(/',
+            'ltrim((string) strstr(',
+            $translated,
+        ) ?? $translated;
+
+        $translated = preg_replace(
+            '/->get\(\s*(?!\(string\))strstr\(/',
+            '->get((string) strstr(',
+            $translated,
+        ) ?? $translated;
+
+        return $translated;
     }
 
     private function ignoreFalseReturningInternalFunctionPipelines(string $source): string

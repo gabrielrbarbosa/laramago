@@ -192,6 +192,17 @@ final class UsesInternalFunctions
         $body = json_decode($response->getBody());
         $id = uniqid(mt_rand(), true);
         $exif = exif_read_data($model->file);
+        $name = iconv('UTF-8', 'ASCII//TRANSLIT', $model->name);
+        $parts = array_map('trim', preg_split('/[;,\s]+/', $model->tags));
+        $count = count(preg_split('/[;,\s]+/', $model->tags));
+        $filled = array_filter(preg_split('/[;,\s]+/', $model->tags));
+        $decodedAgain = json_decode(json_encode($model->payload), true);
+        $encodedFile = base64_encode(file_get_contents($model->path));
+        $digest = md5(file_get_contents($model->path));
+        $suffix = ltrim(strstr($model->path, '/img'), '/');
+        \Illuminate\Support\Facades\Storage::disk('local')->put($model->path, json_encode($model->payload));
+        $storedImage = \Illuminate\Support\Facades\Storage::disk('r2')->get(strstr($model->path, '/img'));
+        $encoding = mb_convert_encoding($model->body, 'UTF-8', mb_detect_encoding($model->body));
         $next = date(
             'Y-m-d',
             strtotime(
@@ -200,7 +211,7 @@ final class UsesInternalFunctions
             )
         );
 
-        return [$year, $decoded, $body, $id, $exif, $next];
+        return [$year, $decoded, $body, $id, $exif, $name, $parts, $count, $filled, $decodedAgain, $encodedFile, $digest, $suffix, $storedImage, $encoding, $next];
     }
 
     public function normalize(string $value): string
@@ -230,7 +241,19 @@ PHP);
             && str_contains($overlay, 'json_decode((string) $response->getBody())')
             && str_contains($overlay, 'uniqid((string) mt_rand(), true)')
             && str_contains($overlay, 'exif_read_data((string) $model->file)')
+            && str_contains($overlay, '$name = (string) iconv(\'UTF-8\', \'ASCII//TRANSLIT\', $model->name)')
+            && str_contains($overlay, "array_map('trim', (preg_split('/[;,\\s]+/', \$model->tags) ?: []))")
+            && str_contains($overlay, "count((preg_split('/[;,\\s]+/', \$model->tags) ?: []))")
+            && str_contains($overlay, "array_filter((preg_split('/[;,\\s]+/', \$model->tags) ?: []))")
+            && str_contains($overlay, 'json_decode((string) json_encode($model->payload), true)')
+            && str_contains($overlay, 'base64_encode((string) file_get_contents($model->path))')
+            && str_contains($overlay, 'md5((string) file_get_contents($model->path))')
+            && str_contains($overlay, "ltrim((string) strstr(\$model->path, '/img'), '/')")
+            && str_contains($overlay, "\\Illuminate\\Support\\Facades\\Storage::disk('local')->put(\$model->path, (string) json_encode(\$model->payload))")
+            && str_contains($overlay, "\\Illuminate\\Support\\Facades\\Storage::disk('r2')->get((string) strstr(\$model->path, '/img'))")
+            && str_contains($overlay, "mb_convert_encoding(\$model->body, 'UTF-8', (string) mb_detect_encoding(\$model->body))")
             && str_contains($overlay, 'strtotime((string) $model->created_at)')
+            && str_contains($overlay, "return (string) preg_replace('/[^a-z]/', '', (string) iconv('UTF-8', 'ASCII//TRANSLIT', \$value))")
             && substr_count($overlay, '@mago-ignore analysis:possibly-false-argument analysis:invalid-argument analysis:nullable-return-statement analysis:invalid-return-statement analysis:falsable-return-statement') === 6) {
             $foundOverlay = true;
         }
