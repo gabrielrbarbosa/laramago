@@ -75,6 +75,7 @@ trait BuildsSourceCompatibilityOverlays
                 $translated = $this->annotateLaravelFormRequestDynamicProperties($translated, $relativePath, $projectRoot);
                 $translated = $this->annotateAllowDynamicPropertiesClasses($translated);
                 $translated = $this->ignoreNullCoalescePropertyAccess($translated);
+                $translated = $this->ignoreLaravelInstanceBuilderMagicCalls($translated);
                 $minimumAliases = $translated === $source ? 2 : 1;
                 $overlay = $this->insertTraitSelfCallMethods($this->insertCaseInsensitiveMethodAliases($translated, $caseInsensitiveAliasCandidates, $minimumAliases));
 
@@ -1565,6 +1566,35 @@ trait BuildsSourceCompatibilityOverlays
             if (str_contains($line, '??') && str_contains($line, '->') && ! str_contains($line, '@mago-ignore')) {
                 preg_match('/^\s*/', $line, $matches);
                 $translated .= ($matches[0] ?? '') . '// @mago-ignore invalid-property-access' . $lineEnding;
+            }
+
+            $translated .= $line . $lineEnding;
+        }
+
+        return $translated;
+    }
+
+    private function ignoreLaravelInstanceBuilderMagicCalls(string $source): string
+    {
+        if (! str_contains($source, '->first(') && ! str_contains($source, '->query(')) {
+            return $source;
+        }
+
+        $lines = preg_split('/(\R)/', $source, -1, PREG_SPLIT_DELIM_CAPTURE);
+
+        if (! is_array($lines)) {
+            return $source;
+        }
+
+        $translated = '';
+
+        for ($index = 0; $index < count($lines); $index += 2) {
+            $line = (string) $lines[$index];
+            $lineEnding = (string) ($lines[$index + 1] ?? '');
+
+            if (preg_match('/->\s*(?:first|query)\s*\(/', $line) === 1 && ! str_contains($line, '@mago-ignore')) {
+                preg_match('/^\s*/', $line, $matches);
+                $translated .= ($matches[0] ?? '') . '// @mago-ignore dynamic-static-method-call' . $lineEnding;
             }
 
             $translated .= $line . $lineEnding;
