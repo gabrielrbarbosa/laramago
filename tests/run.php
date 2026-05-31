@@ -97,6 +97,7 @@ if ($doctorExitCode !== $expectedDoctorExitCode) {
 }
 
 testDoctorTreatsMissingBaselineAsOptional($project, $binary);
+testHelpDocumentsOverlayOptOutFlags($binary);
 testBaselinePathTranslation($project, $root);
 testOutputPathTranslation($project, $root);
 testBaselinePathTranslationUsesPhpStanPragmaOverlays($project, $root);

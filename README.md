@@ -109,7 +109,7 @@ See [Laravel Model Overlays](docs/laravel-model-overlays.md) for the full discov
 vendor/bin/laramago init [--force] [--source=app] [--exclude=path/**]
 vendor/bin/laramago migrate-phpstan [--force] [--phpstan-config=phpstan.neon] [--update-composer]
 vendor/bin/laramago prepare
-vendor/bin/laramago analyze [--phpstan-level=0..10|max] [--find-unused-definitions] [--no-phpstan-pragma-overlays] [mago analyze options] [path ...]
+vendor/bin/laramago analyze [--phpstan-level=0..10|max] [--find-unused-definitions] [--no-laravel-model-overlays] [--no-laravel-framework-overlays] [--no-phpstan-pragma-overlays] [mago analyze options] [path ...]
 vendor/bin/laramago compare [--phpstan-level=0..10|max] [mago analyze options] [path ...]
 vendor/bin/laramago baseline [--force] [--phpstan-level=0..10|max] [--find-unused-definitions]
 vendor/bin/laramago verify-baseline [--phpstan-level=0..10|max] [--find-unused-definitions]

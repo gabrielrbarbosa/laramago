@@ -16,6 +16,26 @@ function testDoctorTreatsMissingBaselineAsOptional(string $project, string $bina
     }
 }
 
+function testHelpDocumentsOverlayOptOutFlags(string $binary): void
+{
+    $result = captureRun([PHP_BINARY, $binary, 'help']);
+    $output = $result['output'];
+
+    if ($result['exitCode'] !== 0) {
+        fail('help command should succeed');
+    }
+
+    foreach ([
+        '--no-laravel-model-overlays',
+        '--no-laravel-framework-overlays',
+        '--no-phpstan-pragma-overlays',
+    ] as $flag) {
+        if (! str_contains($output, $flag)) {
+            fail('help command should document overlay opt-out flag: ' . $flag);
+        }
+    }
+}
+
 function testBaselinePathTranslation(string $project, string $root): void
 {
     $cache = $project . '/.laramago/cache';
