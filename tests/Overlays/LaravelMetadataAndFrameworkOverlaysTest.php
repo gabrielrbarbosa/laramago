@@ -638,6 +638,20 @@ interface Provider
 }
 PHP);
 
+    file_put_contents($project . '/vendor/laravel/socialite/src/Two/ProviderInterface.php', <<<'PHP'
+<?php
+
+namespace Laravel\Socialite\Two;
+
+interface ProviderInterface
+{
+    /**
+     * @return \Laravel\Socialite\Two\User
+     */
+    public function user();
+}
+PHP);
+
     file_put_contents($project . '/vendor/laravel/socialite/src/Two/User.php', <<<'PHP'
 <?php
 
@@ -1050,7 +1064,7 @@ PHP);
     $method = new ReflectionMethod($application, 'laravelFrameworkSubstitutions');
     $substitutions = $method->invoke($application, $project, []);
 
-    if (! is_array($substitutions) || count($substitutions) !== 68) {
+    if (! is_array($substitutions) || count($substitutions) !== 70) {
         fail('framework overlay generation returned unexpected substitutions');
     }
 
@@ -1087,6 +1101,7 @@ PHP);
     $scopeOverlay = file_get_contents($project . '/.laramago/cache/framework-overlays/Scope.php');
     $fromCollectionOverlay = file_get_contents($project . '/.laramago/cache/framework-overlays/FromCollection.php');
     $socialiteProviderOverlay = file_get_contents($project . '/.laramago/cache/framework-overlays/SocialiteProvider.php');
+    $socialiteTwoProviderOverlay = file_get_contents($project . '/.laramago/cache/framework-overlays/SocialiteTwoProvider.php');
     $socialiteUserOverlay = file_get_contents($project . '/.laramago/cache/framework-overlays/SocialiteUser.php');
 
     if (! is_string($guardOverlay) || ! str_contains($guardOverlay, '@return \\App\\Models\\Usuario\\Usuario|null')) {
@@ -1156,7 +1171,10 @@ PHP);
         fail('Support collection overlay did not document project collection macros');
     }
 
-    if (! is_string($applicationContractOverlay) || ! str_contains($applicationContractOverlay, 'public function isProduction(): bool;')) {
+    if (! is_string($applicationContractOverlay)
+        || ! str_contains($applicationContractOverlay, 'interface Application extends \\ArrayAccess')
+        || ! str_contains($applicationContractOverlay, 'public function isProduction(): bool;')
+        || ! str_contains($applicationContractOverlay, 'public function offsetGet(mixed $key): mixed;')) {
         fail('application contract overlay did not expose production environment helper');
     }
 
@@ -1190,6 +1208,10 @@ PHP);
 
     if (! is_string($socialiteProviderOverlay) || ! str_contains($socialiteProviderOverlay, '@return \\Laravel\\Socialite\\Contracts\\User|null') || ! str_contains($socialiteProviderOverlay, 'public function with(array $parameters): static;') || ! str_contains($socialiteProviderOverlay, 'public function scopes(array $scopes): static;')) {
         fail('Socialite provider overlay did not expose fluent provider methods');
+    }
+
+    if (! is_string($socialiteTwoProviderOverlay) || ! str_contains($socialiteTwoProviderOverlay, '@return \\Laravel\\Socialite\\Contracts\\User|null')) {
+        fail('Socialite two provider overlay did not expose SocialiteProviders-compatible user returns');
     }
 
     if (! is_string($socialiteUserOverlay) || ! str_contains($socialiteUserOverlay, 'public function setAccessTokenResponseBody(array $body): static')) {

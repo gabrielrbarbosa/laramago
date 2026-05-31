@@ -47,6 +47,7 @@ trait BuildsLaravelFrameworkOverlays
         $scopePath = $projectRoot . '/vendor/laravel/framework/src/Illuminate/Database/Eloquent/Scope.php';
         $fromCollectionPath = $projectRoot . '/vendor/maatwebsite/excel/src/Concerns/FromCollection.php';
         $socialiteProviderPath = $projectRoot . '/vendor/laravel/socialite/src/Contracts/Provider.php';
+        $socialiteTwoProviderPath = $projectRoot . '/vendor/laravel/socialite/src/Two/ProviderInterface.php';
         $socialiteUserPath = $projectRoot . '/vendor/laravel/socialite/src/Two/User.php';
 
         $authModel = $this->detectAuthUserModel($projectRoot);
@@ -297,6 +298,14 @@ trait BuildsLaravelFrameworkOverlays
 
             if (is_string($socialiteProviderSource)) {
                 $overlays[] = $this->writeFrameworkOverlay($projectRoot, 'SocialiteProvider.php', $socialiteProviderPath, $this->renderSocialiteProviderOverlay($socialiteProviderSource));
+            }
+        }
+
+        if (is_file($socialiteTwoProviderPath)) {
+            $socialiteTwoProviderSource = file_get_contents($socialiteTwoProviderPath);
+
+            if (is_string($socialiteTwoProviderSource)) {
+                $overlays[] = $this->writeFrameworkOverlay($projectRoot, 'SocialiteTwoProvider.php', $socialiteTwoProviderPath, $this->renderSocialiteTwoProviderOverlay($socialiteTwoProviderSource));
             }
         }
 
@@ -847,17 +856,50 @@ PHP,
 
     private function renderApplicationContractOverlay(string $source): string
     {
-        if (str_contains($source, 'function isProduction(')) {
-            return $source;
+        if (! str_contains($source, 'ArrayAccess')) {
+            $source = preg_replace_callback(
+                '/interface\s+Application(\s+extends\s+[^{]+)?\s*\{/',
+                static function (array $matches): string {
+                    $extends = trim((string) ($matches[1] ?? ''));
+
+                    if ($extends === '') {
+                        return 'interface Application extends \ArrayAccess {';
+                    }
+
+                    return 'interface Application ' . $extends . ', \ArrayAccess {';
+                },
+                $source,
+                1,
+            ) ?? $source;
         }
 
-        return $this->insertBeforeFinalClassBrace($source, <<<'PHP'
+        $declarations = [];
+
+        if (! str_contains($source, 'function isProduction(')) {
+            $declarations[] = <<<'PHP'
 
     /**
      * Determine if the application environment is production.
      */
     public function isProduction(): bool;
-PHP);
+PHP;
+        }
+
+        if (! str_contains($source, 'function offsetGet(')) {
+            $declarations[] = <<<'PHP'
+
+    /**
+     * Laramago overlay for Laravel container array access.
+     */
+    public function offsetGet(mixed $key): mixed;
+PHP;
+        }
+
+        if ($declarations === []) {
+            return $source;
+        }
+
+        return $this->insertBeforeFinalClassBrace($source, implode(PHP_EOL, $declarations));
     }
 
     private function renderResourceCollectionOverlay(string $source, string $className): string
@@ -1621,6 +1663,24 @@ PHP);
     public function stateless(): static;
 PHP);
         }
+
+        return $source;
+    }
+
+    private function renderSocialiteTwoProviderOverlay(string $source): string
+    {
+        $source = preg_replace(
+            '/@return\s+\\\\?Laravel\\\\Socialite\\\\Two\\\\User\b/',
+            '@return \Laravel\Socialite\Contracts\User|null',
+            $source,
+        ) ?? $source;
+
+        $source = preg_replace(
+            '/public function user\(\)(?:\s*:\s*[^;\r\n]+)?;/',
+            'public function user();',
+            $source,
+            1,
+        ) ?? $source;
 
         return $source;
     }
