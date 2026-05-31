@@ -584,6 +584,13 @@ namespace Illuminate\Database\Eloquent;
 
 class Model
 {
+    /**
+     * @param  array<string, mixed>  $attributes
+     */
+    public function __construct(array $attributes = [])
+    {
+    }
+
     public function load($relations)
     {
     }
@@ -602,6 +609,43 @@ class Model
 
     protected function decrement($column, $amount = 1, array $extra = [])
     {
+    }
+
+    /**
+     * @param  array<string, mixed>  $attributes
+     * @return $this
+     */
+    public function fill(array $attributes)
+    {
+        return $this;
+    }
+
+    /**
+     * @param  array<string, mixed>  $attributes
+     * @return $this
+     */
+    public function forceFill(array $attributes)
+    {
+        return $this;
+    }
+
+    /**
+     * @param  array<string, mixed>  $attributes
+     * @param  bool  $exists
+     * @return static
+     */
+    public function newInstance($attributes = [], $exists = false)
+    {
+        return new static;
+    }
+
+    /**
+     * @param  array<string, mixed>  $attributes
+     * @param  array<string, mixed>  $options
+     */
+    public function update(array $attributes = [], array $options = []): bool
+    {
+        return true;
     }
 }
 PHP);
@@ -745,6 +789,17 @@ namespace Illuminate\Support;
 class Collection
 {
     /**
+     * @template TGetDefault
+     *
+     * @param  TKey|null  $key
+     * @param  TGetDefault|(\Closure(): TGetDefault)  $default
+     * @return TValue|TGetDefault
+     */
+    public function get($key, $default = null)
+    {
+    }
+
+    /**
      * @return static<array-key, mixed>
      */
     public function pluck($value, $key = null)
@@ -867,7 +922,7 @@ PHP);
         fail('Optional overlay did not document project-used dynamic optional members');
     }
 
-    if (! is_string($supportCollectionOverlay) || ! str_contains($supportCollectionOverlay, '@method \\Illuminate\\Pagination\\LengthAwarePaginator paginate(') || ! str_contains($supportCollectionOverlay, '@return \\Illuminate\\Support\\Collection<array-key, mixed>')) {
+    if (! is_string($supportCollectionOverlay) || ! str_contains($supportCollectionOverlay, '@method \\Illuminate\\Pagination\\LengthAwarePaginator paginate(') || ! str_contains($supportCollectionOverlay, '@return \\Illuminate\\Support\\Collection<array-key, mixed>') || ! str_contains($supportCollectionOverlay, '@param  TKey|false|null  $key')) {
         fail('Support collection overlay did not document project collection macros');
     }
 
@@ -915,7 +970,7 @@ PHP);
         fail('Eloquent builder overlay did not preserve source and add delegated chain methods');
     }
 
-    if (! is_string($eloquentModelOverlay) || ! str_contains($eloquentModelOverlay, 'public function loadMissing($relations, ...$additionalRelations)') || ! str_contains($eloquentModelOverlay, 'public function increment($column, $amount = 1, array $extra = [])') || ! str_contains($eloquentModelOverlay, 'public static function withoutGlobalScopes(?array $scopes = null)') || ! str_contains($eloquentModelOverlay, 'public static function where(mixed $column, mixed $operator = null, mixed $value = null, string $boolean = \'and\')') || ! str_contains($eloquentModelOverlay, 'public static function select(mixed ...$columns)') || ! str_contains($eloquentModelOverlay, 'public static function selectRaw(mixed $expression, array $bindings = [])') || ! str_contains($eloquentModelOverlay, 'public static function lockForUpdate()') || ! str_contains($eloquentModelOverlay, '@return \\Illuminate\\Database\\Eloquent\\Builder<static>') || ! str_contains($eloquentModelOverlay, '@return static|\\Illuminate\\Database\\Eloquent\\Collection<int, static>|null')) {
+    if (! is_string($eloquentModelOverlay) || ! str_contains($eloquentModelOverlay, '@param  array<array-key, mixed>  $attributes') || ! str_contains($eloquentModelOverlay, '@param  array<array-key, mixed>  $options') || ! str_contains($eloquentModelOverlay, 'public function loadMissing($relations, ...$additionalRelations)') || ! str_contains($eloquentModelOverlay, 'public function increment($column, $amount = 1, array $extra = [])') || ! str_contains($eloquentModelOverlay, 'public static function withoutGlobalScopes(?array $scopes = null)') || ! str_contains($eloquentModelOverlay, 'public static function where(mixed $column, mixed $operator = null, mixed $value = null, string $boolean = \'and\')') || ! str_contains($eloquentModelOverlay, 'public static function select(mixed ...$columns)') || ! str_contains($eloquentModelOverlay, 'public static function selectRaw(mixed $expression, array $bindings = [])') || ! str_contains($eloquentModelOverlay, 'public static function lockForUpdate()') || ! str_contains($eloquentModelOverlay, '@return \\Illuminate\\Database\\Eloquent\\Builder<static>') || ! str_contains($eloquentModelOverlay, '@return static|\\Illuminate\\Database\\Eloquent\\Collection<int, static>|null')) {
         fail('Eloquent model overlay did not expose dynamic static builder delegation');
     }
 

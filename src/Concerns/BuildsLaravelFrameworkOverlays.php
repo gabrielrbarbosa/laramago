@@ -620,8 +620,14 @@ PHP,
     private function renderSupportCollectionOverlay(string $source, string $projectRoot, array $arguments): string
     {
         $source = str_replace(
-            '@return static<array-key, mixed>',
-            '@return \Illuminate\Support\Collection<array-key, mixed>',
+            [
+                '@return static<array-key, mixed>',
+                '@param  TKey|null  $key',
+            ],
+            [
+                '@return \Illuminate\Support\Collection<array-key, mixed>',
+                '@param  TKey|false|null  $key',
+            ],
             $source,
         );
 
@@ -818,6 +824,8 @@ PHP);
                 'public function loadCount($relations)',
                 'protected function increment($column, $amount = 1, array $extra = [])',
                 'protected function decrement($column, $amount = 1, array $extra = [])',
+                '@param  array<string, mixed>  $attributes',
+                '@param  array<string, mixed>  $options',
             ],
             [
                 'public function load($relations, ...$additionalRelations)',
@@ -825,6 +833,8 @@ PHP);
                 'public function loadCount($relations, ...$additionalRelations)',
                 'public function increment($column, $amount = 1, array $extra = [])',
                 'public function decrement($column, $amount = 1, array $extra = [])',
+                '@param  array<array-key, mixed>  $attributes',
+                '@param  array<array-key, mixed>  $options',
             ],
             $source,
         );
