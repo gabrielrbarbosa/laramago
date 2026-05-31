@@ -108,7 +108,7 @@ Generated overlays currently add:
 - `@method static` entries for common Eloquent builder chains and terminals such as `where`, `whereIn`, `with`, `withCount`, `select`, `orderBy`, `first`, `firstOrCreate`, `updateOrCreate`, `get`, `pluck`, `exists`, `count`, `insert`, `delete`, `find`, and `findOrFail`;
 - merged generated metadata with existing model class PHPDoc, so project annotations such as `@mixin`, `@method`, `@property`, and generic hints stay visible;
 - `createToken` return types for models using Laravel Sanctum's `HasApiTokens` trait;
-- `@method static` entries for classic `scopeFoo()` local scopes and Laravel `#[Scope]` methods;
+- `@method static` entries for classic `scopeFoo()` local scopes, trait-defined local scopes, inherited local scopes, and Laravel `#[Scope]` methods;
 - Laravel `HasFactory` return types without app-level generic boilerplate;
 - Laravel `Scope` and Laravel Excel `FromCollection` compatibility without app-level generic boilerplate;
 - auth guard and facade return types for the configured Laravel user model;

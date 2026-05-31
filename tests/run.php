@@ -674,6 +674,10 @@ function testLaravelMetadataInferenceHelpers(string $root): void
         eval('namespace Illuminate\\Database\\Eloquent\\Relations; class Relation {} class HasManyThrough extends Relation {} class MorphTo extends Relation {}');
     }
 
+    if (! class_exists('Illuminate\\Database\\Eloquent\\Attributes\\Scope')) {
+        eval('namespace Illuminate\\Database\\Eloquent\\Attributes; #[\\Attribute(\\Attribute::TARGET_METHOD)] class Scope {}');
+    }
+
     if (! class_exists('App\\Models\\Order')) {
         eval('namespace App\\Models; class Order extends \\Illuminate\\Database\\Eloquent\\Model {}');
     }
@@ -710,6 +714,30 @@ function testLaravelMetadataInferenceHelpers(string $root): void
 
     if ($morphTo !== '\\Illuminate\\Database\\Eloquent\\Model|null') {
         fail('MorphTo relation type inference returned an unexpected type');
+    }
+
+    if (! trait_exists('LaramagoScopeFixtureTrait')) {
+        eval('trait LaramagoScopeFixtureTrait { protected function scopeUseIndex(mixed $query, array|string $index): mixed { return $query; } }');
+    }
+
+    if (! class_exists('LaramagoScopeFixtureModel')) {
+        eval('class LaramagoScopeFixtureModel extends \\Illuminate\\Database\\Eloquent\\Model { use \\LaramagoScopeFixtureTrait; #[\\Illuminate\\Database\\Eloquent\\Attributes\\Scope] protected function active(mixed $query): mixed { return $query; } }');
+    }
+
+    $scopes = modelScopes('LaramagoScopeFixtureModel');
+
+    if (! in_array([
+        'name' => 'useIndex',
+        'parameters' => 'array|string $index',
+    ], $scopes, true)) {
+        fail('model scope discovery missed a trait-defined local scope');
+    }
+
+    if (! in_array([
+        'name' => 'active',
+        'parameters' => '',
+    ], $scopes, true)) {
+        fail('model scope discovery missed an attribute-defined protected scope');
     }
 }
 

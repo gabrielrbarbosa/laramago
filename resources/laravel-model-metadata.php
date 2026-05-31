@@ -274,9 +274,10 @@ function modelScopes(string $class): array
 {
     $scopes = [];
     $reflection = new ReflectionClass($class);
+    $declaringClasses = scopeDeclaringClasses($class);
 
     foreach ($reflection->getMethods(ReflectionMethod::IS_PUBLIC | ReflectionMethod::IS_PROTECTED) as $method) {
-        if ($method->getDeclaringClass()->getName() !== $class) {
+        if (! isset($declaringClasses[$method->getDeclaringClass()->getName()])) {
             continue;
         }
 
@@ -306,6 +307,23 @@ function modelScopes(string $class): array
     }
 
     return uniqueNamedMetadata($scopes);
+}
+
+/**
+ * @return array<string, true>
+ */
+function scopeDeclaringClasses(string $class): array
+{
+    $classes = array_merge([$class], class_parents($class) ?: []);
+    $declaringClasses = array_fill_keys($classes, true);
+
+    foreach ($classes as $className) {
+        foreach (class_uses($className) ?: [] as $trait) {
+            collectTraits($trait, $declaringClasses);
+        }
+    }
+
+    return $declaringClasses;
 }
 
 function relationType(string $relationClass, string $relatedClass): string
