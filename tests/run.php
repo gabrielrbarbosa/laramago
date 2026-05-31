@@ -60,6 +60,7 @@ if ($doctorExitCode !== $expectedDoctorExitCode) {
 testBaselinePathTranslation($project, $root);
 testOutputPathTranslation($project, $root);
 testRuntimeConfigGeneration($project, $root);
+testPhpStanMigration($project, $root, $binary);
 testExcludedSymbolStubGeneration($project, $root);
 testModelDocblockIncludesLaravelMagic($root);
 testLaravelFrameworkOverlayGeneration($project, $root);
@@ -175,6 +176,54 @@ function testRuntimeConfigGeneration(string $project, string $root): void
         if (! is_string($levelConfig) || ! str_contains($levelConfig, $expected)) {
             fail('runtime config missed an explicit PHPStan level 6 compatibility ignore: ' . $expected);
         }
+    }
+}
+
+function testPhpStanMigration(string $project, string $root, string $binary): void
+{
+    file_put_contents($project . '/phpstan.neon', <<<'NEON'
+includes:
+    - ./vendor/larastan/larastan/extension.neon
+
+parameters:
+    paths:
+        - app/
+    level: 6
+    excludePaths:
+        - vendor/*
+        - storage/*
+        - database/*
+        - app/Legacy/*
+        - app/Services/NotaFiscal/*
+NEON);
+
+    $exitCode = run([PHP_BINARY, $binary, 'migrate-phpstan', '--project=' . $project, '--force']);
+
+    if ($exitCode !== 0) {
+        fail('migrate-phpstan command failed');
+    }
+
+    $config = file_get_contents($project . '/mago.toml');
+
+    if (! is_string($config) || ! str_contains($config, 'paths = ["app"]')) {
+        fail('migrate-phpstan did not preserve PHPStan source paths');
+    }
+
+    if (! str_contains($config, 'excludes = ["app/Legacy/**", "app/Services/NotaFiscal/**"]')) {
+        fail('migrate-phpstan did not normalize PHPStan exclude paths');
+    }
+
+    $application = new Laramago\Application();
+    $method = new ReflectionMethod($application, 'phpStanCompatibilityIgnores');
+    $levelIgnores = $method->invoke($application, ['--phpstan-level=6']);
+    $strictIgnores = $method->invoke($application, ['--phpstan-level=8']);
+
+    if (! is_array($levelIgnores) || ! in_array('mixed-argument', $levelIgnores, true)) {
+        fail('PHPStan level 6 compatibility ignores were not enabled explicitly');
+    }
+
+    if ($strictIgnores !== []) {
+        fail('unsupported PHPStan levels should not enable compatibility ignores');
     }
 }
 

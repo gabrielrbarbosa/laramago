@@ -44,6 +44,12 @@ Generate the project source configuration:
 vendor/bin/laramago init
 ```
 
+Or migrate the source paths and excluded paths from an existing PHPStan/Larastan config:
+
+```bash
+vendor/bin/laramago migrate-phpstan
+```
+
 Run analysis:
 
 ```bash
@@ -115,6 +121,7 @@ vendor/bin/laramago analyze --no-laravel-framework-overlays
 
 ```bash
 vendor/bin/laramago init [--force] [--source=app] [--exclude=path/**]
+vendor/bin/laramago migrate-phpstan [--force] [--phpstan-config=phpstan.neon]
 vendor/bin/laramago prepare
 vendor/bin/laramago analyze [--phpstan-level=6] [mago analyze options] [path ...]
 vendor/bin/laramago baseline [--force] [--phpstan-level=6]
@@ -130,6 +137,12 @@ vendor/bin/laramago clear
 Writes a minimal `mago.toml` with project source settings. Existing configs are preserved unless `--force` is provided.
 
 Laramago does not exclude application paths by default. Add `--exclude=path/**` only for project-specific legacy areas that should be omitted from analysis.
+
+### `migrate-phpstan`
+
+Reads a PHPStan/Larastan NEON file and writes the equivalent Laramago `mago.toml` source settings. It imports common `parameters.paths`, `parameters.excludePaths`, and detects level 6 so it can print the matching explicit `--phpstan-level=6` migration command.
+
+By default it searches `phpstan.neon`, `phpstan.neon.dist`, `phpstan-ci.neon`, and `phpstan-parallel.neon`. Use `--phpstan-config=path/to/phpstan.neon` for a custom file.
 
 ### `prepare`
 
@@ -198,9 +211,9 @@ Ignore generated cache files:
 
 1. Remove Larastan/PHPStan-only dev dependencies when no other tool needs them.
 2. Install `laramago/laramago`.
-3. Run `vendor/bin/laramago init`.
-4. Run `vendor/bin/laramago baseline`.
-5. Replace the old `phpstan` Composer script with `vendor/bin/laramago analyze --reporting-format=count`.
+3. Run `vendor/bin/laramago migrate-phpstan` or `vendor/bin/laramago init`.
+4. Run `vendor/bin/laramago baseline --phpstan-level=6` if you are migrating a level 6 Larastan gate.
+5. Replace the old `phpstan` Composer script with `vendor/bin/laramago analyze --phpstan-level=6 --reporting-format=count` when migrating a level 6 gate.
 6. Run `composer test`.
 
 ## Configuration

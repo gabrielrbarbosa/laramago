@@ -6,7 +6,7 @@ namespace Laramago;
 
 final class Application
 {
-    private const VERSION = '0.1.13';
+    private const VERSION = '0.1.14';
 
     private const CONFIG_FILE = 'mago.toml';
 
@@ -45,6 +45,7 @@ final class Application
             'count' => $this->analyze(array_merge(['--reporting-format=count'], $arguments)),
             'codes' => $this->analyze(array_merge(['--list-codes'], $arguments)),
             'help', '--help', '-h' => $this->help(),
+            'migrate-phpstan' => $this->migratePhpStan($arguments),
             'version', '--version', '-V' => $this->version(),
             default => $this->unknown($command),
         };
@@ -101,6 +102,68 @@ final class Application
 
         $this->line('Prepared ' . (int) (count($modelSubstitutions) / 2) . ' Laravel model overlays.');
         $this->line('Prepared ' . (int) (count($frameworkSubstitutions) / 2) . ' Laravel framework overlays.');
+
+        return 0;
+    }
+
+    /**
+     * @param list<string> $arguments
+     */
+    private function migratePhpStan(array $arguments): int
+    {
+        $projectRoot = $this->projectRoot($arguments);
+        $force = in_array('--force', $arguments, true);
+        $configPath = $projectRoot . '/' . self::CONFIG_FILE;
+
+        if (is_file($configPath) && ! $force) {
+            $this->line('mago.toml already exists. Use --force to replace it.');
+
+            return 1;
+        }
+
+        $phpStanConfig = $this->phpStanConfigPath($projectRoot, $arguments);
+
+        if ($phpStanConfig === null) {
+            $this->line('Unable to find phpstan.neon, phpstan.neon.dist, phpstan-ci.neon, or phpstan-parallel.neon.');
+
+            return 1;
+        }
+
+        $source = file_get_contents($phpStanConfig);
+
+        if (! is_string($source)) {
+            $this->line("Unable to read {$phpStanConfig}.");
+
+            return 1;
+        }
+
+        $paths = $this->neonListValue($source, 'paths');
+
+        if ($paths === []) {
+            $paths = ['app'];
+        }
+
+        $excludes = $this->neonListValue($source, 'excludePaths');
+        $config = $this->renderProjectConfig($this->detectPhpVersion($projectRoot), $this->normalizePhpStanPaths($paths), ['vendor'], $this->normalizePhpStanPaths($excludes));
+
+        if (file_put_contents($configPath, $config) === false) {
+            $this->line("Unable to write {$configPath}.");
+
+            return 1;
+        }
+
+        $level = $this->neonScalarValue($source, 'level');
+        $levelFlag = $level === '6' ? ' --phpstan-level=6' : '';
+
+        $this->line("Read {$phpStanConfig}");
+        $this->line("Wrote {$configPath}");
+        $this->line('Suggested script: vendor/bin/laramago analyze' . $levelFlag . ' --reporting-format=count');
+
+        if ($levelFlag !== '') {
+            $this->line('Suggested baseline: vendor/bin/laramago baseline' . $levelFlag);
+        } elseif ($level !== null) {
+            $this->line("Detected PHPStan level {$level}; use Mago report/fail-level flags or a baseline to choose equivalent strictness.");
+        }
 
         return 0;
     }
@@ -287,6 +350,7 @@ Laramago
 
 Usage:
   laramago init [--force] [--source=app] [--exclude=path/**]
+  laramago migrate-phpstan [--force] [--phpstan-config=phpstan.neon]
   laramago prepare
   laramago analyze [--phpstan-level=6] [--no-laravel-model-overlays] [--no-laravel-framework-overlays] [mago analyze options] [path ...]
   laramago baseline [--force] [--phpstan-level=6]
@@ -348,6 +412,122 @@ HELP);
         }
 
         return $values;
+    }
+
+    /**
+     * @param list<string> $arguments
+     */
+    private function phpStanConfigPath(string $projectRoot, array $arguments): ?string
+    {
+        foreach ($arguments as $argument) {
+            if (str_starts_with($argument, '--phpstan-config=')) {
+                $path = substr($argument, strlen('--phpstan-config='));
+                $absolutePath = str_starts_with($path, '/') ? $path : $projectRoot . '/' . $path;
+
+                return is_file($absolutePath) ? $absolutePath : null;
+            }
+        }
+
+        foreach (['phpstan.neon', 'phpstan.neon.dist', 'phpstan-ci.neon', 'phpstan-parallel.neon'] as $candidate) {
+            $path = $projectRoot . '/' . $candidate;
+
+            if (is_file($path)) {
+                return $path;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function neonListValue(string $source, string $key): array
+    {
+        if (preg_match('/^\s*' . preg_quote($key, '/') . '\s*:\s*\[([^\]]*)\]/m', $source, $inlineMatches) === 1) {
+            preg_match_all('/[\'"]?([^\'",\s]+)[\'"]?/', $inlineMatches[1], $valueMatches);
+
+            return array_values(array_filter(array_map('trim', $valueMatches[1]), static fn (string $value): bool => $value !== ''));
+        }
+
+        $lines = preg_split('/\R/', $source);
+
+        if (! is_array($lines)) {
+            return [];
+        }
+
+        $values = [];
+        $inList = false;
+        $indent = 0;
+
+        foreach ($lines as $line) {
+            if (! $inList && preg_match('/^(\s*)' . preg_quote($key, '/') . '\s*:\s*$/', $line, $matches) === 1) {
+                $inList = true;
+                $indent = strlen($matches[1]);
+                continue;
+            }
+
+            if (! $inList) {
+                continue;
+            }
+
+            if (trim($line) === '') {
+                continue;
+            }
+
+            $lineIndent = strlen($line) - strlen(ltrim($line));
+
+            if ($lineIndent <= $indent) {
+                break;
+            }
+
+            if (preg_match('/^\s*-\s*[\'"]?([^\'"#]+)[\'"]?/', $line, $valueMatches) === 1) {
+                $values[] = trim($valueMatches[1]);
+            }
+        }
+
+        return $values;
+    }
+
+    private function neonScalarValue(string $source, string $key): ?string
+    {
+        if (preg_match('/^\s*' . preg_quote($key, '/') . '\s*:\s*[\'"]?([^\'"#\s]+)[\'"]?/m', $source, $matches) !== 1) {
+            return null;
+        }
+
+        return trim($matches[1]);
+    }
+
+    /**
+     * @param list<string> $paths
+     * @return list<string>
+     */
+    private function normalizePhpStanPaths(array $paths): array
+    {
+        $normalized = [];
+
+        foreach ($paths as $path) {
+            $path = trim($path);
+
+            if ($path === '' || str_starts_with($path, '%')) {
+                continue;
+            }
+
+            $path = preg_replace('#^\./#', '', $path) ?? $path;
+            $path = rtrim($path, '/');
+
+            if ($path === 'vendor' || str_starts_with($path, 'vendor/') || $path === 'storage' || str_starts_with($path, 'storage/') || $path === 'database' || str_starts_with($path, 'database/')) {
+                continue;
+            }
+
+            if (str_ends_with($path, '/*')) {
+                $path = substr($path, 0, -2) . '/**';
+            }
+
+            $normalized[] = $path;
+        }
+
+        return array_values(array_unique($normalized));
     }
 
     /**
