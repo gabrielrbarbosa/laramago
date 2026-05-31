@@ -6,7 +6,7 @@ namespace Laramago;
 
 final class Application
 {
-    private const VERSION = '0.1.44';
+    private const VERSION = '0.1.45';
 
     private const CONFIG_FILE = 'mago.toml';
 
@@ -2460,6 +2460,7 @@ PHP;
                 $translated = $this->translatePhpStanPragmas($source);
                 $translated = $this->translateLaravelDateHelperCalls($translated);
                 $translated = $this->annotateLaravelCollectionMacroClosures($translated);
+                $translated = $this->annotateLaravelRequestParameters($translated);
                 $translated = $this->rewriteLaravelRequestPropertyReads($translated, $projectRoot);
                 $translated = $this->annotateLaravelJsonResourceDynamicMembers($translated, $relativePath);
                 $translated = $this->annotateLaravelFormRequestDynamicProperties($translated, $relativePath, $projectRoot);
@@ -2712,6 +2713,27 @@ PHP;
         );
 
         return is_string($translated) ? $translated : $source;
+    }
+
+    private function annotateLaravelRequestParameters(string $source): string
+    {
+        if (! str_contains($source, 'mixed $request') || ! $this->usesLaravelRequestParameter($source)) {
+            return $source;
+        }
+
+        $translated = preg_replace_callback(
+            '/\bmixed\s+\$request\b/',
+            static fn (): string => '\\Illuminate\\Http\\Request $request',
+            $source,
+        );
+
+        return is_string($translated) ? $translated : $source;
+    }
+
+    private function usesLaravelRequestParameter(string $source): bool
+    {
+        return preg_match('/\$request\s*->\s*(?:all|boolean|collect|date|enum|file|filled|get|has|header|input|integer|isMethod|merge|method|only|post|query|route|string|validate)\s*\(/', $source) === 1
+            || preg_match('/\$request\s*->\s*(?:method)\b(?!\s*\()/', $source) === 1;
     }
 
     private function rewriteLaravelRequestPropertyReads(string $source, string $projectRoot): string
@@ -3788,17 +3810,29 @@ PHP,
         }
 
         $declarationOffset = $matches[0][1];
-        $existingDocblock = $this->classDocblockBeforeOffset($source, $declarationOffset);
+        $docblockOffset = $this->classDocblockInsertionOffset($source, $declarationOffset);
+        $existingDocblock = $this->classDocblockBeforeOffset($source, $docblockOffset);
 
         if ($existingDocblock !== null) {
             $mergedDocblock = $this->mergeGeneratedDocblockLines($existingDocblock['docblock'], $lines);
 
-            return substr($source, 0, $existingDocblock['offset']) . $mergedDocblock . substr($source, $declarationOffset);
+            return substr($source, 0, $existingDocblock['offset']) . $mergedDocblock . substr($source, $docblockOffset);
         }
 
         $newDocblock ??= '/**' . PHP_EOL . implode(PHP_EOL, $lines) . PHP_EOL . ' */' . PHP_EOL;
 
-        return substr($source, 0, $declarationOffset) . $newDocblock . substr($source, $declarationOffset);
+        return substr($source, 0, $docblockOffset) . $newDocblock . substr($source, $docblockOffset);
+    }
+
+    private function classDocblockInsertionOffset(string $source, int $declarationOffset): int
+    {
+        $prefix = substr($source, 0, $declarationOffset);
+
+        if (preg_match('/(?:^|\R)([ \t]*(?:#\[[^\r\n]*\][ \t]*\R[ \t]*)+)$/', $prefix, $matches, PREG_OFFSET_CAPTURE) !== 1) {
+            return $declarationOffset;
+        }
+
+        return $matches[1][1];
     }
 
     /**

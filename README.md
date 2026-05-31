@@ -107,6 +107,7 @@ Generated overlays currently add:
 - `@property-read` entries for Eloquent relations, including through, polymorphic, and many-to-many collection relations;
 - `@method static` entries for common Eloquent builder chains and terminals such as `where`, `whereIn`, `join`, `leftJoin`, `groupBy`, `having`, variadic `with`, `withCount`, variadic `select`, `orderBy`, `first`, `firstOrCreate`, `updateOrCreate`, `get`, `pluck`, `exists`, `count`, `insert`, `destroy`, `find`, and `findOrFail`;
 - merged generated metadata with existing model class PHPDoc, so project annotations such as `@mixin`, `@method`, `@property`, and generic hints stay visible;
+- attribute-safe model metadata insertion, so models using Laravel attributes such as `#[ScopedBy]` still receive analyzer-visible generated PHPDoc;
 - `createToken` return types for models using Laravel Sanctum's `HasApiTokens` trait;
 - `@method static` entries for classic `scopeFoo()` local scopes, trait-defined local scopes, inherited local scopes, and Laravel `#[Scope]` methods;
 - Laravel `HasFactory` return types without app-level generic boilerplate;
@@ -115,7 +116,7 @@ Generated overlays currently add:
 - auth helper, guard, manager, and facade return types for the configured Laravel user model;
 - Composer autoload and autoload-dev type discovery for application namespaces that live outside the analyzed source paths;
 - excluded-path symbol discovery so `exclude` can omit legacy code from analysis without turning referenced classes into false missing-class errors;
-- Laravel request input compatibility for dynamic `$request->field`, `$this->request->field`, and trait-provided Request properties used by pagination/filtering helpers;
+- Laravel request input compatibility for dynamic `$request->field`, `$this->request->field`, trait-provided Request properties used by pagination/filtering helpers, and helper parameters that accept `mixed $request` but clearly use Laravel request APIs;
 - Laravel JSON resource delegated property and method metadata for normal `$this->field` / `$this->relation()` resource transformations;
 - PHPStan suppression pragma compatibility for `@phpstan-ignore`, `@phpstan-ignore-next-line`, and `@phpstan-ignore-line` comments through generated temporary overlays;
 - path-scoped suppression of unused generated Mago pragmas inside overlays, so PHPStan compatibility comments do not create new analyzer noise after Laramago resolves the original issue;

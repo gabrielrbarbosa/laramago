@@ -939,6 +939,14 @@ class SearchController
 
         return [$value, $stored, $sortBy, $hasSearch];
     }
+
+    public function helper(mixed $request): array
+    {
+        return [
+            $request->input('name'),
+            $request->method,
+        ];
+    }
 }
 PHP);
 
@@ -960,7 +968,9 @@ PHP);
             && str_contains($overlay, '$stored = $this->request->input(\'per_page\');')
             && str_contains($overlay, '$sortBy = $this->requestPagination->input(\'sortBy\');')
             && str_contains($overlay, '$hasSearch = isset($request->search);')
-            && str_contains($overlay, '$request->search = \'changed\';')) {
+            && str_contains($overlay, '$request->search = \'changed\';')
+            && str_contains($overlay, 'public function helper(\Illuminate\Http\Request $request): array')
+            && str_contains($overlay, '$request->input(\'method\')')) {
             return;
         }
     }
@@ -1427,6 +1437,31 @@ PHP;
 
     if (strpos($overlay, '@mixin \\Illuminate\\Database\\Eloquent\\Builder<Product>') > strpos($overlay, '@laramago-generated')) {
         fail('model docblock overlay should preserve existing annotations before generated metadata');
+    }
+
+    $attributedSource = <<<'PHP'
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Attributes\ScopedBy;
+use Illuminate\Database\Eloquent\Model;
+
+#[ScopedBy([])]
+class AttributedProduct extends Model
+{
+}
+PHP;
+
+    $attributedOverlay = $method->invoke($application, $attributedSource, 'AttributedProduct', [[
+        'name' => 'id',
+        'type' => 'int',
+    ]], [], [], [], false);
+
+    if (! is_string($attributedOverlay)
+        || strpos($attributedOverlay, '@property int $id') === false
+        || strpos($attributedOverlay, '@property int $id') > strpos($attributedOverlay, '#[ScopedBy([])]')) {
+        fail('model docblock overlay should be inserted before class attributes');
     }
 }
 
