@@ -178,6 +178,10 @@ TOML);
         fail('runtime config should ignore unused generated PHPStan pragma compatibility overlays');
     }
 
+    if (! str_contains($config, '{ code = "possibly-non-existent-property", in = ".laramago/cache/phpstan-pragma-overlays/" }')) {
+        fail('runtime config should ignore generated PHPStan pragma compatibility property noise');
+    }
+
     foreach ([
         'too-few-arguments',
         'missing-template-parameter',

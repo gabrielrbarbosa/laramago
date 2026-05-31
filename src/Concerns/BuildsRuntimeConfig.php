@@ -351,6 +351,10 @@ TOML;
                 'in' => self::PHPSTAN_PRAGMA_OVERLAY_DIR . '/',
             ],
             [
+                'code' => 'possibly-non-existent-property',
+                'in' => self::PHPSTAN_PRAGMA_OVERLAY_DIR . '/',
+            ],
+            [
                 'code' => 'missing-return-statement',
                 'in' => self::EXCLUDED_SYMBOL_DIR . '/',
             ],

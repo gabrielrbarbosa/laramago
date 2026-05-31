@@ -150,6 +150,58 @@ PHP);
     fail('Laravel request input overlay did not annotate array-like request variables safely');
 }
 
+function testLaravelEloquentModelTraitOverlayGeneration(string $project, string $root): void
+{
+    require_once $root . '/src/Application.php';
+
+    if (! is_dir($project . '/app/Traits')) {
+        mkdir($project . '/app/Traits', 0777, true);
+    }
+
+    file_put_contents($project . '/app/Traits/TouchesModelTimestamps.php', <<<'PHP'
+<?php
+
+namespace App\Traits;
+
+trait TouchesModelTimestamps
+{
+    public function markDeleted(): array
+    {
+        if ($this->timestamps && $this->getUpdatedAtColumn() !== null) {
+            return [
+                $this->getDeletedAtColumn() => $this->fromDateTime($this->freshTimestamp()),
+            ];
+        }
+
+        return [];
+    }
+}
+PHP);
+
+    $application = new Laramago\Application();
+    $method = new ReflectionMethod($application, 'phpStanPragmaSubstitutions');
+    $method->invoke($application, $project, [], []);
+
+    $map = json_decode((string) file_get_contents($project . '/.laramago/cache/phpstan-pragma-overlays.json'), true);
+
+    foreach (is_array($map) ? $map : [] as $entry) {
+        if (($entry['original'] ?? null) !== 'app/Traits/TouchesModelTimestamps.php' || ! is_string($entry['overlay'] ?? null)) {
+            continue;
+        }
+
+        $overlay = file_get_contents($project . '/' . $entry['overlay']);
+
+        if (is_string($overlay)
+            && str_contains($overlay, '@mixin \\Illuminate\\Database\\Eloquent\\Model')
+            && str_contains($overlay, '// @mago-ignore analysis:possibly-non-existent-property')
+            && str_contains($overlay, 'trait TouchesModelTimestamps')) {
+            return;
+        }
+    }
+
+    fail('Laravel Eloquent model trait overlay did not annotate model-bound trait members');
+}
+
 function testLaravelJsonResourceDynamicMemberOverlayGeneration(string $project, string $root): void
 {
     require_once $root . '/src/Application.php';

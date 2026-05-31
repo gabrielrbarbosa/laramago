@@ -115,6 +115,7 @@ trait BuildsSourceCompatibilityOverlays
         $translated = $this->annotateEloquentModelArrayAccessAssignments($translated);
         $translated = $this->annotateDynamicMemberSelectorStrings($translated);
         $translated = $this->annotateLaravelFormRequestDynamicProperties($translated, $relativePath, $projectRoot);
+        $translated = $this->annotateLaravelEloquentModelTraits($translated);
         $translated = $this->annotateAllowDynamicPropertiesClasses($translated);
         $translated = $this->ignoreNullCoalescePropertyAccess($translated);
         $translated = $this->ignoreLaravelInstanceBuilderMagicCalls($translated);
@@ -360,6 +361,73 @@ trait BuildsSourceCompatibilityOverlays
             '$1',
             $comment,
         ) ?? $comment;
+    }
+
+    private function annotateLaravelEloquentModelTraits(string $source): string
+    {
+        if (! str_contains($source, 'trait ') || ! str_contains($source, '$this->timestamps')) {
+            return $source;
+        }
+
+        if (! preg_match('/\$this->(?:fromDateTime|freshTimestamp|getDeletedAtColumn|getUpdatedAtColumn|newModelQuery|setKeysForSaveQuery)\s*\(/', $source)) {
+            return $source;
+        }
+
+        $source = preg_replace_callback(
+            '/(?:(\/\*\*.*?\*\/)\s*)?(\btrait\s+[A-Za-z_][A-Za-z0-9_]*)/s',
+            static function (array $matches): string {
+                $docblock = (string) ($matches[1] ?? '');
+                $trait = $matches[2];
+
+                if ($docblock !== '' && str_contains($docblock, '@mixin \\Illuminate\\Database\\Eloquent\\Model')) {
+                    return $matches[0];
+                }
+
+                $overlay = <<<'PHP'
+/**
+ * Laramago overlay for traits mixed into Eloquent models.
+ *
+ * @mixin \Illuminate\Database\Eloquent\Model
+ */
+PHP;
+
+                if ($docblock === '') {
+                    return $overlay . PHP_EOL . $trait;
+                }
+
+                return $docblock . PHP_EOL . $overlay . PHP_EOL . $trait;
+            },
+            $source,
+            1,
+        ) ?? $source;
+
+        return $this->ignoreLaravelEloquentModelTraitTimestampAccess($source);
+    }
+
+    private function ignoreLaravelEloquentModelTraitTimestampAccess(string $source): string
+    {
+        $lines = preg_split('/(\R)/', $source, -1, PREG_SPLIT_DELIM_CAPTURE);
+
+        if (! is_array($lines)) {
+            return $source;
+        }
+
+        $translated = '';
+
+        for ($index = 0; $index < count($lines); $index += 2) {
+            $line = (string) $lines[$index];
+            $lineEnding = (string) ($lines[$index + 1] ?? '');
+            $previousLine = $index >= 2 ? (string) $lines[$index - 2] : '';
+
+            if (str_contains($line, '$this->timestamps') && ! str_contains($previousLine, '@mago-ignore analysis:possibly-non-existent-property')) {
+                preg_match('/^\s*/', $line, $matches);
+                $translated .= ($matches[0] ?? '') . '// @mago-ignore analysis:possibly-non-existent-property' . $lineEnding;
+            }
+
+            $translated .= $line . $lineEnding;
+        }
+
+        return $translated;
     }
 
     private function matchingGenericCloseOffset(string $source, int $open): ?int

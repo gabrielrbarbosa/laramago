@@ -135,6 +135,7 @@ testLaravelQueryBuilderClosureOverlayGeneration($project, $root);
 testLaravelObserverModelOverlayGeneration($project, $root);
 testLaravelRequestPropertyReadOverlayGeneration($project, $root);
 testLaravelRequestInputArrayVariableOverlayGeneration($project, $root);
+testLaravelEloquentModelTraitOverlayGeneration($project, $root);
 testLaravelJsonResourceDynamicMemberOverlayGeneration($project, $root);
 testLaravelFormRequestDynamicPropertyOverlayGeneration($project, $root);
 testAllowDynamicPropertiesOverlayGeneration($project, $root);
