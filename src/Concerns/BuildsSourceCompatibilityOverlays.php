@@ -77,6 +77,7 @@ trait BuildsSourceCompatibilityOverlays
         $translated = $this->translatePhpStanPragmas($source);
         $translated = $this->translateLarastanPseudoTypes($translated);
         $translated = $this->translatePhpStanListTypes($translated);
+        $translated = $this->normalizeLaravelPaginatorReturnDocblocks($translated);
         $translated = $this->normalizeCommonReflectionMethodCasing($translated);
         $translated = $this->translateLaravelCarbonImports($translated);
         $translated = $this->removeObjectAccessStringInterpolations($translated);
@@ -322,6 +323,43 @@ trait BuildsSourceCompatibilityOverlays
         }
 
         return $translated . substr($comment, $offset);
+    }
+
+    private function normalizeLaravelPaginatorReturnDocblocks(string $source): string
+    {
+        if (! str_contains($source, 'Paginator<')) {
+            return $source;
+        }
+
+        $tokens = token_get_all($source);
+        $translated = '';
+
+        foreach ($tokens as $token) {
+            if (! is_array($token)) {
+                $translated .= $token;
+
+                continue;
+            }
+
+            if ($token[0] === T_DOC_COMMENT) {
+                $translated .= $this->normalizeLaravelPaginatorReturnDocblock($token[1]);
+
+                continue;
+            }
+
+            $translated .= $token[1];
+        }
+
+        return $translated;
+    }
+
+    private function normalizeLaravelPaginatorReturnDocblock(string $comment): string
+    {
+        return preg_replace(
+            '/(@return\s+(?:\\\\?Illuminate\\\\(?:Contracts\\\\)?Pagination\\\\)?(?:LengthAwarePaginator|Paginator))\s*<[^>\r\n*]+>/',
+            '$1',
+            $comment,
+        ) ?? $comment;
     }
 
     private function matchingGenericCloseOffset(string $source, int $open): ?int
@@ -1485,9 +1523,34 @@ trait BuildsSourceCompatibilityOverlays
 
     private function annotateLaravelCollectionMacroClosures(string $source): string
     {
+        if (! str_contains($source, 'Collection::macro')) {
+            return $source;
+        }
+
         $translated = preg_replace_callback(
-            '/((?:\\\\?Illuminate\\\\Support\\\\)?Collection::macro\s*\(\s*[\'"][^\'"]+[\'"]\s*,\s*function\s*\([^)]*\)\s*(?::\s*[^{]+)?\{)(?!\s*\/\*\*\s*@var\s+[^*]*\$this)/m',
-            static fn (array $matches): string => $matches[1] . PHP_EOL . '                    /** @var \Illuminate\Support\Collection $this */',
+            '/((?:\\\\?Illuminate\\\\Support\\\\)?Collection::macro\s*\(\s*[\'"][^\'"]+[\'"]\s*,\s*function\s*\([^)]*\)\s*(?::\s*[^{]+)?\{)(.*?)(\R[ \t]*\}\s*\)\s*;)/ms',
+            static function (array $matches): string {
+                $body = $matches[2];
+
+                if (! str_contains($body, '$this->') || str_contains($body, '$laramagoCollectionMacroThis')) {
+                    return $matches[0];
+                }
+
+                $body = preg_replace(
+                    '/[ \t]*\/\*\*\s*@var\s+[^*]*\$this\s*\*\/\R/',
+                    '',
+                    $body,
+                ) ?? $body;
+                $body = str_replace('$this->', '$laramagoCollectionMacroThis->', $body);
+
+                return $matches[1]
+                    . PHP_EOL
+                    . '                    /** @var \Illuminate\Support\Collection $laramagoCollectionMacroThis */'
+                    . PHP_EOL
+                    . '                    $laramagoCollectionMacroThis = new \Illuminate\Support\Collection();'
+                    . $body
+                    . $matches[3];
+            },
             $source,
         );
 

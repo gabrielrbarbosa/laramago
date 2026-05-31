@@ -34,6 +34,7 @@ trait BuildsLaravelFrameworkOverlays
         $queryBuilderPath = $projectRoot . '/vendor/laravel/framework/src/Illuminate/Database/Query/Builder.php';
         $controllerMiddlewareOptionsPath = $projectRoot . '/vendor/laravel/framework/src/Illuminate/Routing/ControllerMiddlewareOptions.php';
         $requestPath = $projectRoot . '/vendor/laravel/framework/src/Illuminate/Http/Request.php';
+        $formRequestPath = $projectRoot . '/vendor/laravel/framework/src/Illuminate/Foundation/Http/FormRequest.php';
         $interactsWithInputPath = $projectRoot . '/vendor/laravel/framework/src/Illuminate/Http/Concerns/InteractsWithInput.php';
         $resourceCollectionPath = $projectRoot . '/vendor/laravel/framework/src/Illuminate/Http/Resources/Json/ResourceCollection.php';
         $anonymousResourceCollectionPath = $projectRoot . '/vendor/laravel/framework/src/Illuminate/Http/Resources/Json/AnonymousResourceCollection.php';
@@ -204,6 +205,14 @@ trait BuildsLaravelFrameworkOverlays
 
             if (is_string($requestSource)) {
                 $overlays[] = $this->writeFrameworkOverlay($projectRoot, 'Request.php', $requestPath, $this->renderRequestOverlay($requestSource));
+            }
+        }
+
+        if (is_file($formRequestPath)) {
+            $formRequestSource = file_get_contents($formRequestPath);
+
+            if (is_string($formRequestSource)) {
+                $overlays[] = $this->writeFrameworkOverlay($projectRoot, 'FormRequest.php', $formRequestPath, $this->renderFormRequestOverlay($formRequestSource));
             }
         }
 
@@ -1382,9 +1391,9 @@ PHP);
     /**
      * Laramago overlay for Laravel's controller validation safe input helper.
      *
-     * @return \Illuminate\Support\ValidatedInput|array<array-key, mixed>
+     * @return \Illuminate\Support\ValidatedInput
      */
-    public function safe(?array $keys = null): \Illuminate\Support\ValidatedInput|array
+    public function safe(?array $keys = null): \Illuminate\Support\ValidatedInput
     {
         throw new \LogicException('Laramago analysis overlay.');
     }
@@ -1408,6 +1417,38 @@ PHP;
         }
 
         return $this->insertBeforeFinalClassBrace($source, implode(PHP_EOL, $declarations));
+    }
+
+    private function renderFormRequestOverlay(string $source): string
+    {
+        if (! str_contains($source, 'function safe(')) {
+            return $source;
+        }
+
+        $source = preg_replace(
+            '/(^[ \t]*\*\s*)@return\s+\([^\r\n]*ValidatedInput[^\r\n]*\)$/m',
+            '$1@return \\Illuminate\\Support\\ValidatedInput',
+            $source,
+        ) ?? $source;
+
+        $source = preg_replace(
+            '/public function safe\(\?array \$keys = null\)(?:\s*:\s*[^{\r\n]+)?/',
+            'public function safe(?array $keys = null): \\Illuminate\\Support\\ValidatedInput',
+            $source,
+            1,
+        ) ?? $source;
+
+        return $this->replaceFunctionBodies($source, static function (string $header, string $body): string {
+            if (! str_contains($header, 'function safe(')) {
+                return $body;
+            }
+
+            return <<<'PHP'
+{
+        throw new \LogicException('Laramago analysis overlay.');
+    }
+PHP;
+        });
     }
 
     private function renderInteractsWithInputOverlay(string $source): string

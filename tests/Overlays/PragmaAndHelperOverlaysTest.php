@@ -81,6 +81,50 @@ PHP);
     }
 }
 
+function testLaravelPaginatorReturnDocblockOverlayGeneration(string $root): void
+{
+    require_once $root . '/src/Application.php';
+
+    $source = <<<'PHP'
+<?php
+
+namespace App;
+
+use Illuminate\Pagination\LengthAwarePaginator;
+
+final class UsesPaginatorDocs
+{
+    /**
+     * @return LengthAwarePaginator<mixed>
+     */
+    public function paginate(): LengthAwarePaginator
+    {
+        throw new \RuntimeException();
+    }
+
+    /**
+     * @return \Illuminate\Contracts\Pagination\Paginator<int, string>
+     */
+    public function simple(): \Illuminate\Contracts\Pagination\Paginator
+    {
+        throw new \RuntimeException();
+    }
+}
+PHP;
+
+    $application = new Laramago\Application();
+    $method = new ReflectionMethod($application, 'applySourceCompatibilityOverlayTransforms');
+    $overlay = $method->invoke($application, $source, sys_get_temp_dir(), [], 'app/UsesPaginatorDocs.php', []);
+
+    if (! is_string($overlay)
+        || str_contains($overlay, 'LengthAwarePaginator<mixed>')
+        || str_contains($overlay, 'Paginator<int, string>')
+        || ! str_contains($overlay, '@return LengthAwarePaginator')
+        || ! str_contains($overlay, '@return \\Illuminate\\Contracts\\Pagination\\Paginator')) {
+        fail('source compatibility overlay did not normalize Laravel paginator return docblocks');
+    }
+}
+
 function testLaravelDateHelperOverlayGeneration(string $project, string $root): void
 {
     require_once $root . '/src/Application.php';
@@ -627,8 +671,9 @@ PHP);
         $overlay = file_get_contents($project . '/' . $entry['overlay']);
 
         if (is_string($overlay)
-            && str_contains($overlay, '/** @var \Illuminate\Support\Collection $this */')
-            && str_contains($overlay, '$this->forPage(1, $perPage)->values()')) {
+            && str_contains($overlay, '/** @var \Illuminate\Support\Collection $laramagoCollectionMacroThis */')
+            && str_contains($overlay, '$laramagoCollectionMacroThis = new \Illuminate\Support\Collection();')
+            && str_contains($overlay, '$laramagoCollectionMacroThis->forPage(1, $perPage)->values()')) {
             return;
         }
     }

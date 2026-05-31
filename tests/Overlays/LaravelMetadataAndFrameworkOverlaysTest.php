@@ -250,8 +250,9 @@ function testLaravelFrameworkOverlayGeneration(string $project, string $root): v
     mkdir($project . '/vendor/laravel/framework/src/Illuminate/Contracts/Broadcasting', 0777, true);
     mkdir($project . '/vendor/laravel/framework/src/Illuminate/Contracts/Auth', 0777, true);
     mkdir($project . '/vendor/laravel/framework/src/Illuminate/Contracts/Foundation', 0777, true);
-    mkdir($project . '/vendor/laravel/framework/src/Illuminate/Contracts/Pagination', 0777, true);
     mkdir($project . '/vendor/laravel/framework/src/Illuminate/Foundation', 0777, true);
+    mkdir($project . '/vendor/laravel/framework/src/Illuminate/Foundation/Http', 0777, true);
+    mkdir($project . '/vendor/laravel/framework/src/Illuminate/Contracts/Pagination', 0777, true);
     mkdir($project . '/vendor/laravel/framework/src/Illuminate/Http/Client', 0777, true);
     mkdir($project . '/vendor/laravel/framework/src/Illuminate/Http/Concerns', 0777, true);
     mkdir($project . '/vendor/laravel/framework/src/Illuminate/Http/Resources/Json', 0777, true);
@@ -908,6 +909,28 @@ class Request
 }
 PHP);
 
+    file_put_contents($project . '/vendor/laravel/framework/src/Illuminate/Foundation/Http/FormRequest.php', <<<'PHP'
+<?php
+
+namespace Illuminate\Foundation\Http;
+
+class FormRequest
+{
+    /**
+     * Get a validated input container for the validated input.
+     *
+     * @param  array<int, string>|null  $keys
+     * @return ($keys is array ? array<string, mixed> : \Illuminate\Support\ValidatedInput)
+     */
+    public function safe(?array $keys = null)
+    {
+        return is_array($keys)
+            ? $this->validator->safe()->only($keys)
+            : $this->validator->safe();
+    }
+}
+PHP);
+
     file_put_contents($project . '/vendor/laravel/framework/src/Illuminate/Http/Concerns/InteractsWithInput.php', <<<'PHP'
 <?php
 
@@ -1027,7 +1050,7 @@ PHP);
     $method = new ReflectionMethod($application, 'laravelFrameworkSubstitutions');
     $substitutions = $method->invoke($application, $project, []);
 
-    if (! is_array($substitutions) || count($substitutions) !== 66) {
+    if (! is_array($substitutions) || count($substitutions) !== 68) {
         fail('framework overlay generation returned unexpected substitutions');
     }
 
@@ -1054,6 +1077,7 @@ PHP);
     $queryBuilderOverlay = file_get_contents($project . '/.laramago/cache/framework-overlays/QueryBuilder.php');
     $controllerMiddlewareOptionsOverlay = file_get_contents($project . '/.laramago/cache/framework-overlays/ControllerMiddlewareOptions.php');
     $requestOverlay = file_get_contents($project . '/.laramago/cache/framework-overlays/Request.php');
+    $formRequestOverlay = file_get_contents($project . '/.laramago/cache/framework-overlays/FormRequest.php');
     $interactsWithInputOverlay = file_get_contents($project . '/.laramago/cache/framework-overlays/InteractsWithInput.php');
     $resourceCollectionOverlay = file_get_contents($project . '/.laramago/cache/framework-overlays/ResourceCollection.php');
     $anonymousResourceCollectionOverlay = file_get_contents($project . '/.laramago/cache/framework-overlays/AnonymousResourceCollection.php');
@@ -1204,8 +1228,15 @@ PHP);
         fail('ControllerMiddlewareOptions overlay did not expose variadic middleware filters');
     }
 
-    if (! is_string($requestOverlay) || ! str_contains($requestOverlay, 'public function __set(string $key, mixed $value): void') || ! str_contains($requestOverlay, 'public function safe(?array $keys = null): \\Illuminate\\Support\\ValidatedInput|array')) {
+    if (! is_string($requestOverlay) || ! str_contains($requestOverlay, 'public function __set(string $key, mixed $value): void') || ! str_contains($requestOverlay, 'public function safe(?array $keys = null): \\Illuminate\\Support\\ValidatedInput')) {
         fail('Request overlay did not expose safe input helper and dynamic request writes');
+    }
+
+    if (! is_string($formRequestOverlay)
+        || ! str_contains($formRequestOverlay, '@return \\Illuminate\\Support\\ValidatedInput')
+        || ! str_contains($formRequestOverlay, 'public function safe(?array $keys = null): \\Illuminate\\Support\\ValidatedInput')
+        || ! str_contains($formRequestOverlay, "throw new \\LogicException('Laramago analysis overlay.');")) {
+        fail('FormRequest overlay did not expose no-argument safe input as a validated input container');
     }
 
     if (! is_string($interactsWithInputOverlay) || ! str_contains($interactsWithInputOverlay, '@param mixed $default') || ! str_contains($interactsWithInputOverlay, '@return mixed') || ! str_contains($interactsWithInputOverlay, '@return ($key is null ? array<string, mixed> : \\Illuminate\\Http\\UploadedFile|null)') || ! str_contains($interactsWithInputOverlay, 'public function file($key = null, $default = null): array|\\Illuminate\\Http\\UploadedFile|null')) {

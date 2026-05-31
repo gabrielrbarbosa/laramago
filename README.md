@@ -17,12 +17,12 @@ The goal is simple: keep the developer workflow that teams already use for stati
 
 ## Migration Snapshot
 
-The first production migration target is a private Laravel application, so repository names, paths, classes, and domain details are intentionally omitted here.
+The first production migration target is a private Laravel application. This is a sanitized count-only comparison: repository names, paths, classes, and domain details are intentionally omitted.
 
 | Run | Result |
 | --- | --- |
-| Plain Mago 1.29 with the application's source config | 28,980 errors and 10,004 warnings |
-| Laramago with the matching PHPStan/Larastan level gate | No reported issues |
+| Plain Mago 1.29 with the application's source config, before Laramago compatibility overlays | 28,980 errors and 10,004 warnings |
+| After installing Laramago and running the matching PHPStan/Larastan level gate | No reported issues |
 
 The gap is mostly Laravel framework magic, Eloquent metadata, PHPStan pragma compatibility, excluded legacy symbols, and PHPStan/Larastan level semantics. Laramago's job is to make those migration concerns explicit and reusable, so teams can evaluate the real remaining analyzer findings instead of sorting through framework noise.
 

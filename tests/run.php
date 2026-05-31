@@ -116,6 +116,7 @@ testStdinInputDoesNotRequireConfiguredSources($project, $root);
 testStagedInputDoesNotRequireConfiguredSources($project, $root);
 testPhpStanLevelAnalyzeRunsEndToEnd($project, $binary);
 testPhpStanPragmaOverlayGeneration($project, $root);
+testLaravelPaginatorReturnDocblockOverlayGeneration($root);
 testLaravelDateHelperOverlayGeneration($project, $root);
 testReflectionMethodCasingOverlayGeneration($project, $root);
 testInternalFunctionCompatibilityOverlayGeneration($project, $root);
