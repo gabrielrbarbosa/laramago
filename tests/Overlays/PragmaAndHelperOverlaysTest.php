@@ -189,8 +189,10 @@ final class UsesInternalFunctions
     {
         $year = date('Y', strtotime($model->created_at));
         $decoded = json_decode($response->getBody(), true);
+        $body = json_decode($response->getBody());
+        $id = uniqid(mt_rand(), true);
 
-        return [$year, $decoded];
+        return [$year, $decoded, $body, $id];
     }
 
     public function normalize(string $value): string
@@ -217,6 +219,8 @@ PHP);
         if (is_string($overlay)
             && str_contains($overlay, 'date(\'Y\', strtotime((string) $model->created_at))')
             && str_contains($overlay, 'json_decode((string) $response->getBody(), true)')
+            && str_contains($overlay, 'json_decode((string) $response->getBody())')
+            && str_contains($overlay, 'uniqid((string) mt_rand(), true)')
             && substr_count($overlay, '@mago-ignore possibly-false-argument invalid-argument nullable-return-statement invalid-return-statement falsable-return-statement') === 3) {
             $foundOverlay = true;
         }

@@ -483,15 +483,26 @@ trait BuildsSourceCompatibilityOverlays
 
     private function normalizeStringableInternalFunctionArguments(string $source): string
     {
-        if (! str_contains($source, 'strtotime(') && ! str_contains($source, 'json_decode(')) {
+        if (! str_contains($source, 'strtotime(') && ! str_contains($source, 'json_decode(') && ! str_contains($source, 'uniqid(')) {
             return $source;
         }
 
         $translated = preg_replace(
-            '/json_decode\(\s*([^,\r\n;]+->\s*getBody\s*\(\s*\))\s*,/',
-            'json_decode((string) $1,',
+            '/json_decode\(\s*([^,\r\n;]+->\s*getBody\s*\(\s*\))\s*([,)])/',
+            'json_decode((string) $1$2',
             $source,
         ) ?? $source;
+
+        $translated = preg_replace(
+            '/uniqid\(\s*(?!\(string\)|[\'"])([^,\r\n;)]+)\s*,/',
+            'uniqid((string) $1,',
+            $translated,
+        ) ?? $translated;
+        $translated = preg_replace(
+            '/uniqid\(\s*(mt_rand\(\)|rand\(\)|time\(\))\s*,/',
+            'uniqid((string) $1,',
+            $translated,
+        ) ?? $translated;
 
         $translated = preg_replace_callback(
             '/strtotime\(\s*(?!\(string\))([^,\r\n;]+?)\s*(?=[,)])/',
