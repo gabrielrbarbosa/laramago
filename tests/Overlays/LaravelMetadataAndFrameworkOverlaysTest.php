@@ -1234,7 +1234,7 @@ PHP);
         fail('Eloquent model overlay did not expose dynamic static builder delegation');
     }
 
-    if (! is_string($eloquentRelationOverlay) || ! str_contains($eloquentRelationOverlay, 'public function withoutGlobalScopes(?array $scopes = null): static') || ! str_contains($eloquentRelationOverlay, 'public function withoutGlobalScopesExcept(array $scopes = []): static')) {
+    if (! is_string($eloquentRelationOverlay) || ! str_contains($eloquentRelationOverlay, '@method static visibleTo(mixed ...$parameters)') || ! str_contains($eloquentRelationOverlay, '@method static visibleto(mixed ...$parameters)') || ! str_contains($eloquentRelationOverlay, '@method static forCustomer(mixed ...$parameters)') || ! str_contains($eloquentRelationOverlay, 'public function withoutGlobalScopes(?array $scopes = null): static') || ! str_contains($eloquentRelationOverlay, 'public function withoutGlobalScopesExcept(array $scopes = []): static')) {
         fail('Eloquent relation overlay did not preserve decorated builder methods as relation chains');
     }
 

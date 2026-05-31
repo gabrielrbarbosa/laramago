@@ -173,7 +173,7 @@ trait BuildsLaravelFrameworkOverlays
             $eloquentRelationSource = file_get_contents($eloquentRelationPath);
 
             if (is_string($eloquentRelationSource)) {
-                $overlays[] = $this->writeFrameworkOverlay($projectRoot, 'Relation.php', $eloquentRelationPath, $this->renderEloquentRelationOverlay($eloquentRelationSource));
+                $overlays[] = $this->writeFrameworkOverlay($projectRoot, 'Relation.php', $eloquentRelationPath, $this->renderEloquentRelationOverlay($eloquentRelationSource, $projectRoot, $arguments));
             }
         }
 
@@ -1184,8 +1184,10 @@ PHP);
         return substr($source, 0, $position) . $code . PHP_EOL . substr($source, $position);
     }
 
-    private function renderEloquentRelationOverlay(string $source): string
+    private function renderEloquentRelationOverlay(string $source, string $projectRoot, array $arguments): string
     {
+        $source = $this->insertClassDocblockLines($source, 'Relation', $this->projectEloquentScopeMethodLines($projectRoot, $arguments, 'static'));
+
         if (str_contains($source, 'function withoutGlobalScopes(')) {
             return $source;
         }
@@ -1350,7 +1352,7 @@ PHP);
         ]);
     }
 
-    private function projectEloquentScopeMethodLines(string $projectRoot, array $arguments): array
+    private function projectEloquentScopeMethodLines(string $projectRoot, array $arguments, string $returnType = '\\Illuminate\\Database\\Eloquent\\Builder<TModel>'): array
     {
         $scopes = [];
         $seenFiles = [];
@@ -1400,7 +1402,7 @@ PHP);
         $lines = [];
 
         foreach (array_keys($scopes) as $scope) {
-            $lines[] = ' * @method \Illuminate\Database\Eloquent\Builder<TModel> ' . $scope . '(mixed ...$parameters)';
+            $lines[] = ' * @method ' . $returnType . ' ' . $scope . '(mixed ...$parameters)';
         }
 
         sort($lines);
