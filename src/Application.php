@@ -6,7 +6,7 @@ namespace Laramago;
 
 final class Application
 {
-    private const VERSION = '0.1.15';
+    private const VERSION = '0.1.16';
 
     private const CONFIG_FILE = 'mago.toml';
 
@@ -1656,30 +1656,53 @@ PHP;
 
     private function ensureDirectory(string $directory): void
     {
-        if (! is_dir($directory)) {
-            mkdir($directory, 0777, true);
+        if (is_dir($directory)) {
+            return;
+        }
+
+        if (! @mkdir($directory, 0777, true) && ! is_dir($directory)) {
+            throw new \RuntimeException("Unable to create directory {$directory}.");
         }
     }
 
     private function removeDirectory(string $directory): void
     {
-        $iterator = new \RecursiveIteratorIterator(
-            new \RecursiveDirectoryIterator($directory, \FilesystemIterator::SKIP_DOTS),
-            \RecursiveIteratorIterator::CHILD_FIRST
-        );
+        if (! is_dir($directory)) {
+            return;
+        }
+
+        try {
+            $iterator = new \RecursiveIteratorIterator(
+                new \RecursiveDirectoryIterator($directory, \FilesystemIterator::SKIP_DOTS),
+                \RecursiveIteratorIterator::CHILD_FIRST
+            );
+        } catch (\UnexpectedValueException) {
+            return;
+        }
 
         foreach ($iterator as $file) {
             if ($file instanceof \SplFileInfo && $file->isDir()) {
-                rmdir($file->getPathname());
+                $path = $file->getPathname();
+
+                if (is_dir($path)) {
+                    @rmdir($path);
+                }
+
                 continue;
             }
 
             if ($file instanceof \SplFileInfo) {
-                unlink($file->getPathname());
+                $path = $file->getPathname();
+
+                if (is_file($path) || is_link($path)) {
+                    @unlink($path);
+                }
             }
         }
 
-        rmdir($directory);
+        if (is_dir($directory)) {
+            @rmdir($directory);
+        }
     }
 
     private function line(string $message): void

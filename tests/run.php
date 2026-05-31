@@ -62,6 +62,7 @@ testOutputPathTranslation($project, $root);
 testRuntimeConfigGeneration($project, $root);
 testPhpStanMigration($project, $root, $binary);
 testExcludedSymbolStubGeneration($project, $root);
+testRaceSafeCacheDirectoryOperations($project, $root);
 testModelDocblockIncludesLaravelMagic($root);
 testLaravelFrameworkOverlayGeneration($project, $root);
 
@@ -300,6 +301,45 @@ TOML);
 
     if (! is_string($stub) || ! str_contains($stub, 'namespace App\Excluded;') || ! str_contains($stub, 'class LegacyService')) {
         fail('excluded symbol stub generation wrote an unexpected stub');
+    }
+}
+
+function testRaceSafeCacheDirectoryOperations(string $project, string $root): void
+{
+    require_once $root . '/src/Application.php';
+
+    $application = new Laramago\Application();
+    $ensureDirectory = new ReflectionMethod($application, 'ensureDirectory');
+    $removeDirectory = new ReflectionMethod($application, 'removeDirectory');
+    $raceDirectory = $project . '/.laramago/cache/race-safe';
+
+    $warnings = [];
+    set_error_handler(static function (int $severity, string $message) use (&$warnings): bool {
+        $warnings[] = $severity . ': ' . $message;
+
+        return true;
+    });
+
+    try {
+        $ensureDirectory->invoke($application, $raceDirectory);
+        $ensureDirectory->invoke($application, $raceDirectory);
+        file_put_contents($raceDirectory . '/first.php', '<?php');
+        $removeDirectory->invoke($application, $raceDirectory);
+        $removeDirectory->invoke($application, $raceDirectory);
+        $ensureDirectory->invoke($application, $raceDirectory);
+        file_put_contents($raceDirectory . '/second.php', '<?php');
+        unlink($raceDirectory . '/second.php');
+        $removeDirectory->invoke($application, $raceDirectory);
+    } finally {
+        restore_error_handler();
+    }
+
+    if ($warnings !== []) {
+        fail('cache directory operations emitted warnings: ' . implode('; ', $warnings));
+    }
+
+    if (is_dir($raceDirectory)) {
+        fail('cache directory operations left the test directory behind');
     }
 }
 
