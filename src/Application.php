@@ -6,7 +6,7 @@ namespace Laramago;
 
 final class Application
 {
-    private const VERSION = '0.1.47';
+    private const VERSION = '0.1.48';
 
     private const CONFIG_FILE = 'mago.toml';
 
@@ -2440,14 +2440,15 @@ PHP;
             $this->removeDirectory($overlayDirectory);
         }
 
-        $substitutions = [];
-        $pathMap = [];
-        $seenFiles = [];
-        $config = $this->projectConfigValues($projectRoot);
-        $excludes = $config['excludes'];
+            $substitutions = [];
+            $pathMap = [];
+            $seenFiles = [];
+            $config = $this->projectConfigValues($projectRoot);
+            $excludes = $config['excludes'];
+            $observerModels = $this->laravelObserverModelMap($projectRoot, $arguments);
 
-        foreach ($this->sourceOverlayPaths($projectRoot, $arguments, $config['paths']) as $path) {
-            foreach ($this->sourcePhpFiles($projectRoot, $path) as $file) {
+            foreach ($this->sourceOverlayPaths($projectRoot, $arguments, $config['paths']) as $path) {
+                foreach ($this->sourcePhpFiles($projectRoot, $path) as $file) {
                 if (isset($seenFiles[$file]) || isset($skippedOriginalPaths[$file])) {
                     continue;
                 }
@@ -2472,6 +2473,7 @@ PHP;
                 $translated = $this->annotateLaravelQueryBuilderClosures($translated);
                 $translated = $this->annotateLaravelRequestParameters($translated);
                 $translated = $this->rewriteLaravelRequestPropertyReads($translated, $projectRoot);
+                $translated = $this->annotateLaravelObserverModelParameters($translated, $relativePath, $observerModels);
                 $translated = $this->annotateLaravelJsonResourceDynamicMembers($translated, $relativePath);
                 $translated = $this->annotateLaravelFormRequestDynamicProperties($translated, $relativePath, $projectRoot);
                 $minimumAliases = $translated === $source ? 2 : 1;
@@ -2773,6 +2775,44 @@ PHP;
         $translated = preg_replace_callback(
             '/(->\s*(?:' . $methodPattern . ')\s*\((?:(?!\{).)*?function\s*\(\s*\$([A-Za-z_][A-Za-z0-9_]*)\s*\)(?:\s*use\s*\([^)]*\))?\s*(?::\s*[^{]+)?\{)(?!\s*\/\*\*\s*@var\s+[^*]*\$[A-Za-z_][A-Za-z0-9_]*)/ms',
             static fn (array $matches): string => $matches[1] . PHP_EOL . '                /** @var \Illuminate\Database\Query\Builder $' . $matches[2] . ' */',
+            $source,
+        );
+
+        return is_string($translated) ? $translated : $source;
+    }
+
+    /**
+     * @param array<string, list<string>> $observerModels
+     */
+    private function annotateLaravelObserverModelParameters(string $source, string $relativePath, array $observerModels): string
+    {
+        $models = $observerModels[$relativePath] ?? null;
+
+        if ($models === null || $models === [] || ! str_contains($source, 'function')) {
+            return $source;
+        }
+
+        $modelType = implode('|', array_map(static fn (string $model): string => '\\' . ltrim($model, '\\'), $models));
+        $events = implode('|', [
+            'retrieved',
+            'creating',
+            'created',
+            'updating',
+            'updated',
+            'saving',
+            'saved',
+            'deleting',
+            'deleted',
+            'restoring',
+            'restored',
+            'forceDeleting',
+            'forceDeleted',
+            'replicating',
+        ]);
+
+        $translated = preg_replace_callback(
+            '/(\bfunction\s+(?:' . $events . ')\s*\(\s*)(?:(?:\\\\?Illuminate\\\\Database\\\\Eloquent\\\\)?Model|mixed|object)\s+(\$[A-Za-z_][A-Za-z0-9_]*)/m',
+            static fn (array $matches): string => $matches[1] . $modelType . ' ' . $matches[2],
             $source,
         );
 
@@ -3256,6 +3296,149 @@ PHP);
         }
 
         return null;
+    }
+
+    private function classReferenceName(string $source, string $reference): ?string
+    {
+        $reference = trim($reference);
+
+        if ($reference === '') {
+            return null;
+        }
+
+        if (str_starts_with($reference, '\\')) {
+            return ltrim($reference, '\\');
+        }
+
+        if (! str_contains($reference, '\\')) {
+            return $this->importedClassName($source, $reference) ?? $this->namespacedClassName($source, $reference);
+        }
+
+        [$firstSegment, $remaining] = explode('\\', $reference, 2);
+        $import = $this->importedClassName($source, $firstSegment);
+
+        if ($import !== null) {
+            return $import . '\\' . $remaining;
+        }
+
+        if (preg_match('/^namespace\s+([^;]+);/m', $source, $matches) === 1) {
+            return trim($matches[1]) . '\\' . $reference;
+        }
+
+        return $reference;
+    }
+
+    /**
+     * @param list<string> $arguments
+     * @return array<string, list<string>>
+     */
+    private function laravelObserverModelMap(string $projectRoot, array $arguments): array
+    {
+        $config = $this->projectConfigValues($projectRoot);
+        $seenFiles = [];
+        $observerModels = [];
+
+        foreach ($this->sourceOverlayPaths($projectRoot, $arguments, $config['paths']) as $path) {
+            foreach ($this->sourcePhpFiles($projectRoot, $path) as $file) {
+                if (isset($seenFiles[$file])) {
+                    continue;
+                }
+
+                $seenFiles[$file] = true;
+                $relativePath = ltrim(substr($file, strlen($projectRoot)), '/');
+
+                if ($this->isExcludedProjectPath($relativePath, $config['excludes'])) {
+                    continue;
+                }
+
+                $source = file_get_contents($file);
+
+                if (! is_string($source) || (! str_contains($source, 'observe(') && ! str_contains($source, 'ObservedBy'))) {
+                    continue;
+                }
+
+                if (preg_match('/^namespace\s+([^;]+);/m', $source) !== 1 || preg_match('/^(?:(?:abstract|final|readonly)\s+)*class\s+([A-Za-z_][A-Za-z0-9_]*)\b/m', $source) !== 1) {
+                    continue;
+                }
+
+                $modelClass = $this->sourceClassName($source);
+
+                if ($modelClass === null) {
+                    continue;
+                }
+
+                foreach ($this->observerClassReferences($source) as $observerClass) {
+                    $observerPath = $this->projectClassPath($projectRoot, $observerClass);
+
+                    if ($observerPath === null || ! is_file($observerPath)) {
+                        continue;
+                    }
+
+                    $observerRelativePath = ltrim(substr($observerPath, strlen($projectRoot)), '/');
+                    $observerModels[$observerRelativePath][$modelClass] = true;
+                }
+            }
+        }
+
+        $map = [];
+
+        foreach ($observerModels as $observerPath => $models) {
+            $modelNames = array_keys($models);
+            sort($modelNames);
+            $map[$observerPath] = $modelNames;
+        }
+
+        return $map;
+    }
+
+    private function sourceClassName(string $source): ?string
+    {
+        if (preg_match('/^namespace\s+([^;]+);/m', $source, $namespaceMatches) !== 1) {
+            return null;
+        }
+
+        if (preg_match('/^(?:(?:abstract|final|readonly)\s+)*class\s+([A-Za-z_][A-Za-z0-9_]*)\b/m', $source, $classMatches) !== 1) {
+            return null;
+        }
+
+        return trim($namespaceMatches[1]) . '\\' . $classMatches[1];
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function observerClassReferences(string $source): array
+    {
+        $observers = [];
+
+        $calls = [];
+
+        if (preg_match_all('/\b(?:static|self|parent|[A-Za-z_\\\\][A-Za-z0-9_\\\\]*)::observe\s*\((.*?)\)\s*;/s', $source, $observeCalls) > 0) {
+            $calls = array_merge($calls, $observeCalls[1]);
+        }
+
+        if (preg_match_all('/#\[\s*(?:\\\\?Illuminate\\\\Database\\\\Eloquent\\\\Attributes\\\\)?ObservedBy\s*\((.*?)\)\s*\]/s', $source, $attributeCalls) > 0) {
+            $calls = array_merge($calls, $attributeCalls[1]);
+        }
+
+        foreach ($calls as $call) {
+            if (preg_match_all('/([\\\\A-Za-z_][\\\\A-Za-z0-9_]*)::class/', $call, $matches) === 0) {
+                continue;
+            }
+
+            foreach ($matches[1] as $reference) {
+                $class = $this->classReferenceName($source, $reference);
+
+                if ($class !== null) {
+                    $observers[$class] = true;
+                }
+            }
+        }
+
+        $observerNames = array_keys($observers);
+        sort($observerNames);
+
+        return $observerNames;
     }
 
     /**

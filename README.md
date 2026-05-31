@@ -120,6 +120,7 @@ Generated overlays currently add:
 - Laravel JSON resource delegated property and method metadata for normal `$this->field` / `$this->relation()` resource transformations;
 - Laravel resource collection compatibility for common paginated `ResourceCollection` transforms that map Eloquent models from `$this->resource->getCollection()`;
 - Laravel query builder callback compatibility for common nested `where`, `whereIn`, and `whereExists` closures;
+- Laravel observer model inference from `static::observe(...)` and `#[ObservedBy(...)]` registrations, so observer lifecycle method parameters see the concrete Eloquent model type;
 - Laravel Excel event callback compatibility for `BeforeExport`, `BeforeWriting`, `BeforeSheet`, and `AfterSheet` closures;
 - Eloquent static builder delegation for lock-based query chains such as `Model::lockForUpdate()->...`;
 - PHPStan suppression pragma compatibility for `@phpstan-ignore`, `@phpstan-ignore-next-line`, and `@phpstan-ignore-line` comments through generated temporary overlays;

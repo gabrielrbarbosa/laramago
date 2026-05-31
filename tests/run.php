@@ -73,6 +73,7 @@ testLaravelDateHelperOverlayGeneration($project, $root);
 testLaravelCollectionMacroOverlayGeneration($project, $root);
 testLaravelExcelEventOverlayGeneration($project, $root);
 testLaravelQueryBuilderClosureOverlayGeneration($project, $root);
+testLaravelObserverModelOverlayGeneration($project, $root);
 testLaravelRequestPropertyReadOverlayGeneration($project, $root);
 testLaravelJsonResourceDynamicMemberOverlayGeneration($project, $root);
 testLaravelFormRequestDynamicPropertyOverlayGeneration($project, $root);
@@ -990,6 +991,127 @@ PHP);
     }
 
     fail('Laravel query builder closure overlay did not annotate nested builder callbacks');
+}
+
+function testLaravelObserverModelOverlayGeneration(string $project, string $root): void
+{
+    require_once $root . '/src/Application.php';
+
+    if (! is_dir($project . '/app/Models')) {
+        mkdir($project . '/app/Models', 0777, true);
+    }
+
+    if (! is_dir($project . '/app/Observers')) {
+        mkdir($project . '/app/Observers', 0777, true);
+    }
+
+    file_put_contents($project . '/app/Models/Order.php', <<<'PHP'
+<?php
+
+namespace App\Models;
+
+use App\Observers\OrderObserver;
+use Illuminate\Database\Eloquent\Model;
+
+final class Order extends Model
+{
+    protected static function booted(): void
+    {
+        static::observe([OrderObserver::class]);
+    }
+}
+PHP);
+
+    file_put_contents($project . '/app/Models/AttributedOrder.php', <<<'PHP'
+<?php
+
+namespace App\Models;
+
+use App\Observers\AttributedOrderObserver;
+use Illuminate\Database\Eloquent\Attributes\ObservedBy;
+use Illuminate\Database\Eloquent\Model;
+
+#[ObservedBy([AttributedOrderObserver::class])]
+final class AttributedOrder extends Model
+{
+}
+PHP);
+
+    file_put_contents($project . '/app/Observers/OrderObserver.php', <<<'PHP'
+<?php
+
+namespace App\Observers;
+
+use Illuminate\Database\Eloquent\Model;
+
+final class OrderObserver
+{
+    public function created(Model $order): void
+    {
+        $order->total;
+    }
+
+    public function updated(mixed $order): void
+    {
+        $order->total;
+    }
+
+    public function deleted(object $order): void
+    {
+        $order->total;
+    }
+}
+PHP);
+
+    file_put_contents($project . '/app/Observers/AttributedOrderObserver.php', <<<'PHP'
+<?php
+
+namespace App\Observers;
+
+use Illuminate\Database\Eloquent\Model;
+
+final class AttributedOrderObserver
+{
+    public function created(Model $order): void
+    {
+        $order->total;
+    }
+}
+PHP);
+
+    $application = new Laramago\Application();
+    $method = new ReflectionMethod($application, 'phpStanPragmaSubstitutions');
+    $method->invoke($application, $project, [], []);
+
+    $map = json_decode((string) file_get_contents($project . '/.laramago/cache/phpstan-pragma-overlays.json'), true);
+    $foundRegisteredObserver = false;
+    $foundAttributedObserver = false;
+
+    foreach (is_array($map) ? $map : [] as $entry) {
+        if (! is_string($entry['original'] ?? null) || ! is_string($entry['overlay'] ?? null)) {
+            continue;
+        }
+
+        $overlay = file_get_contents($project . '/' . $entry['overlay']);
+
+        if (($entry['original'] ?? null) === 'app/Observers/OrderObserver.php'
+            && is_string($overlay)
+            && str_contains($overlay, 'public function created(\App\Models\Order $order): void')
+            && str_contains($overlay, 'public function updated(\App\Models\Order $order): void')
+            && str_contains($overlay, 'public function deleted(\App\Models\Order $order): void')) {
+            $foundRegisteredObserver = true;
+        }
+
+        if (($entry['original'] ?? null) === 'app/Observers/AttributedOrderObserver.php'
+            && is_string($overlay)
+            && str_contains($overlay, 'public function created(\App\Models\AttributedOrder $order): void')) {
+            $foundAttributedObserver = true;
+        }
+    }
+
+    if (! $foundRegisteredObserver || ! $foundAttributedObserver) {
+        fail('Laravel observer overlay did not infer observed model parameters');
+    }
 }
 
 function testLaravelRequestPropertyReadOverlayGeneration(string $project, string $root): void
