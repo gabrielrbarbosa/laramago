@@ -265,6 +265,7 @@ function testLaravelFrameworkOverlayGeneration(string $project, string $root): v
     mkdir($project . '/vendor/laravel/socialite/src/Two', 0777, true);
     mkdir($project . '/vendor/nesbot/carbon/src/Carbon', 0777, true);
     mkdir($project . '/app/Models/Ticket', 0777, true);
+    mkdir($project . '/app/Models/Usuario', 0777, true);
     mkdir($project . '/app/Providers', 0777, true);
 
     file_put_contents($project . '/config/auth.php', <<<'PHP'
@@ -279,6 +280,18 @@ return [
         ],
     ],
 ];
+PHP);
+
+    file_put_contents($project . '/app/Models/Usuario/Usuario.php', <<<'PHP'
+<?php
+
+namespace App\Models\Usuario;
+
+use Illuminate\Foundation\Auth\User as Authenticatable;
+
+class Usuario extends Authenticatable
+{
+}
 PHP);
 
     file_put_contents($project . '/app/Models/Ticket/InteracaoTicket.php', <<<'PHP'
@@ -1056,12 +1069,38 @@ PHP);
         fail('guard overlay did not use the configured auth model');
     }
 
-    if (! is_string($authManagerOverlay) || ! str_contains($authManagerOverlay, '@method \\App\\Models\\Usuario\\Usuario|null user()') || ! str_contains($authManagerOverlay, '@method int|string|null id()')) {
+    if (! is_string($authManagerOverlay) || ! str_contains($authManagerOverlay, '@method \\App\\Models\\Usuario\\Usuario|null user()') || ! str_contains($authManagerOverlay, '@method int|null id()')) {
         fail('auth manager overlay did not expose delegated guard methods');
     }
 
-    if (! is_string($authOverlay) || ! str_contains($authOverlay, '@method static \\App\\Models\\Usuario\\Usuario|null user()')) {
+    if (! is_string($guardOverlay) || ! str_contains($guardOverlay, '@return int|null')) {
+        fail('guard overlay did not infer the configured auth model identifier type');
+    }
+
+    if (! is_string($authOverlay) || ! str_contains($authOverlay, '@method static \\App\\Models\\Usuario\\Usuario|null user()') || ! str_contains($authOverlay, '@method static int|null id()')) {
         fail('auth facade overlay did not use the configured auth model');
+    }
+
+    file_put_contents($project . '/app/Models/Usuario/Usuario.php', <<<'PHP'
+<?php
+
+namespace App\Models\Usuario;
+
+use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Illuminate\Foundation\Auth\User as Authenticatable;
+
+class Usuario extends Authenticatable
+{
+    use HasUuids;
+
+    protected $keyType = 'string';
+}
+PHP);
+
+    $authIdentifierTypeMethod = new ReflectionMethod($application, 'authIdentifierType');
+
+    if ($authIdentifierTypeMethod->invoke($application, $project, '\\App\\Models\\Usuario\\Usuario') !== 'string|null') {
+        fail('auth model identifier inference should detect string-key auth models');
     }
 
     if (! is_string($foundationHelpersOverlay) || ! str_contains($foundationHelpersOverlay, '@return ($guard is null ? \\Illuminate\\Auth\\AuthManager : \\Illuminate\\Contracts\\Auth\\Guard)') || ! str_contains($foundationHelpersOverlay, 'function auth($guard = null): \\Illuminate\\Auth\\AuthManager|Guard') || ! str_contains($foundationHelpersOverlay, 'function now($tz = null): \\Illuminate\\Support\\Carbon')) {

@@ -52,21 +52,22 @@ trait BuildsLaravelFrameworkOverlays
 
         if ($authModel !== null) {
             $authModel = '\\' . ltrim($authModel, '\\');
+            $authIdentifierType = $this->authIdentifierType($projectRoot, $authModel);
 
             if (is_file($guardPath)) {
-                $overlays[] = $this->writeFrameworkOverlay($projectRoot, 'Guard.php', $guardPath, $this->renderAuthGuardOverlay($authModel));
+                $overlays[] = $this->writeFrameworkOverlay($projectRoot, 'Guard.php', $guardPath, $this->renderAuthGuardOverlay($authModel, $authIdentifierType));
             }
 
             if (is_file($authManagerPath)) {
                 $authManagerSource = file_get_contents($authManagerPath);
 
                 if (is_string($authManagerSource)) {
-                    $overlays[] = $this->writeFrameworkOverlay($projectRoot, 'AuthManager.php', $authManagerPath, $this->renderAuthManagerOverlay($authManagerSource, $authModel));
+                    $overlays[] = $this->writeFrameworkOverlay($projectRoot, 'AuthManager.php', $authManagerPath, $this->renderAuthManagerOverlay($authManagerSource, $authModel, $authIdentifierType));
                 }
             }
 
             if (is_file($authFacadePath)) {
-                $overlays[] = $this->writeFrameworkOverlay($projectRoot, 'Auth.php', $authFacadePath, $this->renderAuthFacadeOverlay($authModel));
+                $overlays[] = $this->writeFrameworkOverlay($projectRoot, 'Auth.php', $authFacadePath, $this->renderAuthFacadeOverlay($authModel, $authIdentifierType));
             }
 
             if (is_file($foundationHelpersPath)) {
@@ -608,11 +609,11 @@ PHP,
         ];
     }
 
-    private function renderAuthManagerOverlay(string $source, string $authModel): string
+    private function renderAuthManagerOverlay(string $source, string $authModel, string $authIdentifierType): string
     {
         return $this->insertClassDocblockLines($source, 'AuthManager', [
             ' * @method ' . $authModel . '|null user()',
-            ' * @method int|string|null id()',
+            ' * @method ' . $authIdentifierType . ' id()',
             ' * @method bool check()',
             ' * @method bool guest()',
         ]);
@@ -1669,7 +1670,7 @@ trait HasFactory
 PHP;
     }
 
-    private function renderAuthGuardOverlay(string $authModel): string
+    private function renderAuthGuardOverlay(string $authModel, string $authIdentifierType): string
     {
         return <<<PHP
 <?php
@@ -1688,7 +1689,7 @@ interface Guard
     public function user();
 
     /**
-     * @return int|string|null
+     * @return {$authIdentifierType}
      */
     public function id();
 
@@ -1701,7 +1702,7 @@ interface Guard
 PHP;
     }
 
-    private function renderAuthFacadeOverlay(string $authModel): string
+    private function renderAuthFacadeOverlay(string $authModel, string $authIdentifierType): string
     {
         return <<<PHP
 <?php
@@ -1713,7 +1714,7 @@ namespace Illuminate\Support\Facades;
  * @method static bool check()
  * @method static bool guest()
  * @method static {$authModel}|null user()
- * @method static int|string|null id()
+ * @method static {$authIdentifierType} id()
  * @method static bool validate(array \$credentials = [])
  * @method static bool hasUser()
  * @method static \Illuminate\Contracts\Auth\Guard setUser(\Illuminate\Contracts\Auth\Authenticatable \$user)
@@ -1782,6 +1783,82 @@ PHP;
         }
 
         return is_file($projectRoot . '/app/Models/User.php') ? 'App\\Models\\User' : null;
+    }
+
+    private function authIdentifierType(string $projectRoot, string $authModel): string
+    {
+        $source = $this->projectClassSource($projectRoot, $authModel);
+
+        if ($source === null) {
+            return 'int|string|null';
+        }
+
+        if (preg_match('/\$keyType\s*=\s*[\'"]string[\'"]/', $source) === 1
+            || preg_match('/function\s+getKeyType\s*\([^)]*\)\s*(?::\s*string)?\s*\{[^}]*return\s+[\'"]string[\'"]\s*;/s', $source) === 1
+            || str_contains($source, 'HasUuids')
+            || str_contains($source, 'HasUlids')) {
+            return 'string|null';
+        }
+
+        if (preg_match('/\$keyType\s*=\s*[\'"]int(?:eger)?[\'"]/', $source) === 1
+            || preg_match('/function\s+getKeyType\s*\([^)]*\)\s*(?::\s*string)?\s*\{[^}]*return\s+[\'"]int(?:eger)?[\'"]\s*;/s', $source) === 1) {
+            return 'int|null';
+        }
+
+        if (preg_match('/\$incrementing\s*=\s*false\b/', $source) === 1) {
+            return 'int|string|null';
+        }
+
+        return 'int|null';
+    }
+
+    private function projectClassSource(string $projectRoot, string $class): ?string
+    {
+        $class = ltrim($class, '\\');
+        $paths = [];
+
+        if (str_starts_with($class, 'App\\')) {
+            $paths[] = $projectRoot . '/app/' . str_replace('\\', '/', substr($class, strlen('App\\'))) . '.php';
+        }
+
+        $composerPath = $projectRoot . '/composer.json';
+        $composer = is_file($composerPath) ? json_decode((string) file_get_contents($composerPath), true) : null;
+
+        if (is_array($composer)) {
+            foreach (['autoload', 'autoload-dev'] as $section) {
+                $psr4 = $composer[$section]['psr-4'] ?? null;
+
+                if (! is_array($psr4)) {
+                    continue;
+                }
+
+                foreach ($psr4 as $prefix => $directories) {
+                    if (! is_string($prefix) || ! str_starts_with($class, $prefix)) {
+                        continue;
+                    }
+
+                    foreach ((array) $directories as $directory) {
+                        if (! is_string($directory)) {
+                            continue;
+                        }
+
+                        $paths[] = $projectRoot . '/' . trim($directory, '/') . '/' . str_replace('\\', '/', substr($class, strlen($prefix))) . '.php';
+                    }
+                }
+            }
+        }
+
+        foreach (array_values(array_unique($paths)) as $path) {
+            if (! is_file($path)) {
+                continue;
+            }
+
+            $source = file_get_contents($path);
+
+            return is_string($source) ? $source : null;
+        }
+
+        return null;
     }
 
     private function importedClassName(string $source, string $shortName): ?string
