@@ -6,7 +6,7 @@ namespace Laramago;
 
 final class Application
 {
-    private const VERSION = '0.1.45';
+    private const VERSION = '0.1.46';
 
     private const CONFIG_FILE = 'mago.toml';
 
@@ -2875,9 +2875,16 @@ PHP;
 
         $parent = strtolower($classMatches[2]);
 
-        if (! str_ends_with($parent, 'jsonresource') && ! str_ends_with($parent, 'resourcecollection')) {
+        $isJsonResource = str_ends_with($parent, 'jsonresource');
+        $isResourceCollection = str_ends_with($parent, 'resourcecollection');
+
+        if (! $isJsonResource && ! $isResourceCollection) {
             return $source;
         }
+
+        $annotatedSource = $isResourceCollection ? $this->annotateLaravelResourceCollectionTransforms($source) : $source;
+        $sourceChanged = $annotatedSource !== $source;
+        $source = $annotatedSource;
 
         $declaredProperties = $this->declaredProperties($source);
         $properties = [];
@@ -2904,7 +2911,7 @@ PHP;
             }
         }
 
-        if ($properties === [] && $methods === []) {
+        if ($properties === [] && $methods === [] && ! $sourceChanged) {
             return $source;
         }
 
@@ -2921,6 +2928,43 @@ PHP;
         }
 
         return $this->insertClassDocblockLines($source, $classMatches[1], $lines);
+    }
+
+    private function annotateLaravelResourceCollectionTransforms(string $source): string
+    {
+        $translated = preg_replace_callback(
+            '/^([ \t]*)(\$([A-Za-z_][A-Za-z0-9_]*)\s*=\s*\$this\s*->\s*resource\s*;)/m',
+            function (array $matches) use ($source): string {
+                $variable = $matches[3];
+
+                if (preg_match('/\$' . preg_quote($variable, '/') . '\s*->\s*getCollection\s*\(/', $source) !== 1) {
+                    return $matches[0];
+                }
+
+                return $matches[1] . '/** @var \Illuminate\Pagination\AbstractPaginator $' . $variable . ' */' . PHP_EOL . $matches[0];
+            },
+            $source,
+        );
+
+        if (! is_string($translated)) {
+            return $source;
+        }
+
+        $translated = preg_replace_callback(
+            '/(map\s*\(\s*function\s*\(\s*\$([A-Za-z_][A-Za-z0-9_]*)\s*\)\s*(?::\s*[^{]+)?\{)(?!\s*\/\*\*\s*@var\s+[^*]*\$[A-Za-z_][A-Za-z0-9_]*)/m',
+            function (array $matches) use ($translated): string {
+                $variable = $matches[2];
+
+                if (! str_contains($translated, '$' . $variable . '->')) {
+                    return $matches[0];
+                }
+
+                return $matches[1] . PHP_EOL . '                /** @var \Illuminate\Database\Eloquent\Model $' . $variable . ' */';
+            },
+            $translated,
+        );
+
+        return is_string($translated) ? $translated : $source;
     }
 
     private function annotateLaravelFormRequestDynamicProperties(string $source, string $relativePath, string $projectRoot): string

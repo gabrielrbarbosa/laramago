@@ -1006,14 +1006,57 @@ class OrderResource extends JsonResource
 }
 PHP);
 
+    file_put_contents($project . '/app/Http/Resources/OrderCollection.php', <<<'PHP'
+<?php
+
+namespace App\Http\Resources;
+
+use Illuminate\Http\Request;
+use Illuminate\Http\Resources\Json\ResourceCollection;
+
+class OrderCollection extends ResourceCollection
+{
+    public function toArray(Request $request): array
+    {
+        $orders = $this->resource;
+
+        return $orders
+            ->getCollection()
+            ->map(function ($order) {
+                return [
+                    'id' => $order->id,
+                    'issued_at' => $order->issued_at->format('Y-m-d'),
+                ];
+            })
+            ->toArray();
+    }
+}
+PHP);
+
     $application = new Laramago\Application();
     $method = new ReflectionMethod($application, 'phpStanPragmaSubstitutions');
     $method->invoke($application, $project, [], []);
 
     $map = json_decode((string) file_get_contents($project . '/.laramago/cache/phpstan-pragma-overlays.json'), true);
 
+    $foundResource = false;
+    $foundCollection = false;
+
     foreach (is_array($map) ? $map : [] as $entry) {
         if (($entry['original'] ?? null) !== 'app/Http/Resources/OrderResource.php' || ! is_string($entry['overlay'] ?? null)) {
+            if (($entry['original'] ?? null) !== 'app/Http/Resources/OrderCollection.php' || ! is_string($entry['overlay'] ?? null)) {
+                continue;
+            }
+
+            $overlay = file_get_contents($project . '/' . $entry['overlay']);
+
+            if (is_string($overlay)
+                && str_contains($overlay, '/** @var \Illuminate\Pagination\AbstractPaginator $orders */')
+                && str_contains($overlay, '/** @var \Illuminate\Database\Eloquent\Model $order */')
+                && str_contains($overlay, '$order->issued_at->format(\'Y-m-d\')')) {
+                $foundCollection = true;
+            }
+
             continue;
         }
 
@@ -1025,11 +1068,13 @@ PHP);
             && str_contains($overlay, '@property mixed $issued_at')
             && ! str_contains($overlay, '@property mixed $resource')
             && str_contains($overlay, '@method mixed statusLabel(mixed ...$parameters)')) {
-            return;
+            $foundResource = true;
         }
     }
 
-    fail('Laravel JsonResource overlay did not document delegated resource members');
+    if (! $foundResource || ! $foundCollection) {
+        fail('Laravel JsonResource overlay did not document delegated resource members');
+    }
 }
 
 function testLaravelFormRequestDynamicPropertyOverlayGeneration(string $project, string $root): void

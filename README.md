@@ -118,6 +118,7 @@ Generated overlays currently add:
 - excluded-path symbol discovery so `exclude` can omit legacy code from analysis without turning referenced classes into false missing-class errors;
 - Laravel request input compatibility for dynamic `$request->field`, `$this->request->field`, trait-provided Request properties used by pagination/filtering helpers, and helper parameters that accept `mixed $request` but clearly use Laravel request APIs;
 - Laravel JSON resource delegated property and method metadata for normal `$this->field` / `$this->relation()` resource transformations;
+- Laravel resource collection compatibility for common paginated `ResourceCollection` transforms that map Eloquent models from `$this->resource->getCollection()`;
 - PHPStan suppression pragma compatibility for `@phpstan-ignore`, `@phpstan-ignore-next-line`, and `@phpstan-ignore-line` comments through generated temporary overlays;
 - path-scoped suppression of unused generated Mago pragmas inside overlays, so PHPStan compatibility comments do not create new analyzer noise after Laramago resolves the original issue;
 - baseline and output path translation so generated overlay paths do not leak into application diagnostics.
