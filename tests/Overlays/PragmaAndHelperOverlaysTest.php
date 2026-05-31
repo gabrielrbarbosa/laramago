@@ -31,10 +31,13 @@ final class PhpStanIgnored
 
     /**
      * @param model-property<User> $column
+     * @param list<string> $columns
+     * @param non-empty-list<int> $ids
+     * @return list<array{content: list<string>, title: string}>
      */
-    public function larastanColumn(string $column): string
+    public function larastanColumn(string $column, array $columns, array $ids): array
     {
-        return $column;
+        return [['content' => [$column, ...$columns], 'title' => (string) $ids[0]]];
     }
 }
 PHP);
@@ -61,6 +64,16 @@ PHP);
 
     if (str_contains($overlay, 'model-property<User>') || ! str_contains($overlay, '@param string $column')) {
         fail('source compatibility overlay did not translate Larastan model-property pseudo-types');
+    }
+
+    if (
+        str_contains($overlay, 'list<string>')
+        || str_contains($overlay, 'non-empty-list<int>')
+        || ! str_contains($overlay, '@param array<int, string> $columns')
+        || ! str_contains($overlay, '@param non-empty-array<int, int> $ids')
+        || ! str_contains($overlay, '@return array<int, array{content: array<int, string>, title: string}>')
+    ) {
+        fail('source compatibility overlay did not translate PHPStan list pseudo-types');
     }
 
     if (! str_contains($overlay, '@method mixed getuser(mixed ...$arguments)')) {

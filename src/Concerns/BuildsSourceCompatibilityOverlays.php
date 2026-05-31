@@ -47,6 +47,7 @@ trait BuildsSourceCompatibilityOverlays
 
                 $translated = $this->translatePhpStanPragmas($source);
                 $translated = $this->translateLarastanPseudoTypes($translated);
+                $translated = $this->translatePhpStanListTypes($translated);
                 $translated = $this->translateLaravelDateHelperCalls($translated);
                 $translated = $this->rewriteLaravelHttpClientWrapperReturnTypes($translated);
                 $translated = $this->annotateLaravelHttpClientWrapperAssignments($translated, $projectRoot);
@@ -208,6 +209,85 @@ trait BuildsSourceCompatibilityOverlays
     private function translateLarastanPseudoTypes(string $source): string
     {
         return preg_replace('/\bmodel-property\s*<\s*[^>\r\n*]+\s*>/', 'string', $source) ?? $source;
+    }
+
+    private function translatePhpStanListTypes(string $source): string
+    {
+        $tokens = token_get_all($source);
+        $translated = '';
+
+        foreach ($tokens as $token) {
+            if (! is_array($token)) {
+                $translated .= $token;
+
+                continue;
+            }
+
+            if (in_array($token[0], [T_COMMENT, T_DOC_COMMENT], true)) {
+                $translated .= $this->translatePhpStanListTypesInComment($token[1]);
+
+                continue;
+            }
+
+            $translated .= $token[1];
+        }
+
+        return $translated;
+    }
+
+    private function translatePhpStanListTypesInComment(string $comment): string
+    {
+        $translated = '';
+        $offset = 0;
+
+        while (preg_match('/\b(non-empty-list|list)\s*</', $comment, $matches, PREG_OFFSET_CAPTURE, $offset) === 1) {
+            $type = $matches[1][0];
+            $start = $matches[0][1];
+            $open = $start + strlen($matches[0][0]) - 1;
+            $close = $this->matchingGenericCloseOffset($comment, $open);
+
+            if ($close === null) {
+                break;
+            }
+
+            $inner = substr($comment, $open + 1, $close - $open - 1);
+            $replacement = $type === 'non-empty-list'
+                ? 'non-empty-array<int, ' . $this->translatePhpStanListTypesInComment($inner) . '>'
+                : 'array<int, ' . $this->translatePhpStanListTypesInComment($inner) . '>';
+
+            $translated .= substr($comment, $offset, $start - $offset) . $replacement;
+            $offset = $close + 1;
+        }
+
+        return $translated . substr($comment, $offset);
+    }
+
+    private function matchingGenericCloseOffset(string $source, int $open): ?int
+    {
+        $depth = 0;
+        $length = strlen($source);
+
+        for ($index = $open; $index < $length; $index++) {
+            $character = $source[$index];
+
+            if ($character === '<') {
+                $depth++;
+
+                continue;
+            }
+
+            if ($character !== '>') {
+                continue;
+            }
+
+            $depth--;
+
+            if ($depth === 0) {
+                return $index;
+            }
+        }
+
+        return null;
     }
 
     private function translateLaravelDateHelperCalls(string $source): string
