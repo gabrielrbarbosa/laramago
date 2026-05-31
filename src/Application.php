@@ -340,7 +340,7 @@ final class Application
                 '--config',
                 $runtimeConfig,
                 'analyze',
-            ], $this->defaultAnalyzeFlags($projectRoot, $arguments, $modelSubstitutions !== []), [
+            ], $this->defaultAnalyzeFlags($projectRoot, $arguments, $substitutions !== []), [
                 '--verify-baseline',
                 '--reporting-format=count',
             ], $substitutions, $this->stripLaramagoOptions($arguments)), $projectRoot);

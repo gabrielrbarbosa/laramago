@@ -65,6 +65,31 @@ function testOutputPathTranslation(string $project, string $root): void
     }
 }
 
+function testBaselinePathTranslationUsesPhpStanPragmaOverlays(string $project, string $root): void
+{
+    file_put_contents($project . '/.laramago/cache/phpstan-pragma-overlays.json', json_encode([[
+        'original' => 'app/Services/LegacyService.php',
+        'overlay' => '.laramago/cache/phpstan-pragma-overlays/legacy.php',
+    ]], JSON_THROW_ON_ERROR));
+    file_put_contents($project . '/laramago-analyzer-baseline.toml', "file = \"app/Services/LegacyService.php\"\n");
+
+    require_once $root . '/src/Application.php';
+
+    $application = new Laramago\Application();
+    $method = new ReflectionMethod($application, 'defaultAnalyzeFlags');
+    $flags = $method->invoke($application, $project, [], true);
+
+    if ($flags !== ['--baseline', '.laramago/cache/analyzer-baseline.toml']) {
+        fail('analysis should use a translated runtime baseline when PHPStan pragma overlays are active');
+    }
+
+    $translated = file_get_contents($project . '/.laramago/cache/analyzer-baseline.toml');
+
+    if ($translated !== "file = \".laramago/cache/phpstan-pragma-overlays/legacy.php\"\n") {
+        fail('baseline path translation should include PHPStan pragma overlay paths');
+    }
+}
+
 function testRuntimeConfigGeneration(string $project, string $root): void
 {
     require_once $root . '/src/Application.php';

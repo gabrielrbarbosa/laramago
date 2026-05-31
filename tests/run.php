@@ -99,6 +99,7 @@ if ($doctorExitCode !== $expectedDoctorExitCode) {
 testDoctorTreatsMissingBaselineAsOptional($project, $binary);
 testBaselinePathTranslation($project, $root);
 testOutputPathTranslation($project, $root);
+testBaselinePathTranslationUsesPhpStanPragmaOverlays($project, $root);
 testRuntimeConfigGeneration($project, $root);
 testNativeMagoBinaryIsPreferred($project, $root);
 testPhpStanMigration($project, $root, $binary);
