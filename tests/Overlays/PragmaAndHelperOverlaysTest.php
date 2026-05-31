@@ -470,6 +470,9 @@ final class UsesCollectionArrowCallbacks
             ->map(fn (Order $order): array => ['id' => $order->id])
             ->filter(fn (array $row): bool => $row !== [])
             ->map(fn (int $id): int => $id)
+            ->map(function (Order $order, string $key): array {
+                return ['key' => $key, 'id' => $order->id];
+            })
             ->all();
     }
 }
@@ -492,7 +495,9 @@ PHP);
             && str_contains($overlay, '->map(fn ($order): array =>')
             && str_contains($overlay, '->filter(fn (array $row): bool =>')
             && str_contains($overlay, '->map(fn ($id): int =>')
-            && ! str_contains($overlay, 'fn (Order $order)')) {
+            && str_contains($overlay, '->map(function ($order, $key): array {')
+            && ! str_contains($overlay, 'fn (Order $order)')
+            && ! str_contains($overlay, 'function (Order $order, string $key)')) {
             return;
         }
     }

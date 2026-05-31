@@ -448,6 +448,26 @@ class PendingRequest
     public function send(string $method, string $url, array $options = [])
     {
     }
+
+    /**
+     * @param  \Psr\Http\Message\StreamInterface|string  $content
+     * @param  string  $contentType
+     * @return $this
+     */
+    public function withBody($content, $contentType = 'application/json')
+    {
+    }
+
+    /**
+     * @param  string|array  $name
+     * @param  string|resource  $contents
+     * @param  string|null  $filename
+     * @param  array  $headers
+     * @return $this
+     */
+    public function attach($name, $contents = '', $filename = null, array $headers = [])
+    {
+    }
 }
 PHP);
 
@@ -999,7 +1019,12 @@ PHP);
         fail('HTTP facade overlay did not expose synchronous response return types');
     }
 
-    if (! is_string($pendingRequestOverlay) || ! str_contains($pendingRequestOverlay, '@return \\Illuminate\\Http\\Client\\Response') || str_contains($pendingRequestOverlay, 'PromiseInterface') || str_contains($pendingRequestOverlay, 'LazyPromise')) {
+    if (! is_string($pendingRequestOverlay)
+        || ! str_contains($pendingRequestOverlay, '@return \\Illuminate\\Http\\Client\\Response')
+        || str_contains($pendingRequestOverlay, 'PromiseInterface')
+        || str_contains($pendingRequestOverlay, 'LazyPromise')
+        || ! str_contains($pendingRequestOverlay, '@param  \\Psr\\Http\\Message\\StreamInterface|\\Stringable|false|string  $content')
+        || ! str_contains($pendingRequestOverlay, '@param  \\Illuminate\\Http\\UploadedFile|\\SplFileInfo|\\Stringable|resource|string  $contents')) {
         fail('PendingRequest overlay did not expose synchronous response return types');
     }
 

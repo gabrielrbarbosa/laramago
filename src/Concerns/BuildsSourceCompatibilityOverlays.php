@@ -59,6 +59,7 @@ trait BuildsSourceCompatibilityOverlays
                 $translated = $this->annotateLaravelCollectionMacroClosures($translated);
                 $translated = $this->annotateLaravelCollectionStringCallbacks($translated);
                 $translated = $this->loosenLaravelCollectionArrowCallbackParameterTypes($translated);
+                $translated = $this->loosenLaravelCollectionClosureCallbackParameterTypes($translated);
                 $translated = $this->annotateLaravelExcelEventClosures($translated);
                 $translated = $this->annotateLaravelValidationRuleClosures($translated);
                 $translated = $this->annotateLaravelQueryBuilderClosures($translated);
@@ -1020,6 +1021,67 @@ trait BuildsSourceCompatibilityOverlays
         );
 
         return is_string($translated) ? $translated : $source;
+    }
+
+    private function loosenLaravelCollectionClosureCallbackParameterTypes(string $source): string
+    {
+        if (! str_contains($source, 'function') || ! str_contains($source, '->')) {
+            return $source;
+        }
+
+        $methods = [
+            'each',
+            'every',
+            'filter',
+            'first',
+            'flatMap',
+            'groupBy',
+            'keyBy',
+            'map',
+            'mapInto',
+            'mapSpread',
+            'mapToGroups',
+            'mapWithKeys',
+            'partition',
+            'reject',
+            'some',
+            'sortBy',
+            'sortByDesc',
+            'tap',
+            'transform',
+        ];
+        $methodPattern = implode('|', array_map(static fn (string $method): string => preg_quote($method, '/'), $methods));
+
+        $translated = preg_replace_callback(
+            '/(->\s*(?:' . $methodPattern . ')\s*\(\s*(?:static\s+)?function\s*\()([^)]*)(\)\s*(?:use\s*\([^)]*\)\s*)?(?::\s*[^{]+)?\{)/m',
+            fn (array $matches): string => $matches[1] . $this->loosenLaravelCollectionCallbackParameters($matches[2]) . $matches[3],
+            $source,
+        );
+
+        return is_string($translated) ? $translated : $source;
+    }
+
+    private function loosenLaravelCollectionCallbackParameters(string $parameters): string
+    {
+        $parts = explode(',', $parameters);
+
+        foreach ($parts as $index => $parameter) {
+            $parts[$index] = preg_replace_callback(
+                '/^(\s*)(\??\\\\?[A-Za-z_][A-Za-z0-9_\\\\]*(?:\s*&\s*\\\\?[A-Za-z_][A-Za-z0-9_\\\\]*)?(?:\s*\|\s*\??\\\\?[A-Za-z_][A-Za-z0-9_\\\\]*(?:\s*&\s*\\\\?[A-Za-z_][A-Za-z0-9_\\\\]*)?)*)\s+(&?\$[A-Za-z_][A-Za-z0-9_]*\b.*)$/',
+                static function (array $matches): string {
+                    $type = ltrim(strtolower(str_replace([' ', '?'], '', $matches[2])), '\\');
+
+                    if (in_array($type, ['array', 'callable', 'iterable', 'mixed'], true)) {
+                        return $matches[0];
+                    }
+
+                    return $matches[1] . $matches[3];
+                },
+                $parameter,
+            ) ?? $parameter;
+        }
+
+        return implode(',', $parts);
     }
 
     private function annotateLaravelForeachObjectRows(string $source): string
