@@ -57,12 +57,20 @@ During `analyze`, `baseline`, and `verify-baseline`, Laramago:
 
 1. boots the Laravel application;
 2. discovers Eloquent models in `app/Models`;
-3. reads database columns, casts, and public relation methods;
+3. reads database columns, casts, accessors, local scopes, and public relation methods;
 4. writes generated files to `.laramago/cache/model-overlays`;
 5. passes those files to Mago through `--substitute`;
 6. translates baseline and diagnostic paths back to the original app files.
 
 The application source tree is not modified.
+
+Generated overlays currently add:
+
+- `@property` entries for database columns with cast-aware types;
+- `@property-read` entries for legacy `getFooAttribute()` accessors and `Attribute` accessors;
+- `@property-read` entries for Eloquent relations;
+- `@method static` entries for classic `scopeFoo()` local scopes and Laravel `#[Scope]` methods;
+- baseline and output path translation so generated overlay paths do not leak into application diagnostics.
 
 Disable overlays when you want raw Mago behavior:
 

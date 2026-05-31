@@ -56,6 +56,7 @@ if ($doctorExitCode !== $expectedDoctorExitCode) {
 testBaselinePathTranslation($project, $root);
 testOutputPathTranslation($project, $root);
 testRuntimeConfigGeneration($project, $root);
+testModelDocblockIncludesLaravelMagic($root);
 
 cleanup($project);
 echo "OK\n";
@@ -149,6 +150,54 @@ function testRuntimeConfigGeneration(string $project, string $root): void
 
     if (! str_contains($config, 'paths = ["app"]') || ! str_contains($config, 'php-version = "8.5.0"')) {
         fail('runtime config did not preserve project source settings');
+    }
+}
+
+function testModelDocblockIncludesLaravelMagic(string $root): void
+{
+    require_once $root . '/src/Application.php';
+
+    $source = <<<'PHP'
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Model;
+
+class Product extends Model
+{
+}
+PHP;
+
+    $application = new Laramago\Application();
+    $method = new ReflectionMethod($application, 'insertModelDocblock');
+    $overlay = $method->invoke($application, $source, 'Product', [[
+        'name' => 'id',
+        'type' => 'int',
+    ]], [[
+        'name' => 'image_url',
+        'type' => 'string|null',
+    ]], [[
+        'name' => 'orders',
+        'type' => '\\Illuminate\\Database\\Eloquent\\Collection<int, \\App\\Models\\Order>',
+    ]], [[
+        'name' => 'active',
+        'parameters' => 'bool $onlyVisible = null',
+    ]]);
+
+    if (! is_string($overlay)) {
+        fail('model docblock overlay did not return source');
+    }
+
+    foreach ([
+        '@property int $id',
+        '@property-read string|null $image_url',
+        '@property-read \\Illuminate\\Database\\Eloquent\\Collection<int, \\App\\Models\\Order> $orders',
+        '@method static \\Illuminate\\Database\\Eloquent\\Builder<static> active(bool $onlyVisible = null)',
+    ] as $expected) {
+        if (! str_contains($overlay, $expected)) {
+            fail('model docblock overlay missed expected Laravel magic: ' . $expected);
+        }
     }
 }
 

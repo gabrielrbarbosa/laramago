@@ -6,7 +6,7 @@ namespace Laramago;
 
 final class Application
 {
-    private const VERSION = '0.1.2';
+    private const VERSION = '0.1.3';
 
     private const CONFIG_FILE = 'mago.toml';
 
@@ -675,9 +675,11 @@ TOML;
             $file = $model['file'] ?? null;
             $class = $model['shortClass'] ?? null;
             $properties = $model['properties'] ?? null;
+            $accessors = $model['accessors'] ?? [];
             $relations = $model['relations'] ?? null;
+            $scopes = $model['scopes'] ?? [];
 
-            if (! is_string($file) || ! is_string($class) || ! is_array($properties) || ! is_array($relations)) {
+            if (! is_string($file) || ! is_string($class) || ! is_array($properties) || ! is_array($accessors) || ! is_array($relations) || ! is_array($scopes)) {
                 continue;
             }
 
@@ -694,7 +696,7 @@ TOML;
             }
 
             $overlayRelativePath = self::MODEL_OVERLAY_DIR . '/' . sha1($file) . '.php';
-            $overlay = $this->insertModelDocblock($source, $class, $properties, $relations);
+            $overlay = $this->insertModelDocblock($source, $class, $properties, $accessors, $relations, $scopes);
             file_put_contents($projectRoot . '/' . $overlayRelativePath, $overlay);
 
             $pathMap[] = [
@@ -765,9 +767,11 @@ TOML;
 
     /**
      * @param list<array{name: string, type: string}> $properties
+     * @param list<array{name: string, type: string}> $accessors
      * @param list<array{name: string, type: string}> $relations
+     * @param list<array{name: string, parameters: string}> $scopes
      */
-    private function insertModelDocblock(string $source, string $shortClass, array $properties, array $relations): string
+    private function insertModelDocblock(string $source, string $shortClass, array $properties, array $accessors, array $relations, array $scopes): string
     {
         $lines = [
             '/**',
@@ -782,6 +786,14 @@ TOML;
             $lines[] = ' * @property ' . $property['type'] . ' $' . $property['name'];
         }
 
+        foreach ($accessors as $accessor) {
+            if (! is_array($accessor) || ! isset($accessor['name'], $accessor['type'])) {
+                continue;
+            }
+
+            $lines[] = ' * @property-read ' . $accessor['type'] . ' $' . $accessor['name'];
+        }
+
         foreach ($relations as $relation) {
             if (! is_array($relation) || ! isset($relation['name'], $relation['type'])) {
                 continue;
@@ -792,6 +804,15 @@ TOML;
 
         $lines[] = ' * @method static \\Illuminate\\Database\\Eloquent\\Builder<static> query()';
         $lines[] = ' * @method static static|null find(mixed $id, array|string $columns = ["*"])';
+
+        foreach ($scopes as $scope) {
+            if (! is_array($scope) || ! isset($scope['name'], $scope['parameters'])) {
+                continue;
+            }
+
+            $lines[] = ' * @method static \\Illuminate\\Database\\Eloquent\\Builder<static> ' . $scope['name'] . '(' . $scope['parameters'] . ')';
+        }
+
         $lines[] = ' */';
 
         $docblock = implode(PHP_EOL, $lines) . PHP_EOL;

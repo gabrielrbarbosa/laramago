@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 use Illuminate\Contracts\Console\Kernel;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
+use Illuminate\Database\Eloquent\Attributes\Scope;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
@@ -51,7 +53,9 @@ foreach ($classes as $entry) {
             'shortClass' => (new ReflectionClass($class))->getShortName(),
             'file' => $file,
             'properties' => modelProperties($model),
+            'accessors' => modelAccessors($class),
             'relations' => modelRelations($class, $model),
+            'scopes' => modelScopes($class),
         ];
     } catch (Throwable) {
         continue;
@@ -144,6 +148,43 @@ function propertyType(mixed $cast, string $databaseType, bool $nullable): string
 /**
  * @return list<array{name: string, type: string}>
  */
+function modelAccessors(string $class): array
+{
+    $accessors = [];
+    $reflection = new ReflectionClass($class);
+
+    foreach ($reflection->getMethods(ReflectionMethod::IS_PUBLIC | ReflectionMethod::IS_PROTECTED) as $method) {
+        if ($method->getDeclaringClass()->getName() !== $class || $method->getNumberOfParameters() > 0) {
+            continue;
+        }
+
+        $name = $method->getName();
+
+        if (preg_match('/^get([A-Z][A-Za-z0-9_]*)Attribute$/', $name, $matches) === 1) {
+            $accessors[] = [
+                'name' => snakeCase($matches[1]),
+                'type' => reflectionType($method->getReturnType()),
+            ];
+
+            continue;
+        }
+
+        $returnType = $method->getReturnType();
+
+        if ($returnType instanceof ReflectionNamedType && is_a($returnType->getName(), Attribute::class, true)) {
+            $accessors[] = [
+                'name' => snakeCase($name),
+                'type' => attributeAccessorType((string) $method->getDocComment()),
+            ];
+        }
+    }
+
+    return uniqueNamedMetadata($accessors);
+}
+
+/**
+ * @return list<array{name: string, type: string}>
+ */
 function modelRelations(string $class, Model $model): array
 {
     $relations = [];
@@ -179,6 +220,47 @@ function modelRelations(string $class, Model $model): array
     return $relations;
 }
 
+/**
+ * @return list<array{name: string, parameters: string}>
+ */
+function modelScopes(string $class): array
+{
+    $scopes = [];
+    $reflection = new ReflectionClass($class);
+
+    foreach ($reflection->getMethods(ReflectionMethod::IS_PUBLIC | ReflectionMethod::IS_PROTECTED) as $method) {
+        if ($method->getDeclaringClass()->getName() !== $class) {
+            continue;
+        }
+
+        $name = $method->getName();
+        $scopeName = null;
+
+        if (preg_match('/^scope([A-Z][A-Za-z0-9_]*)$/', $name, $matches) === 1) {
+            $scopeName = lcfirst($matches[1]);
+        } elseif ($method->getAttributes(Scope::class) !== []) {
+            $scopeName = $name;
+        }
+
+        if ($scopeName === null) {
+            continue;
+        }
+
+        $parameters = [];
+
+        foreach (array_slice($method->getParameters(), 1) as $parameter) {
+            $parameters[] = parameterSignature($parameter);
+        }
+
+        $scopes[] = [
+            'name' => $scopeName,
+            'parameters' => implode(', ', $parameters),
+        ];
+    }
+
+    return uniqueNamedMetadata($scopes);
+}
+
 function relationType(string $relationClass, string $relatedClass): string
 {
     $relatedClass = '\\' . ltrim($relatedClass, '\\');
@@ -192,4 +274,101 @@ function relationType(string $relationClass, string $relatedClass): string
     }
 
     return 'mixed';
+}
+
+function reflectionType(?ReflectionType $type): string
+{
+    if ($type instanceof ReflectionNamedType) {
+        $name = $type->getName();
+        $name = match ($name) {
+            'self', 'static', 'parent', 'int', 'float', 'bool', 'array', 'string', 'mixed', 'object', 'callable', 'iterable', 'void', 'never', 'null', 'false', 'true' => $name,
+            default => '\\' . ltrim($name, '\\'),
+        };
+
+        if ($type->allowsNull() && ! in_array($name, ['mixed', 'null'], true)) {
+            return $name . '|null';
+        }
+
+        return $name;
+    }
+
+    if ($type instanceof ReflectionUnionType) {
+        return implode('|', array_map(reflectionType(...), $type->getTypes()));
+    }
+
+    if ($type instanceof ReflectionIntersectionType) {
+        return implode('&', array_map(reflectionType(...), $type->getTypes()));
+    }
+
+    return 'mixed';
+}
+
+function attributeAccessorType(string $docComment): string
+{
+    if (preg_match('/@return\s+' . preg_quote(Attribute::class, '/') . '<([^,>\s]+)/', $docComment, $matches) === 1) {
+        return normalizeDocblockType($matches[1]);
+    }
+
+    if (preg_match('/@return\s+\\\\?' . preg_quote(Attribute::class, '/') . '<([^,>\s]+)/', $docComment, $matches) === 1) {
+        return normalizeDocblockType($matches[1]);
+    }
+
+    return 'mixed';
+}
+
+function normalizeDocblockType(string $type): string
+{
+    return match ($type) {
+        'int', 'float', 'bool', 'array', 'string', 'mixed', 'object', 'callable', 'iterable', 'null', 'false', 'true' => $type,
+        default => str_starts_with($type, '\\') ? $type : '\\' . $type,
+    };
+}
+
+function parameterSignature(ReflectionParameter $parameter): string
+{
+    $signature = reflectionType($parameter->getType());
+
+    if ($parameter->isPassedByReference()) {
+        $signature .= ' &';
+    }
+
+    if ($parameter->isVariadic()) {
+        $signature .= ' ...';
+    }
+
+    $signature .= ' $' . $parameter->getName();
+
+    if ($parameter->isOptional() && ! $parameter->isVariadic()) {
+        $signature .= ' = null';
+    }
+
+    return $signature;
+}
+
+function snakeCase(string $value): string
+{
+    $snake = preg_replace('/(?<!^)[A-Z]/', '_$0', $value);
+
+    return strtolower(is_string($snake) ? $snake : $value);
+}
+
+/**
+ * @param list<array{name: string}> $metadata
+ * @return list<array{name: string}>
+ */
+function uniqueNamedMetadata(array $metadata): array
+{
+    $seen = [];
+    $unique = [];
+
+    foreach ($metadata as $entry) {
+        if (isset($seen[$entry['name']])) {
+            continue;
+        }
+
+        $seen[$entry['name']] = true;
+        $unique[] = $entry;
+    }
+
+    return $unique;
 }
