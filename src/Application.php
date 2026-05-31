@@ -6,7 +6,7 @@ namespace Laramago;
 
 final class Application
 {
-    private const VERSION = '0.1.33';
+    private const VERSION = '0.1.34';
 
     private const CONFIG_FILE = 'mago.toml';
 
@@ -1085,6 +1085,10 @@ TOML;
             [
                 'code' => 'unused-pragma',
                 'in' => self::PHPSTAN_PRAGMA_OVERLAY_DIR . '/',
+            ],
+            [
+                'code' => 'too-few-arguments',
+                'in' => self::FRAMEWORK_OVERLAY_DIR . '/',
             ],
         ]);
     }

@@ -240,6 +240,10 @@ function testRuntimeConfigGeneration(string $project, string $root): void
         fail('runtime config should ignore unused generated PHPStan pragma compatibility overlays');
     }
 
+    if (! str_contains($config, '{ code = "too-few-arguments", in = ".laramago/cache/framework-overlays/" }')) {
+        fail('runtime config should ignore generated framework overlay implementation noise');
+    }
+
     if (str_contains($config, '"mixed-argument"')) {
         fail('runtime config should not include PHPStan level ignores unless explicitly requested');
     }
