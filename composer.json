@@ -1,0 +1,44 @@
+{
+    "name": "laramago/laramago",
+    "description": "Laravel compatibility preset and runner for Mago static analysis.",
+    "type": "library",
+    "license": "MIT",
+    "homepage": "https://github.com/gabrielrbarbosa/laramago",
+    "keywords": [
+        "laravel",
+        "mago",
+        "static-analysis",
+        "larastan",
+        "phpstan"
+    ],
+    "support": {
+        "issues": "https://github.com/gabrielrbarbosa/laramago/issues",
+        "source": "https://github.com/gabrielrbarbosa/laramago"
+    },
+    "require": {
+        "php": "^8.2",
+        "carthage-software/mago": "^1.29"
+    },
+    "autoload": {
+        "psr-4": {
+            "Laramago\\": "src/"
+        }
+    },
+    "bin": [
+        "bin/laramago"
+    ],
+    "scripts": {
+        "test": [
+            "@php tests/run.php"
+        ],
+        "lint": [
+            "@php -l bin/laramago",
+            "@php -l src/Application.php",
+            "@php -l resources/laravel-model-metadata.php",
+            "@php -l tests/run.php"
+        ]
+    },
+    "config": {
+        "sort-packages": true
+    }
+}
