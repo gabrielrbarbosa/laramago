@@ -92,8 +92,9 @@ During `analyze`, `baseline`, and `verify-baseline`, Laramago:
 5. reads Composer `autoload` and `autoload-dev` PSR-4/classmap paths for type discovery outside analyzed source paths;
 6. writes generated files to `.laramago/cache/model-overlays` and `.laramago/cache/framework-overlays`;
 7. writes lightweight symbol stubs for excluded application paths to `.laramago/cache/excluded-symbols`;
-8. passes overlays to Mago through `--substitute` and includes excluded symbol stubs for type discovery;
-9. translates baseline and diagnostic paths back to the original app files.
+8. translates existing PHPStan suppression comments into temporary Mago pragma overlays;
+9. passes overlays to Mago through `--substitute` and includes excluded symbol stubs for type discovery;
+10. translates baseline and diagnostic paths back to the original app files.
 
 The application source tree is not modified.
 
@@ -102,7 +103,7 @@ Generated overlays currently add:
 - `@property` entries for database columns with cast-aware types, including encrypted casts, collection/array object casts, date casts, and enum casts;
 - `@property-read` entries for legacy `getFooAttribute()` accessors and `Attribute` accessors;
 - `@property-read` entries for Eloquent relations, including through, polymorphic, and many-to-many collection relations;
-- `@method static` entries for common static Eloquent model calls such as `create`, `firstOrFail`, `find`, and `findOrFail`;
+- `@method static` entries for common Eloquent builder calls such as `where`, `with`, `withCount`, `get`, `pluck`, `count`, `create`, `find`, and `findOrFail`;
 - merged generated metadata with existing model class PHPDoc, so project annotations such as `@mixin`, `@method`, `@property`, and generic hints stay visible;
 - `createToken` return types for models using Laravel Sanctum's `HasApiTokens` trait;
 - `@method static` entries for classic `scopeFoo()` local scopes and Laravel `#[Scope]` methods;
@@ -111,6 +112,7 @@ Generated overlays currently add:
 - auth guard and facade return types for the configured Laravel user model;
 - Composer autoload and autoload-dev type discovery for application namespaces that live outside the analyzed source paths;
 - excluded-path symbol discovery so `exclude` can omit legacy code from analysis without turning referenced classes into false missing-class errors;
+- PHPStan suppression pragma compatibility for `@phpstan-ignore`, `@phpstan-ignore-next-line`, and `@phpstan-ignore-line` comments through generated temporary overlays;
 - baseline and output path translation so generated overlay paths do not leak into application diagnostics.
 
 Disable overlays when you want raw Mago behavior:
@@ -125,13 +127,19 @@ Disable Laravel framework overlays when you want raw framework vendor types:
 vendor/bin/laramago analyze --no-laravel-framework-overlays
 ```
 
+Disable PHPStan pragma compatibility when you want raw Mago suppression behavior:
+
+```bash
+vendor/bin/laramago analyze --no-phpstan-pragma-overlays
+```
+
 ## Commands
 
 ```bash
 vendor/bin/laramago init [--force] [--source=app] [--exclude=path/**]
 vendor/bin/laramago migrate-phpstan [--force] [--phpstan-config=phpstan.neon] [--update-composer]
 vendor/bin/laramago prepare
-vendor/bin/laramago analyze [--phpstan-level=6] [mago analyze options] [path ...]
+vendor/bin/laramago analyze [--phpstan-level=6] [--no-phpstan-pragma-overlays] [mago analyze options] [path ...]
 vendor/bin/laramago baseline [--force] [--phpstan-level=6]
 vendor/bin/laramago verify-baseline
 vendor/bin/laramago doctor

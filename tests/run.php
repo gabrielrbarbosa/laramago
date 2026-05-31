@@ -66,6 +66,7 @@ testExcludedSymbolStubGeneration($project, $root);
 testRaceSafeCacheDirectoryOperations($project, $root);
 testProjectClassDiscoveryUsesConfiguredSourcePaths($project, $root);
 testAnalysisIgnoresStaleRuntimeBaseline($project, $root);
+testPhpStanPragmaOverlayGeneration($project, $root);
 testLaravelMetadataInferenceHelpers($root);
 testModelDocblockIncludesLaravelMagic($root);
 testLaravelFrameworkOverlayGeneration($project, $root);
@@ -230,8 +231,12 @@ function testRuntimeConfigGeneration(string $project, string $root): void
         fail('runtime config should keep strict unused definition checks by default');
     }
 
-    if (str_contains($config, 'ignore = [')) {
-        fail('runtime config should not include package-level analyzer ignores');
+    if (! str_contains($config, '{ code = "unused-pragma", in = ".laramago/cache/phpstan-pragma-overlays/" }')) {
+        fail('runtime config should ignore unused generated PHPStan pragma compatibility overlays');
+    }
+
+    if (str_contains($config, '"mixed-argument"')) {
+        fail('runtime config should not include PHPStan level ignores unless explicitly requested');
     }
 
     $levelRuntimeConfig = $method->invoke($application, $project, ['--phpstan-level=6']);
@@ -550,6 +555,51 @@ function testAnalysisIgnoresStaleRuntimeBaseline(string $project, string $root):
     }
 }
 
+function testPhpStanPragmaOverlayGeneration(string $project, string $root): void
+{
+    require_once $root . '/src/Application.php';
+
+    file_put_contents($project . '/app/PhpStanIgnored.php', <<<'PHP'
+<?php
+
+namespace App;
+
+final class PhpStanIgnored
+{
+    public function nextLine(): void
+    {
+        // @phpstan-ignore-next-line
+        $this->missing();
+    }
+
+    public function sameLine(): mixed
+    {
+        return $this->missing(); // @phpstan-ignore-line
+    }
+}
+PHP);
+
+    $application = new Laramago\Application();
+    $method = new ReflectionMethod($application, 'phpStanPragmaSubstitutions');
+    $substitutions = $method->invoke($application, $project, [], []);
+
+    if (! is_array($substitutions) || count($substitutions) !== 2) {
+        fail('PHPStan pragma overlay generation returned unexpected substitutions');
+    }
+
+    $map = json_decode((string) file_get_contents($project . '/.laramago/cache/phpstan-pragma-overlays.json'), true);
+
+    if (! is_array($map) || ($map[0]['original'] ?? null) !== 'app/PhpStanIgnored.php' || ! is_string($map[0]['overlay'] ?? null)) {
+        fail('PHPStan pragma overlay generation wrote an unexpected path map');
+    }
+
+    $overlay = file_get_contents($project . '/' . $map[0]['overlay']);
+
+    if (! is_string($overlay) || substr_count($overlay, '@mago-ignore all') !== 2) {
+        fail('PHPStan pragma overlay generation did not translate ignore comments');
+    }
+}
+
 function testLaravelMetadataInferenceHelpers(string $root): void
 {
     if (! class_exists('Illuminate\\Database\\Eloquent\\Model')) {
@@ -645,9 +695,13 @@ PHP;
         '@property int $id',
         '@property-read string|null $image_url',
         '@property-read \\Illuminate\\Database\\Eloquent\\Collection<int, \\App\\Models\\Order> $orders',
+        '@method static \\Illuminate\\Database\\Eloquent\\Builder<static> where(mixed $column, mixed $operator = null, mixed $value = null, string $boolean = "and")',
+        '@method static \\Illuminate\\Database\\Eloquent\\Builder<static> withCount(array|string $relations)',
         '@method static static|null create(array $attributes = null)',
         '@method static static|null firstOrFail(array|string $columns = ["*"])',
         '@method static static|null findOrFail(mixed $id, array|string $columns = ["*"])',
+        '@method static \\Illuminate\\Database\\Eloquent\\Collection get(array|string $columns = ["*"])',
+        '@method static \\Illuminate\\Support\\Collection pluck(string $column, mixed $key = null)',
         '@method \\Laravel\\Sanctum\\NewAccessToken createToken(string $name, array $abilities = ["*"], ?\\DateTimeInterface $expiresAt = null)',
         '@method static \\Illuminate\\Database\\Eloquent\\Builder<static> active(bool $onlyVisible = null)',
         '@mixin \\Illuminate\\Database\\Eloquent\\Builder<Product>',

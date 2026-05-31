@@ -6,7 +6,7 @@ namespace Laramago;
 
 final class Application
 {
-    private const VERSION = '0.1.28';
+    private const VERSION = '0.1.29';
 
     private const CONFIG_FILE = 'mago.toml';
 
@@ -19,6 +19,10 @@ final class Application
     private const MODEL_OVERLAY_MAP = '.laramago/cache/model-overlays.json';
 
     private const FRAMEWORK_OVERLAY_DIR = '.laramago/cache/framework-overlays';
+
+    private const PHPSTAN_PRAGMA_OVERLAY_DIR = '.laramago/cache/phpstan-pragma-overlays';
+
+    private const PHPSTAN_PRAGMA_OVERLAY_MAP = '.laramago/cache/phpstan-pragma-overlays.json';
 
     private const EXCLUDED_SYMBOL_DIR = '.laramago/cache/excluded-symbols';
 
@@ -193,7 +197,8 @@ final class Application
         $runtimeConfig = $this->prepareRuntimeConfig($projectRoot, $arguments);
         $modelSubstitutions = $this->laravelModelSubstitutions($projectRoot, $arguments);
         $frameworkSubstitutions = $this->laravelFrameworkSubstitutions($projectRoot, $arguments);
-        $substitutions = array_merge($modelSubstitutions, $frameworkSubstitutions);
+        $pragmaSubstitutions = $this->phpStanPragmaSubstitutions($projectRoot, $arguments, $this->substitutionOriginalPaths($modelSubstitutions));
+        $substitutions = array_merge($modelSubstitutions, $frameworkSubstitutions, $pragmaSubstitutions);
         $command = [$mago, '--config', $runtimeConfig, 'analyze'];
         $command = array_merge(
             $command,
@@ -233,7 +238,12 @@ final class Application
         ];
 
         $substitutions = $this->laravelModelSubstitutions($projectRoot, $arguments);
-        $command = array_merge($command, $substitutions, $this->laravelFrameworkSubstitutions($projectRoot, $arguments));
+        $command = array_merge(
+            $command,
+            $substitutions,
+            $this->laravelFrameworkSubstitutions($projectRoot, $arguments),
+            $this->phpStanPragmaSubstitutions($projectRoot, $arguments, $this->substitutionOriginalPaths($substitutions)),
+        );
 
         if (is_file($projectRoot . '/' . $baselinePath) && ! in_array('--force', $arguments, true)) {
             $command[] = '--backup-baseline';
@@ -265,7 +275,11 @@ final class Application
         }
 
         $modelSubstitutions = $this->laravelModelSubstitutions($projectRoot, $arguments);
-        $substitutions = array_merge($modelSubstitutions, $this->laravelFrameworkSubstitutions($projectRoot, $arguments));
+        $substitutions = array_merge(
+            $modelSubstitutions,
+            $this->laravelFrameworkSubstitutions($projectRoot, $arguments),
+            $this->phpStanPragmaSubstitutions($projectRoot, $arguments, $this->substitutionOriginalPaths($modelSubstitutions)),
+        );
 
         $runtimeConfig = $this->prepareRuntimeConfig($projectRoot, $arguments);
 
@@ -354,7 +368,7 @@ Usage:
   laramago init [--force] [--source=app] [--exclude=path/**]
   laramago migrate-phpstan [--force] [--phpstan-config=phpstan.neon] [--update-composer]
   laramago prepare
-  laramago analyze [--phpstan-level=6] [--no-laravel-model-overlays] [--no-laravel-framework-overlays] [mago analyze options] [path ...]
+  laramago analyze [--phpstan-level=6] [--no-laravel-model-overlays] [--no-laravel-framework-overlays] [--no-phpstan-pragma-overlays] [mago analyze options] [path ...]
   laramago baseline [--force] [--phpstan-level=6]
   laramago verify-baseline
   laramago doctor
@@ -974,7 +988,7 @@ TOML;
         $paths = $this->tomlArray($sourcePaths);
         $includesValue = $this->tomlArray($includes);
         $excludesValue = $this->tomlArray($excludes);
-        $ignoreBlock = $this->renderAnalyzerIgnoreBlock($this->phpStanCompatibilityIgnores($arguments));
+        $ignoreBlock = $this->renderAnalyzerIgnoreBlock($this->runtimeAnalyzerIgnores($arguments));
         $findUnusedDefinitions = $this->usesPhpStanLevelSixProfile($arguments) ? 'false' : 'true';
 
         return <<<TOML
@@ -1033,6 +1047,18 @@ no-boolean-literal-comparison = false
 check-missing-type-hints = false
 register-super-globals = true
 TOML;
+    }
+
+    /**
+     * @param list<string> $arguments
+     * @return list<string|array{code: string, in: string}>
+     */
+    private function runtimeAnalyzerIgnores(array $arguments): array
+    {
+        return array_merge($this->phpStanCompatibilityIgnores($arguments), [[
+            'code' => 'unused-pragma',
+            'in' => self::PHPSTAN_PRAGMA_OVERLAY_DIR . '/',
+        ]]);
     }
 
     /**
@@ -1165,7 +1191,7 @@ TOML;
     }
 
     /**
-     * @param list<string> $codes
+     * @param list<string|array{code: string, in: string}> $codes
      */
     private function renderAnalyzerIgnoreBlock(array $codes): string
     {
@@ -1174,7 +1200,13 @@ TOML;
         }
 
         return 'ignore = [' . PHP_EOL
-            . implode(PHP_EOL, array_map(static fn (string $code): string => '  "' . $code . '",', $codes))
+            . implode(PHP_EOL, array_map(static function (string|array $ignore): string {
+                if (is_string($ignore)) {
+                    return '  "' . $ignore . '",';
+                }
+
+                return '  { code = "' . $ignore['code'] . '", in = "' . $ignore['in'] . '" },';
+            }, $codes))
             . PHP_EOL
             . ']';
     }
@@ -1323,7 +1355,7 @@ TOML;
             }
 
             $overlayRelativePath = self::MODEL_OVERLAY_DIR . '/' . sha1($file) . '.php';
-            $overlay = $this->insertModelDocblock($source, $class, $properties, $accessors, $relations, $scopes, $usesSanctumApiTokens);
+            $overlay = $this->translatePhpStanPragmas($this->insertModelDocblock($source, $class, $properties, $accessors, $relations, $scopes, $usesSanctumApiTokens));
             file_put_contents($projectRoot . '/' . $overlayRelativePath, $overlay);
 
             $pathMap[] = [
@@ -1551,6 +1583,148 @@ PHP;
             'original' => $originalPath,
             'overlay' => $overlayPath,
         ];
+    }
+
+    /**
+     * @param list<string> $arguments
+     * @param array<string, true> $skippedOriginalPaths
+     * @return list<string>
+     */
+    private function phpStanPragmaSubstitutions(string $projectRoot, array $arguments, array $skippedOriginalPaths = []): array
+    {
+        if (in_array('--no-phpstan-pragma-overlays', $arguments, true)) {
+            return [];
+        }
+
+        $overlayDirectory = $projectRoot . '/' . self::PHPSTAN_PRAGMA_OVERLAY_DIR;
+
+        if (is_dir($overlayDirectory)) {
+            $this->removeDirectory($overlayDirectory);
+        }
+
+        $substitutions = [];
+        $pathMap = [];
+        $seenFiles = [];
+
+        foreach ($this->projectConfigValues($projectRoot)['paths'] as $path) {
+            foreach ($this->sourcePhpFiles($projectRoot, $path) as $file) {
+                if (isset($seenFiles[$file]) || isset($skippedOriginalPaths[$file])) {
+                    continue;
+                }
+
+                $seenFiles[$file] = true;
+                $source = file_get_contents($file);
+
+                if (! is_string($source) || ! str_contains($source, '@phpstan-ignore')) {
+                    continue;
+                }
+
+                $overlay = $this->translatePhpStanPragmas($source);
+
+                if ($overlay === $source) {
+                    continue;
+                }
+
+                $relativePath = ltrim(substr($file, strlen($projectRoot)), '/');
+                $overlayRelativePath = self::PHPSTAN_PRAGMA_OVERLAY_DIR . '/' . sha1($relativePath) . '.php';
+                $this->ensureDirectory($overlayDirectory);
+                file_put_contents($projectRoot . '/' . $overlayRelativePath, $overlay);
+
+                $pathMap[] = [
+                    'original' => $relativePath,
+                    'overlay' => $overlayRelativePath,
+                ];
+
+                $substitutions[] = '--substitute';
+                $substitutions[] = $file . '=' . $projectRoot . '/' . $overlayRelativePath;
+            }
+        }
+
+        file_put_contents($projectRoot . '/' . self::PHPSTAN_PRAGMA_OVERLAY_MAP, json_encode($pathMap, JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR));
+
+        return $substitutions;
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function sourcePhpFiles(string $projectRoot, string $path): array
+    {
+        $path = $this->normalizeProjectPath($this->baseDirectoryFromGlob($path));
+
+        if ($path === '' || str_starts_with($path, '/') || str_starts_with($path, '../')) {
+            return [];
+        }
+
+        $absolutePath = $projectRoot . '/' . $path;
+
+        if (is_file($absolutePath) && str_ends_with($absolutePath, '.php')) {
+            return [$absolutePath];
+        }
+
+        if (is_dir($absolutePath)) {
+            return $this->phpFiles($absolutePath);
+        }
+
+        return [];
+    }
+
+    private function translatePhpStanPragmas(string $source): string
+    {
+        $lines = preg_split('/(\R)/', $source, -1, PREG_SPLIT_DELIM_CAPTURE);
+
+        if (! is_array($lines)) {
+            return $source;
+        }
+
+        $translated = '';
+
+        for ($index = 0; $index < count($lines); $index += 2) {
+            $line = (string) $lines[$index];
+            $lineEnding = (string) ($lines[$index + 1] ?? '');
+
+            if (str_contains($line, '@phpstan-ignore-line')) {
+                preg_match('/^\s*/', $line, $matches);
+                $translated .= ($matches[0] ?? '') . '// @mago-ignore all' . $lineEnding . $line . $lineEnding;
+
+                continue;
+            }
+
+            $line = preg_replace('/@phpstan-ignore-next-line\b[^\r\n*]*/', '@mago-ignore all', $line) ?? $line;
+            $line = preg_replace('/@phpstan-ignore\b[^\r\n*]*/', '@mago-ignore all', $line) ?? $line;
+            $translated .= $line . $lineEnding;
+        }
+
+        return $translated;
+    }
+
+    /**
+     * @param list<string> $substitutions
+     * @return array<string, true>
+     */
+    private function substitutionOriginalPaths(array $substitutions): array
+    {
+        $paths = [];
+
+        foreach ($substitutions as $index => $argument) {
+            if ($argument !== '--substitute') {
+                continue;
+            }
+
+            $substitution = $substitutions[$index + 1] ?? null;
+
+            if (! is_string($substitution)) {
+                continue;
+            }
+
+            $position = strpos($substitution, '=');
+
+            if ($position !== false) {
+                $paths[substr($substitution, 0, $position)] = true;
+            }
+        }
+
+        return $paths;
     }
 
     private function detectAuthUserModel(string $projectRoot): ?string
@@ -1818,11 +1992,9 @@ PHP;
             $lines[] = ' * @property-read ' . $relation['type'] . ' $' . $relation['name'];
         }
 
-        $lines[] = ' * @method static \\Illuminate\\Database\\Eloquent\\Builder<static> query()';
-        $lines[] = ' * @method static static|null create(array $attributes = null)';
-        $lines[] = ' * @method static static|null firstOrFail(array|string $columns = ["*"])';
-        $lines[] = ' * @method static static|null find(mixed $id, array|string $columns = ["*"])';
-        $lines[] = ' * @method static static|null findOrFail(mixed $id, array|string $columns = ["*"])';
+        foreach ($this->eloquentModelMagicMethods() as $method) {
+            $lines[] = $method;
+        }
 
         if ($usesSanctumApiTokens) {
             $lines[] = ' * @method \\Laravel\\Sanctum\\NewAccessToken createToken(string $name, array $abilities = ["*"], ?\\DateTimeInterface $expiresAt = null)';
@@ -1853,6 +2025,27 @@ PHP;
         }
 
         return substr($source, 0, $declarationOffset) . $docblock . substr($source, $declarationOffset);
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function eloquentModelMagicMethods(): array
+    {
+        return [
+            ' * @method static \\Illuminate\\Database\\Eloquent\\Builder<static> query()',
+            ' * @method static \\Illuminate\\Database\\Eloquent\\Builder<static> where(mixed $column, mixed $operator = null, mixed $value = null, string $boolean = "and")',
+            ' * @method static \\Illuminate\\Database\\Eloquent\\Builder<static> with(array|string $relations)',
+            ' * @method static \\Illuminate\\Database\\Eloquent\\Builder<static> withCount(array|string $relations)',
+            ' * @method static static|null create(array $attributes = null)',
+            ' * @method static static|null firstOrFail(array|string $columns = ["*"])',
+            ' * @method static static|null find(mixed $id, array|string $columns = ["*"])',
+            ' * @method static static|null findOrFail(mixed $id, array|string $columns = ["*"])',
+            ' * @method static \\Illuminate\\Database\\Eloquent\\Collection get(array|string $columns = ["*"])',
+            ' * @method static \\Illuminate\\Support\\Collection pluck(string $column, mixed $key = null)',
+            ' * @method static mixed value(string $column)',
+            ' * @method static int count(string $columns = "*")',
+        ];
     }
 
     /**
@@ -1932,21 +2125,16 @@ PHP;
 
     private function translateBaselinePaths(string $projectRoot, bool $overlayToOriginal, string $source, string $target): bool
     {
-        $mapPath = $projectRoot . '/' . self::MODEL_OVERLAY_MAP;
         $sourcePath = $projectRoot . '/' . $source;
         $targetPath = $projectRoot . '/' . $target;
 
-        if (! is_file($mapPath) || ! is_file($sourcePath)) {
+        if (! is_file($sourcePath)) {
             return false;
         }
 
-        try {
-            $map = json_decode((string) file_get_contents($mapPath), true, 512, JSON_THROW_ON_ERROR);
-        } catch (\JsonException) {
-            return false;
-        }
+        $map = $this->overlayPathMap($projectRoot);
 
-        if (! is_array($map)) {
+        if ($map === []) {
             return false;
         }
 
@@ -1984,6 +2172,7 @@ PHP;
                 && $argument !== '--force'
                 && $argument !== '--no-laravel-model-overlays'
                 && $argument !== '--no-laravel-framework-overlays'
+                && $argument !== '--no-phpstan-pragma-overlays'
         ));
     }
 
@@ -2032,23 +2221,11 @@ PHP;
 
     private function translateOutputPaths(string $projectRoot, string $output): string
     {
-        $mapPath = $projectRoot . '/' . self::MODEL_OVERLAY_MAP;
-
-        if (! is_file($mapPath) || $output === '') {
+        if ($output === '') {
             return $output;
         }
 
-        try {
-            $map = json_decode((string) file_get_contents($mapPath), true, 512, JSON_THROW_ON_ERROR);
-        } catch (\JsonException) {
-            return $output;
-        }
-
-        if (! is_array($map)) {
-            return $output;
-        }
-
-        foreach ($map as $entry) {
+        foreach ($this->overlayPathMap($projectRoot) as $entry) {
             if (! is_array($entry) || ! isset($entry['original'], $entry['overlay']) || ! is_string($entry['original']) || ! is_string($entry['overlay'])) {
                 continue;
             }
@@ -2058,6 +2235,45 @@ PHP;
         }
 
         return $output;
+    }
+
+    /**
+     * @return list<array{original: string, overlay: string}>
+     */
+    private function overlayPathMap(string $projectRoot): array
+    {
+        $map = [];
+
+        foreach ([self::MODEL_OVERLAY_MAP, self::PHPSTAN_PRAGMA_OVERLAY_MAP] as $mapFile) {
+            $mapPath = $projectRoot . '/' . $mapFile;
+
+            if (! is_file($mapPath)) {
+                continue;
+            }
+
+            try {
+                $entries = json_decode((string) file_get_contents($mapPath), true, 512, JSON_THROW_ON_ERROR);
+            } catch (\JsonException) {
+                continue;
+            }
+
+            if (! is_array($entries)) {
+                continue;
+            }
+
+            foreach ($entries as $entry) {
+                if (! is_array($entry) || ! isset($entry['original'], $entry['overlay']) || ! is_string($entry['original']) || ! is_string($entry['overlay'])) {
+                    continue;
+                }
+
+                $map[] = [
+                    'original' => $entry['original'],
+                    'overlay' => $entry['overlay'],
+                ];
+            }
+        }
+
+        return $map;
     }
 
     /**
