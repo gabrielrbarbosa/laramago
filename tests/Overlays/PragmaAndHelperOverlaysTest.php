@@ -404,7 +404,7 @@ PHP);
         $overlay = file_get_contents($project . '/' . $entry['overlay']);
 
         if (is_string($overlay)
-            && str_contains($overlay, '/** @var \ArrayAccess<string, mixed>|null $account */')) {
+            && str_contains($overlay, '/** @var \Illuminate\Database\Eloquent\Model|null $account */')) {
             return;
         }
     }

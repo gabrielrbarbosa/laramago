@@ -476,7 +476,7 @@ trait BuildsSourceCompatibilityOverlays
                     return $matches[0];
                 }
 
-                return $matches[1] . '/** @var \ArrayAccess<string, mixed>|null $' . $variable . ' */' . PHP_EOL . $matches[0];
+                return $matches[1] . '/** @var \Illuminate\Database\Eloquent\Model|null $' . $variable . ' */' . PHP_EOL . $matches[0];
             },
             $source,
         );
