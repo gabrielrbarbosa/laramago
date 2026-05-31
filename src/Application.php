@@ -6,7 +6,7 @@ namespace Laramago;
 
 final class Application
 {
-    private const VERSION = '0.1.42';
+    private const VERSION = '0.1.43';
 
     private const CONFIG_FILE = 'mago.toml';
 
@@ -2457,11 +2457,12 @@ PHP;
                     continue;
                 }
 
-                $translated = $this->annotateLaravelFormRequestDynamicProperties(
-                    $this->rewriteLaravelRequestPropertyReads($this->annotateLaravelCollectionMacroClosures($this->translateLaravelDateHelperCalls($this->translatePhpStanPragmas($source)))),
-                    $relativePath,
-                    $projectRoot,
-                );
+                $translated = $this->translatePhpStanPragmas($source);
+                $translated = $this->translateLaravelDateHelperCalls($translated);
+                $translated = $this->annotateLaravelCollectionMacroClosures($translated);
+                $translated = $this->rewriteLaravelRequestPropertyReads($translated);
+                $translated = $this->annotateLaravelJsonResourceDynamicMembers($translated, $relativePath);
+                $translated = $this->annotateLaravelFormRequestDynamicProperties($translated, $relativePath, $projectRoot);
                 $minimumAliases = $translated === $source ? 2 : 1;
                 $overlay = $this->insertTraitSelfCallMethods($this->insertCaseInsensitiveMethodAliases($translated, $caseInsensitiveAliasCandidates, $minimumAliases));
 
@@ -2744,6 +2745,68 @@ PHP;
         }
 
         return $translated;
+    }
+
+    private function annotateLaravelJsonResourceDynamicMembers(string $source, string $relativePath): string
+    {
+        $normalizedPath = str_replace('\\', '/', $relativePath);
+
+        if (! str_contains($normalizedPath, '/Http/Resources/') && ! str_starts_with($normalizedPath, 'app/Http/Resources/')) {
+            return $source;
+        }
+
+        if (preg_match('/^(?:(?:abstract|final|readonly)\s+)*class\s+([A-Za-z_][A-Za-z0-9_]*)\s+extends\s+([\\\\A-Za-z_][\\\\A-Za-z0-9_]*)\b/m', $source, $classMatches) !== 1) {
+            return $source;
+        }
+
+        $parent = strtolower($classMatches[2]);
+
+        if (! str_ends_with($parent, 'jsonresource') && ! str_ends_with($parent, 'resourcecollection')) {
+            return $source;
+        }
+
+        $declaredProperties = $this->declaredProperties($source);
+        $properties = [];
+
+        if (preg_match_all('/\$this\s*->\s*([A-Za-z_][A-Za-z0-9_]*)\b(?!\s*\()/', $source, $propertyMatches) > 0) {
+            foreach ($propertyMatches[1] as $property) {
+                if (isset($declaredProperties[$property]) || in_array($property, ['resource', 'with', 'additional', 'wrap', 'forceWrapping', 'preserveKeys'], true)) {
+                    continue;
+                }
+
+                $properties[$property] = true;
+            }
+        }
+
+        $methods = [];
+
+        if (preg_match_all('/\$this\s*->\s*([A-Za-z_][A-Za-z0-9_]*)\s*\(/', $source, $methodMatches) > 0) {
+            foreach ($methodMatches[1] as $method) {
+                if (in_array($method, ['additional', 'jsonOptions', 'jsonSerialize', 'resolve', 'response', 'toArray', 'toAttributes', 'toJson', 'toPrettyJson', 'toResponse', 'with', 'withResponse'], true)) {
+                    continue;
+                }
+
+                $methods[$method] = true;
+            }
+        }
+
+        if ($properties === [] && $methods === []) {
+            return $source;
+        }
+
+        $lines = [
+            ' * @mixin \Illuminate\Database\Eloquent\Model',
+        ];
+
+        foreach (array_keys($properties) as $property) {
+            $lines[] = ' * @property mixed $' . $property;
+        }
+
+        foreach (array_keys($methods) as $method) {
+            $lines[] = ' * @method mixed ' . $method . '(mixed ...$parameters)';
+        }
+
+        return $this->insertClassDocblockLines($source, $classMatches[1], $lines);
     }
 
     private function annotateLaravelFormRequestDynamicProperties(string $source, string $relativePath, string $projectRoot): string

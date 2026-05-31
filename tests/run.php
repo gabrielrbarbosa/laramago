@@ -72,6 +72,7 @@ testPhpStanPragmaOverlayGeneration($project, $root);
 testLaravelDateHelperOverlayGeneration($project, $root);
 testLaravelCollectionMacroOverlayGeneration($project, $root);
 testLaravelRequestPropertyReadOverlayGeneration($project, $root);
+testLaravelJsonResourceDynamicMemberOverlayGeneration($project, $root);
 testLaravelFormRequestDynamicPropertyOverlayGeneration($project, $root);
 testCaseInsensitiveOverlaySkipsSingleAliasFiles($project, $root);
 testCaseInsensitiveOverlayRespectsExcludes($project, $root);
@@ -947,6 +948,60 @@ PHP);
     }
 
     fail('Laravel request property read overlay did not rewrite dynamic input access safely');
+}
+
+function testLaravelJsonResourceDynamicMemberOverlayGeneration(string $project, string $root): void
+{
+    require_once $root . '/src/Application.php';
+
+    mkdir($project . '/app/Http/Resources', 0777, true);
+
+    file_put_contents($project . '/app/Http/Resources/OrderResource.php', <<<'PHP'
+<?php
+
+namespace App\Http\Resources;
+
+use Illuminate\Http\Request;
+use Illuminate\Http\Resources\Json\JsonResource;
+
+class OrderResource extends JsonResource
+{
+    public function toArray(Request $request): array
+    {
+        return [
+            'id' => $this->id,
+            'issued_at' => $this->issued_at->format('Y-m-d'),
+            'status_label' => $this->statusLabel(),
+            'resource' => $this->resource,
+        ];
+    }
+}
+PHP);
+
+    $application = new Laramago\Application();
+    $method = new ReflectionMethod($application, 'phpStanPragmaSubstitutions');
+    $method->invoke($application, $project, [], []);
+
+    $map = json_decode((string) file_get_contents($project . '/.laramago/cache/phpstan-pragma-overlays.json'), true);
+
+    foreach (is_array($map) ? $map : [] as $entry) {
+        if (($entry['original'] ?? null) !== 'app/Http/Resources/OrderResource.php' || ! is_string($entry['overlay'] ?? null)) {
+            continue;
+        }
+
+        $overlay = file_get_contents($project . '/' . $entry['overlay']);
+
+        if (is_string($overlay)
+            && str_contains($overlay, '@mixin \Illuminate\Database\Eloquent\Model')
+            && str_contains($overlay, '@property mixed $id')
+            && str_contains($overlay, '@property mixed $issued_at')
+            && ! str_contains($overlay, '@property mixed $resource')
+            && str_contains($overlay, '@method mixed statusLabel(mixed ...$parameters)')) {
+            return;
+        }
+    }
+
+    fail('Laravel JsonResource overlay did not document delegated resource members');
 }
 
 function testLaravelFormRequestDynamicPropertyOverlayGeneration(string $project, string $root): void
