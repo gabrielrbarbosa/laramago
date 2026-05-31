@@ -320,6 +320,13 @@ trait BuildsLaravelFrameworkOverlays
             ' * @method $this groupBy(array|string ...$groups)',
             ' * @method $this having(string $column, ?string $operator = null, mixed $value = null, string $boolean = "and")',
             ' * @method $this orHaving(string $column, ?string $operator = null, mixed $value = null)',
+            ' * @method $this where(mixed $column, mixed $operator = null, mixed $value = null, string $boolean = "and")',
+            ' * @method $this orWhere(mixed $column, mixed $operator = null, mixed $value = null)',
+            ' * @method $this whereIn(string $column, mixed $values, string $boolean = "and", bool $not = false)',
+            ' * @method $this whereNotIn(string $column, mixed $values)',
+            ' * @method $this whereNull(string|array $columns, string $boolean = "and", bool $not = false)',
+            ' * @method $this whereNotNull(string|array $columns)',
+            ' * @method $this whereDate(string $column, mixed $operator, mixed $value = null, string $boolean = "and")',
             ' * @method $this select(mixed ...$columns)',
             ' * @method $this addSelect(array|string ...$columns)',
             ' * @method $this with(array|string ...$relations)',
@@ -394,6 +401,90 @@ PHP,
      * @return \Illuminate\Database\Eloquent\Builder<TModel>
      */
     public function orderByDesc(mixed $column): \Illuminate\Database\Eloquent\Builder
+    {
+        return $this;
+    }
+PHP,
+            'where' => <<<'PHP'
+
+    /**
+     * Laramago overlay for forwarded query builder conditions.
+     *
+     * @return \Illuminate\Database\Eloquent\Builder<TModel>
+     */
+    public function where(mixed $column, mixed $operator = null, mixed $value = null, string $boolean = 'and'): \Illuminate\Database\Eloquent\Builder
+    {
+        return $this;
+    }
+PHP,
+            'orWhere' => <<<'PHP'
+
+    /**
+     * Laramago overlay for forwarded query builder conditions.
+     *
+     * @return \Illuminate\Database\Eloquent\Builder<TModel>
+     */
+    public function orWhere(mixed $column, mixed $operator = null, mixed $value = null): \Illuminate\Database\Eloquent\Builder
+    {
+        return $this;
+    }
+PHP,
+            'whereIn' => <<<'PHP'
+
+    /**
+     * Laramago overlay for forwarded query builder conditions.
+     *
+     * @return \Illuminate\Database\Eloquent\Builder<TModel>
+     */
+    public function whereIn(string $column, mixed $values, string $boolean = 'and', bool $not = false): \Illuminate\Database\Eloquent\Builder
+    {
+        return $this;
+    }
+PHP,
+            'whereNotIn' => <<<'PHP'
+
+    /**
+     * Laramago overlay for forwarded query builder conditions.
+     *
+     * @return \Illuminate\Database\Eloquent\Builder<TModel>
+     */
+    public function whereNotIn(string $column, mixed $values): \Illuminate\Database\Eloquent\Builder
+    {
+        return $this;
+    }
+PHP,
+            'whereNull' => <<<'PHP'
+
+    /**
+     * Laramago overlay for forwarded query builder null conditions.
+     *
+     * @return \Illuminate\Database\Eloquent\Builder<TModel>
+     */
+    public function whereNull(string|array $columns, string $boolean = 'and', bool $not = false): \Illuminate\Database\Eloquent\Builder
+    {
+        return $this;
+    }
+PHP,
+            'whereNotNull' => <<<'PHP'
+
+    /**
+     * Laramago overlay for forwarded query builder null conditions.
+     *
+     * @return \Illuminate\Database\Eloquent\Builder<TModel>
+     */
+    public function whereNotNull(string|array $columns): \Illuminate\Database\Eloquent\Builder
+    {
+        return $this;
+    }
+PHP,
+            'whereDate' => <<<'PHP'
+
+    /**
+     * Laramago overlay for forwarded query builder date conditions.
+     *
+     * @return \Illuminate\Database\Eloquent\Builder<TModel>
+     */
+    public function whereDate(string $column, mixed $operator, mixed $value = null, string $boolean = 'and'): \Illuminate\Database\Eloquent\Builder
     {
         return $this;
     }
