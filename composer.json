@@ -43,8 +43,20 @@
         "lint": [
             "@php -l bin/laramago",
             "@php -l src/Application.php",
+            "@php -l src/Concerns/BuildsLaravelFrameworkOverlays.php",
+            "@php -l src/Concerns/BuildsLaravelModelOverlays.php",
+            "@php -l src/Concerns/BuildsRuntimeConfig.php",
+            "@php -l src/Concerns/BuildsSourceCompatibilityOverlays.php",
+            "@php -l src/Concerns/MigratesPhpStan.php",
+            "@php -l src/Concerns/RunsMagoProcesses.php",
             "@php -l resources/laravel-model-metadata.php",
-            "@php -l tests/run.php"
+            "@php -l tests/run.php",
+            "@php -l tests/Support.php",
+            "@php -l tests/CommandsTest.php",
+            "@php -l tests/Overlays/PragmaAndHelperOverlaysTest.php",
+            "@php -l tests/Overlays/DynamicMemberOverlaysTest.php",
+            "@php -l tests/Overlays/ClassResolutionOverlaysTest.php",
+            "@php -l tests/Overlays/LaravelMetadataAndFrameworkOverlaysTest.php"
         ]
     },
     "config": {

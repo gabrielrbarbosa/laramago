@@ -200,23 +200,6 @@ Checks whether Mago is installed, `mago.toml` exists, the baseline exists, Larav
 
 Removes `.laramago/cache`.
 
-## Replacing Larastan/PHPStan
-
-Keep your existing Composer script names if your team and CI already call them:
-
-```json
-{
-  "scripts": {
-    "phpstan": "vendor/bin/laramago analyze --phpstan-level=6 --reporting-format=count",
-    "phpstan:ci": "vendor/bin/laramago analyze --phpstan-level=6 --reporting-format=count",
-    "phpstan:ci:debug": "vendor/bin/laramago analyze --phpstan-level=6 --reporting-format=short",
-    "laramago:baseline": "vendor/bin/laramago baseline --phpstan-level=6"
-  }
-}
-```
-
-Then keep `composer test` unchanged if it already calls `@phpstan`.
-
 ## CI
 
 A typical CI static-analysis lane only needs:
