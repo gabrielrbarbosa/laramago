@@ -28,8 +28,16 @@
         "bin/laramago"
     ],
     "scripts": {
+        "ci": [
+            "@check:composer",
+            "@lint",
+            "@test"
+        ],
         "test": [
             "@php tests/run.php"
+        ],
+        "check:composer": [
+            "composer validate --strict"
         ],
         "lint": [
             "@php -l bin/laramago",

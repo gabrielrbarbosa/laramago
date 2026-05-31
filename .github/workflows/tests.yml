@@ -1,4 +1,4 @@
-name: Tests
+name: tests
 
 on:
   push:
@@ -28,15 +28,10 @@ jobs:
         with:
           php-version: ${{ matrix.php-version }}
           coverage: none
+          tools: composer:v2
 
       - name: Install dependencies
         run: composer install --no-interaction --prefer-dist --no-progress
 
-      - name: Validate package
-        run: composer validate --strict
-
-      - name: Lint PHP
-        run: composer lint
-
-      - name: Run tests
-        run: composer test
+      - name: Run checks
+        run: composer ci

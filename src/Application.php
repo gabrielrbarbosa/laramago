@@ -6,7 +6,7 @@ namespace Laramago;
 
 final class Application
 {
-    private const VERSION = '0.1.22';
+    private const VERSION = '0.1.23';
 
     private const CONFIG_FILE = 'mago.toml';
 
