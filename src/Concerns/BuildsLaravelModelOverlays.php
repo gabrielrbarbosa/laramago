@@ -340,18 +340,29 @@ PHP);
         $declaration = trim($classMatches[1]);
         $kind = $classMatches[2];
         $namespace = trim($namespaceMatches[1]);
+        $imports = $this->namespaceImportStatements($source);
         $methods = $this->publicMethodStubs($source, $kind);
+        $importBlock = $imports === [] ? '' : PHP_EOL . implode(PHP_EOL, $imports) . PHP_EOL;
 
         return <<<PHP
 <?php
 
 namespace {$namespace};
-
+{$importBlock}
 {$declaration}
 {
 {$methods}
 }
 PHP;
+    }
+
+    private function namespaceImportStatements(string $source): array
+    {
+        if (preg_match_all('/^use\s+(?:function\s+|const\s+)?[^;]+;/m', $source, $matches) < 1) {
+            return [];
+        }
+
+        return array_values(array_unique(array_map(static fn (string $import): string => trim($import), $matches[0])));
     }
 
     private function publicMethodStubs(string $source, string $kind): string
@@ -442,12 +453,18 @@ PHP;
             ' * @laramago-generated',
         ];
 
+        $propertyTypes = [];
+
         foreach ($properties as $property) {
             if (! is_array($property) || ! isset($property['name'], $property['type'])) {
                 continue;
             }
 
-            $lines[] = ' * @property ' . $property['type'] . ' $' . $property['name'];
+            if (! is_string($property['name']) || ! is_string($property['type'])) {
+                continue;
+            }
+
+            $propertyTypes[$property['name']] = $property['type'];
         }
 
         foreach ($accessors as $accessor) {
@@ -455,11 +472,29 @@ PHP;
                 continue;
             }
 
+            if (! is_string($accessor['name']) || ! is_string($accessor['type'])) {
+                continue;
+            }
+
+            if (isset($propertyTypes[$accessor['name']])) {
+                $propertyTypes[$accessor['name']] = $this->mergeModelDocblockTypes($propertyTypes[$accessor['name']], $accessor['type']);
+
+                continue;
+            }
+
             $lines[] = ' * @property-read ' . $accessor['type'] . ' $' . $accessor['name'];
+        }
+
+        foreach ($propertyTypes as $name => $type) {
+            $lines[] = ' * @property ' . $type . ' $' . $name;
         }
 
         foreach ($relations as $relation) {
             if (! is_array($relation) || ! isset($relation['name'], $relation['type'])) {
+                continue;
+            }
+
+            if (! is_string($relation['name']) || ! is_string($relation['type']) || isset($propertyTypes[$relation['name']])) {
                 continue;
             }
 
@@ -488,6 +523,31 @@ PHP;
 
         $docblock = '/**' . PHP_EOL . implode(PHP_EOL, $lines) . PHP_EOL . ' */' . PHP_EOL;
         return $this->insertModelStaticDelegationMethods($this->insertClassDocblockLines($source, $shortClass, $lines, $docblock));
+    }
+
+    private function mergeModelDocblockTypes(string $left, string $right): string
+    {
+        if ($left === $right || $right === '') {
+            return $left;
+        }
+
+        if ($left === '' || $right === 'mixed' || $left === 'mixed') {
+            return 'mixed';
+        }
+
+        $types = [];
+
+        foreach (explode('|', $left . '|' . $right) as $type) {
+            $type = trim($type);
+
+            if ($type === '') {
+                continue;
+            }
+
+            $types[$type] = true;
+        }
+
+        return implode('|', array_keys($types));
     }
 
     private function insertModelStaticDelegationMethods(string $source): string

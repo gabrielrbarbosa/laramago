@@ -213,6 +213,24 @@ PHP;
         || strpos($attributedOverlay, '@property int $id') > strpos($attributedOverlay, '#[ScopedBy([])]')) {
         fail('model docblock overlay should be inserted before class attributes');
     }
+
+    $collidingOverlay = $method->invoke($application, $source, 'Product', [[
+        'name' => 'image_url',
+        'type' => 'string|null',
+    ]], [[
+        'name' => 'image_url',
+        'type' => 'mixed',
+    ]], [[
+        'name' => 'image_url',
+        'type' => '\\App\\Models\\Image',
+    ]], [], false);
+
+    if (! is_string($collidingOverlay)
+        || ! str_contains($collidingOverlay, '@property mixed $image_url')
+        || str_contains($collidingOverlay, '@property-read mixed $image_url')
+        || str_contains($collidingOverlay, '@property-read \\App\\Models\\Image $image_url')) {
+        fail('model docblock overlay should not emit readonly accessor or relation metadata for writable attributes with the same name');
+    }
 }
 
 function testLaravelFrameworkOverlayGeneration(string $project, string $root): void

@@ -77,6 +77,7 @@ trait BuildsSourceCompatibilityOverlays
         $translated = $this->translatePhpStanPragmas($source);
         $translated = $this->translateLarastanPseudoTypes($translated);
         $translated = $this->translatePhpStanListTypes($translated);
+        $translated = $this->normalizeCommonReflectionMethodCasing($translated);
         $translated = $this->translateLaravelCarbonImports($translated);
         $translated = $this->removeObjectAccessStringInterpolations($translated);
         $translated = $this->translateLaravelDateHelperCalls($translated);
@@ -228,6 +229,43 @@ trait BuildsSourceCompatibilityOverlays
         }
 
         return $translated;
+    }
+
+    private function normalizeCommonReflectionMethodCasing(string $source): string
+    {
+        if (! str_contains($source, '->')) {
+            return $source;
+        }
+
+        $methodMap = [
+            'allowsnull' => 'allowsNull',
+            'getattributes' => 'getAttributes',
+            'getclassname' => 'getClassName',
+            'getdeclaringclass' => 'getDeclaringClass',
+            'getdeclaringfunction' => 'getDeclaringFunction',
+            'getfilename' => 'getFileName',
+            'getname' => 'getName',
+            'getparameters' => 'getParameters',
+            'getreturntype' => 'getReturnType',
+            'getshortname' => 'getShortName',
+            'gettype' => 'getType',
+            'getvalue' => 'getValue',
+            'isbuiltin' => 'isBuiltin',
+        ];
+
+        return preg_replace_callback(
+            '/->\s*([A-Za-z_][A-Za-z0-9_]*)\s*\(/',
+            static function (array $matches) use ($methodMap): string {
+                $method = strtolower($matches[1]);
+
+                if (! isset($methodMap[$method]) || $matches[1] === $methodMap[$method]) {
+                    return $matches[0];
+                }
+
+                return '->' . $methodMap[$method] . '(';
+            },
+            $source,
+        ) ?? $source;
     }
 
     private function translateLarastanPseudoTypes(string $source): string

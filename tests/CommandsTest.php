@@ -581,6 +581,9 @@ function testExcludedSymbolStubGeneration(string $project, string $root): void
 
 namespace App\Excluded;
 
+use App\Contracts\LegacyContract;
+use App\Support\BaseService;
+
 final class LegacyService extends BaseService implements LegacyContract
 {
     public function __construct(public int $tenantId = 0)
@@ -622,7 +625,13 @@ TOML);
 
     $stub = file_get_contents($stubs[0]);
 
-    if (! is_string($stub) || ! str_contains($stub, 'namespace App\Excluded;') || ! str_contains($stub, 'final class LegacyService extends BaseService implements LegacyContract') || ! str_contains($stub, 'public function __construct(public int $tenantId = 0) {}') || ! str_contains($stub, 'public function getUser(int $id): mixed {}')) {
+    if (! is_string($stub)
+        || ! str_contains($stub, 'namespace App\Excluded;')
+        || ! str_contains($stub, 'use App\Contracts\LegacyContract;')
+        || ! str_contains($stub, 'use App\Support\BaseService;')
+        || ! str_contains($stub, 'final class LegacyService extends BaseService implements LegacyContract')
+        || ! str_contains($stub, 'public function __construct(public int $tenantId = 0) {}')
+        || ! str_contains($stub, 'public function getUser(int $id): mixed {}')) {
         fail('excluded symbol stub generation wrote an unexpected stub');
     }
 }

@@ -189,6 +189,61 @@ PHP);
     }
 }
 
+function testReflectionMethodCasingOverlayGeneration(string $project, string $root): void
+{
+    require_once $root . '/src/Application.php';
+
+    file_put_contents($project . '/app/UsesReflectionTypes.php', <<<'PHP'
+<?php
+
+namespace App;
+
+use ReflectionMethod;
+use ReflectionNamedType;
+
+final class UsesReflectionTypes
+{
+    public function handle(ReflectionMethod $method): ?string
+    {
+        $type = $method->getreturntype();
+
+        if (! $type instanceof ReflectionNamedType || $type->isbuiltin()) {
+            return null;
+        }
+
+        return $type->getname();
+    }
+}
+PHP);
+
+    $application = new Laramago\Application();
+    $method = new ReflectionMethod($application, 'phpStanPragmaSubstitutions');
+    $substitutions = $method->invoke($application, $project, [], []);
+
+    if (! is_array($substitutions) || count($substitutions) < 2) {
+        fail('reflection method casing overlay generation returned unexpected substitutions');
+    }
+
+    $map = json_decode((string) file_get_contents($project . '/.laramago/cache/phpstan-pragma-overlays.json'), true);
+    $overlayPath = null;
+
+    foreach (is_array($map) ? $map : [] as $entry) {
+        if (is_array($entry) && ($entry['original'] ?? null) === 'app/UsesReflectionTypes.php' && is_string($entry['overlay'] ?? null)) {
+            $overlayPath = $entry['overlay'];
+            break;
+        }
+    }
+
+    $overlay = $overlayPath === null ? false : file_get_contents($project . '/' . $overlayPath);
+
+    if (! is_string($overlay)
+        || ! str_contains($overlay, '->getReturnType()')
+        || ! str_contains($overlay, '->isBuiltin()')
+        || ! str_contains($overlay, '->getName()')) {
+        fail('source compatibility overlay did not normalize common Reflection method casing');
+    }
+}
+
 function testInternalFunctionCompatibilityOverlayGeneration(string $project, string $root): void
 {
     require_once $root . '/src/Application.php';
