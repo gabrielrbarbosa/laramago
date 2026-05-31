@@ -492,6 +492,60 @@ NEON);
     }
 }
 
+function testPhpStanMigrationReadsLocalIncludes(string $project, string $binary): void
+{
+    mkdir($project . '/config', 0777, true);
+    file_put_contents($project . '/phpstan.neon', <<<'NEON'
+includes:
+    - ./vendor/larastan/larastan/extension.neon
+    - config/phpstan-shared.neon
+
+parameters:
+    paths:
+        - app/
+    level: 6
+NEON);
+
+    file_put_contents($project . '/config/phpstan-shared.neon', <<<'NEON'
+parameters:
+    paths:
+        - modules/Billing/
+    scanFiles:
+        - support/static-analysis.php
+    ignoreErrors:
+        -
+            identifier: return.type
+            path: modules/Billing/*
+    excludePaths:
+        analyse:
+            - modules/Billing/Legacy/*
+NEON);
+
+    $exitCode = run([PHP_BINARY, $binary, 'migrate-phpstan', '--project=' . $project, '--force']);
+
+    if ($exitCode !== 0) {
+        fail('migrate-phpstan command failed for local includes');
+    }
+
+    $config = file_get_contents($project . '/mago.toml');
+
+    if (! is_string($config) || ! str_contains($config, 'paths = ["app", "modules/Billing"]')) {
+        fail('migrate-phpstan did not preserve paths from local included PHPStan configs');
+    }
+
+    if (! str_contains($config, 'includes = ["vendor", "support/static-analysis.php"]')) {
+        fail('migrate-phpstan did not preserve scan files from local included PHPStan configs');
+    }
+
+    if (! str_contains($config, 'excludes = ["modules/Billing/Legacy/**"]')) {
+        fail('migrate-phpstan did not preserve excludes from local included PHPStan configs');
+    }
+
+    if (! str_contains($config, '{ code = "invalid-return-statement", in = "modules/Billing/**" }')) {
+        fail('migrate-phpstan did not preserve scoped ignores from local included PHPStan configs');
+    }
+}
+
 function testExcludedSymbolStubGeneration(string $project, string $root): void
 {
     require_once $root . '/src/Application.php';

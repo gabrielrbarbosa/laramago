@@ -156,7 +156,7 @@ final class Application
             return 1;
         }
 
-        $source = file_get_contents($phpStanConfig);
+        $source = $this->phpStanConfigSource($phpStanConfig);
 
         if (! is_string($source)) {
             $this->line("Unable to read {$phpStanConfig}.");

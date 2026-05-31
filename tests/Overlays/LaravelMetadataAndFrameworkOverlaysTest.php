@@ -219,7 +219,9 @@ function testLaravelFrameworkOverlayGeneration(string $project, string $root): v
 {
     require_once $root . '/src/Application.php';
 
-    mkdir($project . '/config', 0777, true);
+    if (! is_dir($project . '/config')) {
+        mkdir($project . '/config', 0777, true);
+    }
     mkdir($project . '/vendor/maatwebsite/excel/src/Concerns', 0777, true);
     mkdir($project . '/vendor/laravel/framework/src/Illuminate/Database/Eloquent', 0777, true);
     mkdir($project . '/vendor/laravel/framework/src/Illuminate/Database/Eloquent/Concerns', 0777, true);

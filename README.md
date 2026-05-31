@@ -120,7 +120,7 @@ Laramago does not exclude application paths by default. Add `--exclude=path/**` 
 
 ### `migrate-phpstan`
 
-Reads a PHPStan/Larastan NEON file and writes the equivalent Laramago `mago.toml` source settings. It imports common `parameters.paths`, type-discovery inputs such as `scanDirectories`, `scanFiles`, `bootstrapFiles`, and `stubFiles`, flat `parameters.excludePaths`, nested `parameters.excludePaths.analyse` / `parameters.excludePaths.analyseAndScan`, scoped `ignoreErrors` identifiers, and numeric or `max` levels so it can print the matching explicit `--phpstan-level` migration command.
+Reads a PHPStan/Larastan NEON file and writes the equivalent Laramago `mago.toml` source settings. It imports common `parameters.paths`, type-discovery inputs such as `scanDirectories`, `scanFiles`, `bootstrapFiles`, and `stubFiles`, flat `parameters.excludePaths`, nested `parameters.excludePaths.analyse` / `parameters.excludePaths.analyseAndScan`, scoped `ignoreErrors` identifiers, and numeric or `max` levels so it can print the matching explicit `--phpstan-level` migration command. Local NEON files referenced from `includes` are read recursively; vendor extension includes such as Larastan's own extension file are skipped.
 
 By default it searches `phpstan.neon`, `phpstan.neon.dist`, `phpstan-ci.neon`, and `phpstan-parallel.neon`. Use `--phpstan-config=path/to/phpstan.neon` for a custom file.
 

@@ -28,14 +28,68 @@ trait MigratesPhpStan
         return null;
     }
 
-    private function neonListValue(string $source, string $key): array
+    private function phpStanConfigSource(string $configPath): ?string
     {
-        if (preg_match('/^\s*' . preg_quote($key, '/') . '\s*:\s*\[([^\]]*)\]/m', $source, $inlineMatches) === 1) {
-            preg_match_all('/[\'"]?([^\'",\s]+)[\'"]?/', $inlineMatches[1], $valueMatches);
+        return $this->phpStanConfigSourceRecursive($configPath, []);
+    }
 
-            return array_values(array_filter(array_map('trim', $valueMatches[1]), static fn (string $value): bool => $value !== ''));
+    /**
+     * @param array<string, true> $seen
+     */
+    private function phpStanConfigSourceRecursive(string $configPath, array $seen): ?string
+    {
+        $realPath = realpath($configPath);
+
+        if (! is_string($realPath) || isset($seen[$realPath])) {
+            return null;
         }
 
+        $source = file_get_contents($realPath);
+
+        if (! is_string($source)) {
+            return null;
+        }
+
+        $seen[$realPath] = true;
+        $sources = [$source];
+
+        foreach ($this->phpStanLocalIncludePaths($source, dirname($realPath)) as $includePath) {
+            $includedSource = $this->phpStanConfigSourceRecursive($includePath, $seen);
+
+            if ($includedSource !== null) {
+                $sources[] = $includedSource;
+            }
+        }
+
+        return implode(PHP_EOL, $sources);
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function phpStanLocalIncludePaths(string $source, string $baseDirectory): array
+    {
+        $paths = [];
+
+        foreach ($this->neonListValue($source, 'includes') as $include) {
+            $include = trim(str_replace('\\', '/', $include));
+
+            if ($include === '' || str_starts_with($include, '%') || str_starts_with($include, 'vendor/')) {
+                continue;
+            }
+
+            $absolutePath = str_starts_with($include, '/') ? $include : $baseDirectory . '/' . $include;
+
+            if (is_file($absolutePath)) {
+                $paths[] = $absolutePath;
+            }
+        }
+
+        return array_values(array_unique($paths));
+    }
+
+    private function neonListValue(string $source, string $key): array
+    {
         $lines = preg_split('/\R/', $source);
 
         if (! is_array($lines)) {
@@ -43,36 +97,45 @@ trait MigratesPhpStan
         }
 
         $values = [];
-        $inList = false;
-        $indent = 0;
 
-        foreach ($lines as $line) {
-            if (! $inList && preg_match('/^(\s*)' . preg_quote($key, '/') . '\s*:\s*$/', $line, $matches) === 1) {
-                $inList = true;
-                $indent = strlen($matches[1]);
+        for ($index = 0; $index < count($lines); $index++) {
+            $line = $lines[$index];
+
+            if (preg_match('/^\s*' . preg_quote($key, '/') . '\s*:\s*\[([^\]]*)\]/', $line, $inlineMatches) === 1) {
+                preg_match_all('/[\'"]?([^\'",\s]+)[\'"]?/', $inlineMatches[1], $valueMatches);
+                $values = array_merge($values, array_map('trim', $valueMatches[1]));
                 continue;
             }
 
-            if (! $inList) {
+            if (preg_match('/^(\s*)' . preg_quote($key, '/') . '\s*:\s*$/', $line, $matches) !== 1) {
                 continue;
             }
 
-            if (trim($line) === '') {
-                continue;
-            }
+            $indent = strlen($matches[1]);
 
-            $lineIndent = strlen($line) - strlen(ltrim($line));
+            for ($listIndex = $index + 1; $listIndex < count($lines); $listIndex++) {
+                $listLine = $lines[$listIndex];
 
-            if ($lineIndent <= $indent) {
-                break;
-            }
+                if (trim($listLine) === '') {
+                    continue;
+                }
 
-            if (preg_match('/^\s*-\s*[\'"]?([^\'"#]+)[\'"]?/', $line, $valueMatches) === 1) {
-                $values[] = trim($valueMatches[1]);
+                $lineIndent = strlen($listLine) - strlen(ltrim($listLine));
+
+                if ($lineIndent <= $indent) {
+                    $index = $listIndex - 1;
+                    break;
+                }
+
+                if (preg_match('/^\s*-\s*[\'"]?([^\'"#]+)[\'"]?/', $listLine, $valueMatches) === 1) {
+                    $values[] = trim($valueMatches[1]);
+                }
+
+                $index = $listIndex;
             }
         }
 
-        return $values;
+        return array_values(array_unique(array_filter($values, static fn (string $value): bool => $value !== '')));
     }
 
     private function neonScalarValue(string $source, string $key): ?string
