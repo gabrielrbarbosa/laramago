@@ -496,6 +496,36 @@ class Carbon extends \Carbon\Carbon
 }
 PHP);
 
+    file_put_contents($project . '/vendor/laravel/framework/src/Illuminate/Support/Number.php', <<<'PHP'
+<?php
+
+namespace Illuminate\Support;
+
+class Number
+{
+    /**
+     * @return string|false
+     */
+    public static function currency(int|float $number, string $in = '', ?string $locale = null, ?int $precision = null)
+    {
+    }
+
+    /**
+     * @return string|false
+     */
+    public static function format(int|float $number, ?int $precision = null, ?int $maxPrecision = null, ?string $locale = null)
+    {
+    }
+
+    /**
+     * @return int|float|false
+     */
+    public static function parse(string $string, ?int $type = null, ?string $locale = null): int|float|false
+    {
+    }
+}
+PHP);
+
     file_put_contents($project . '/vendor/laravel/framework/src/Illuminate/Notifications/Notification.php', <<<'PHP'
 <?php
 
@@ -886,7 +916,7 @@ PHP);
     $method = new ReflectionMethod($application, 'laravelFrameworkSubstitutions');
     $substitutions = $method->invoke($application, $project, []);
 
-    if (! is_array($substitutions) || count($substitutions) !== 62) {
+    if (! is_array($substitutions) || count($substitutions) !== 64) {
         fail('framework overlay generation returned unexpected substitutions');
     }
 
@@ -899,6 +929,7 @@ PHP);
     $optionalOverlay = file_get_contents($project . '/.laramago/cache/framework-overlays/Optional.php');
     $supportCollectionOverlay = file_get_contents($project . '/.laramago/cache/framework-overlays/SupportCollection.php');
     $supportCarbonOverlay = file_get_contents($project . '/.laramago/cache/framework-overlays/SupportCarbon.php');
+    $supportNumberOverlay = file_get_contents($project . '/.laramago/cache/framework-overlays/SupportNumber.php');
     $baseCarbonOverlay = file_get_contents($project . '/.laramago/cache/framework-overlays/BaseCarbon.php');
     $baseCarbonImmutableOverlay = file_get_contents($project . '/.laramago/cache/framework-overlays/BaseCarbonImmutable.php');
     $foundationHelpersOverlay = file_get_contents($project . '/.laramago/cache/framework-overlays/FoundationHelpers.php');
@@ -964,6 +995,10 @@ PHP);
 
     if (! is_string($supportCarbonOverlay) || ! str_contains($supportCarbonOverlay, '@method float diffinseconds(') || ! str_contains($supportCarbonOverlay, '@method $this startofmonth(')) {
         fail('support Carbon overlay did not expose lowercase Carbon method aliases');
+    }
+
+    if (! is_string($supportNumberOverlay) || ! str_contains($supportNumberOverlay, '@return string') || str_contains($supportNumberOverlay, '@return string|false') || ! str_contains($supportNumberOverlay, '@return int|float|false')) {
+        fail('support Number overlay did not expose display helpers as strings while preserving parse failures');
     }
 
     if (! is_string($baseCarbonOverlay) || ! str_contains($baseCarbonOverlay, '@method static \\Carbon\\Carbon parse(') || ! str_contains($baseCarbonOverlay, '@method static \\Carbon\\Carbon createfromdate(mixed $year = null') || ! str_contains($baseCarbonOverlay, '@method $this subdays(')) {

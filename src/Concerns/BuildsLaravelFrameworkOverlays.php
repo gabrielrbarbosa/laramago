@@ -23,6 +23,7 @@ trait BuildsLaravelFrameworkOverlays
         $optionalPath = $projectRoot . '/vendor/laravel/framework/src/Illuminate/Support/Optional.php';
         $supportCollectionPath = $projectRoot . '/vendor/laravel/framework/src/Illuminate/Collections/Collection.php';
         $supportCarbonPath = $projectRoot . '/vendor/laravel/framework/src/Illuminate/Support/Carbon.php';
+        $supportNumberPath = $projectRoot . '/vendor/laravel/framework/src/Illuminate/Support/Number.php';
         $baseCarbonPath = $projectRoot . '/vendor/nesbot/carbon/src/Carbon/Carbon.php';
         $baseCarbonImmutablePath = $projectRoot . '/vendor/nesbot/carbon/src/Carbon/CarbonImmutable.php';
         $foundationHelpersPath = $projectRoot . '/vendor/laravel/framework/src/Illuminate/Foundation/helpers.php';
@@ -121,6 +122,14 @@ trait BuildsLaravelFrameworkOverlays
 
             if (is_string($supportCarbonSource)) {
                 $overlays[] = $this->writeFrameworkOverlay($projectRoot, 'SupportCarbon.php', $supportCarbonPath, $this->renderSupportCarbonOverlay($supportCarbonSource));
+            }
+        }
+
+        if (is_file($supportNumberPath)) {
+            $supportNumberSource = file_get_contents($supportNumberPath);
+
+            if (is_string($supportNumberSource)) {
+                $overlays[] = $this->writeFrameworkOverlay($projectRoot, 'SupportNumber.php', $supportNumberPath, $this->renderSupportNumberOverlay($supportNumberSource));
             }
         }
 
@@ -855,6 +864,11 @@ PHP);
     private function renderSupportCarbonOverlay(string $source): string
     {
         return $this->renderCarbonDateOverlay($source, 'Carbon', '\\Illuminate\\Support\\Carbon');
+    }
+
+    private function renderSupportNumberOverlay(string $source): string
+    {
+        return str_replace('@return string|false', '@return string', $source);
     }
 
     private function renderCarbonDateOverlay(string $source, string $className, string $staticReturnType): string
