@@ -191,8 +191,9 @@ final class UsesInternalFunctions
         $decoded = json_decode($response->getBody(), true);
         $body = json_decode($response->getBody());
         $id = uniqid(mt_rand(), true);
+        $exif = exif_read_data($model->file);
 
-        return [$year, $decoded, $body, $id];
+        return [$year, $decoded, $body, $id, $exif];
     }
 
     public function normalize(string $value): string
@@ -221,6 +222,7 @@ PHP);
             && str_contains($overlay, 'json_decode((string) $response->getBody(), true)')
             && str_contains($overlay, 'json_decode((string) $response->getBody())')
             && str_contains($overlay, 'uniqid((string) mt_rand(), true)')
+            && str_contains($overlay, 'exif_read_data((string) $model->file)')
             && substr_count($overlay, '@mago-ignore possibly-false-argument invalid-argument nullable-return-statement invalid-return-statement falsable-return-statement') === 3) {
             $foundOverlay = true;
         }
@@ -474,6 +476,7 @@ final class UsesCollectionArrowCallbacks
             ->map(fn (Order $order): array => ['id' => $order->id])
             ->filter(fn (array $row): bool => $row !== [])
             ->map(fn (int $id): int => $id)
+            ->map(fn (mixed $value, string $key): string => $key . ':' . $value)
             ->map(function (Order $order, string $key): array {
                 return ['key' => $key, 'id' => $order->id];
             })
@@ -499,8 +502,10 @@ PHP);
             && str_contains($overlay, '->map(fn ($order): array =>')
             && str_contains($overlay, '->filter(fn (array $row): bool =>')
             && str_contains($overlay, '->map(fn ($id): int =>')
+            && str_contains($overlay, '->map(fn (mixed $value, $key): string =>')
             && str_contains($overlay, '->map(function ($order, $key): array {')
             && ! str_contains($overlay, 'fn (Order $order)')
+            && ! str_contains($overlay, 'fn (mixed $value, string $key)')
             && ! str_contains($overlay, 'function (Order $order, string $key)')) {
             return;
         }

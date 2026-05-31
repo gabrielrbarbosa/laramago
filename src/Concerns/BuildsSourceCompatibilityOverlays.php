@@ -483,7 +483,7 @@ trait BuildsSourceCompatibilityOverlays
 
     private function normalizeStringableInternalFunctionArguments(string $source): string
     {
-        if (! str_contains($source, 'strtotime(') && ! str_contains($source, 'json_decode(') && ! str_contains($source, 'uniqid(')) {
+        if (! str_contains($source, 'strtotime(') && ! str_contains($source, 'json_decode(') && ! str_contains($source, 'uniqid(') && ! str_contains($source, 'exif_read_data(')) {
             return $source;
         }
 
@@ -501,6 +501,12 @@ trait BuildsSourceCompatibilityOverlays
         $translated = preg_replace(
             '/uniqid\(\s*(mt_rand\(\)|rand\(\)|time\(\))\s*,/',
             'uniqid((string) $1,',
+            $translated,
+        ) ?? $translated;
+
+        $translated = preg_replace(
+            '/exif_read_data\(\s*(?!\(string\)|[\'"])([^,\r\n;)]+)\s*([,)])/',
+            'exif_read_data((string) $1$2',
             $translated,
         ) ?? $translated;
 
@@ -1018,16 +1024,8 @@ trait BuildsSourceCompatibilityOverlays
         $methodPattern = implode('|', array_map(static fn (string $method): string => preg_quote($method, '/'), $methods));
 
         $translated = preg_replace_callback(
-            '/(->\s*(?:' . $methodPattern . ')\s*\(\s*(?:static\s+)?fn\s*\(\s*)(\\\\?[A-Za-z_][A-Za-z0-9_\\\\]*(?:\s*&\s*\\\\?[A-Za-z_][A-Za-z0-9_\\\\]*)?)\s+(\$[A-Za-z_][A-Za-z0-9_]*)(\s*(?:,[^)]*)?\)\s*(?::\s*[^=]+)?=>)/m',
-            static function (array $matches): string {
-                $type = $matches[2];
-
-                if (in_array(ltrim(strtolower(str_replace(' ', '', $type)), '\\'), ['array', 'callable', 'iterable', 'mixed'], true)) {
-                    return $matches[0];
-                }
-
-                return $matches[1] . $matches[3] . $matches[4];
-            },
+            '/(->\s*(?:' . $methodPattern . ')\s*\(\s*(?:static\s+)?fn\s*\()([^)]*)(\)\s*(?::\s*[^=]+)?=>)/m',
+            fn (array $matches): string => $matches[1] . $this->loosenLaravelCollectionCallbackParameters($matches[2]) . $matches[3],
             $source,
         );
 
