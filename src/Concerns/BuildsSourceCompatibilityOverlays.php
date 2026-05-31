@@ -437,6 +437,8 @@ PHP;
             return $source;
         }
 
+        $source = $this->annotateLaravelReflectionRequestClassNames($source);
+
         if (str_contains($source, 'instantiateFormRequestUsing') && str_contains($source, 'new $className')) {
             $source = $this->insertClassStringAnnotationBeforeInstantiation(
                 $source,
@@ -454,6 +456,27 @@ PHP;
         }
 
         return $source;
+    }
+
+    private function annotateLaravelReflectionRequestClassNames(string $source): string
+    {
+        if (! str_contains($source, 'Request::class') || ! str_contains($source, '->getType()->getName()')) {
+            return $source;
+        }
+
+        return preg_replace_callback(
+            '/^([ \t]*)\$requestClass\s*=\s*(\$[A-Za-z_][A-Za-z0-9_]*)\?\s*->\s*getType\(\)\s*->\s*getName\(\)\s*\?\?\s*(\\\\?[A-Za-z_][\\\\A-Za-z0-9_]*)::class\s*;/m',
+            static function (array $matches): string {
+                $indent = $matches[1];
+                $parameter = $matches[2];
+                $requestClass = $matches[3];
+
+                return $indent . '$laramagoRequestType = ' . $parameter . '?->getType();' . PHP_EOL
+                    . $indent . '/** @var \\ReflectionNamedType|null $laramagoRequestType */' . PHP_EOL
+                    . $indent . '$requestClass = $laramagoRequestType?->getName() ?? ' . $requestClass . '::class;';
+            },
+            $source,
+        ) ?? $source;
     }
 
     private function insertClassStringAnnotationBeforeInstantiation(string $source, string $variable, string $class): string

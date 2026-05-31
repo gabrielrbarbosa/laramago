@@ -113,6 +113,9 @@ PHP);
 
         if (is_string($overlay)
             && str_contains($overlay, '/** @var class-string<\\Illuminate\\Foundation\\Http\\FormRequest> $className */')
+            && str_contains($overlay, '$laramagoRequestType = $requestParameter?->getType();')
+            && str_contains($overlay, '/** @var \\ReflectionNamedType|null $laramagoRequestType */')
+            && str_contains($overlay, '$requestClass = $laramagoRequestType?->getName() ?? Request::class;')
             && str_contains($overlay, '/** @var class-string<\\Illuminate\\Http\\Request> $requestClass */')) {
             return;
         }
