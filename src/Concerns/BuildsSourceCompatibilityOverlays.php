@@ -79,6 +79,7 @@ trait BuildsSourceCompatibilityOverlays
         $translated = $this->translatePhpStanListTypes($translated);
         $translated = $this->normalizeLaravelPaginatorReturnDocblocks($translated);
         $translated = $this->normalizeCommonReflectionMethodCasing($translated);
+        $translated = $this->annotateReflectionNamedReturnTypeComparisons($translated);
         $translated = $this->translateLaravelCarbonImports($translated);
         $translated = $this->removeObjectAccessStringInterpolations($translated);
         $translated = $this->translateLaravelDateHelperCalls($translated);
@@ -116,6 +117,7 @@ trait BuildsSourceCompatibilityOverlays
         $translated = $this->annotateDynamicMemberSelectorStrings($translated);
         $translated = $this->annotateLaravelFormRequestDynamicProperties($translated, $relativePath, $projectRoot);
         $translated = $this->annotateLaravelEloquentModelTraits($translated);
+        $translated = $this->annotateClassExistsGuardedInstantiations($translated);
         $translated = $this->annotateLaravelRequestClassInstantiations($translated);
         $translated = $this->annotateAllowDynamicPropertiesClasses($translated);
         $translated = $this->ignoreNullCoalescePropertyAccess($translated);
@@ -266,6 +268,27 @@ trait BuildsSourceCompatibilityOverlays
                 }
 
                 return '->' . $methodMap[$method] . '(';
+            },
+            $source,
+        ) ?? $source;
+    }
+
+    private function annotateReflectionNamedReturnTypeComparisons(string $source): string
+    {
+        if (! str_contains($source, '->getReturnType()->getName()') || ! str_contains($source, '::class')) {
+            return $source;
+        }
+
+        return preg_replace_callback(
+            '/^([ \t]*)return\s+!\s*empty\(\s*(\$[A-Za-z_][A-Za-z0-9_]*)->getReturnType\(\)\s*\)\s*&&\s*\2->getReturnType\(\)->getName\(\)\s*===\s*(\\\\?[A-Za-z_][\\\\A-Za-z0-9_]*)::class\s*;/m',
+            static function (array $matches): string {
+                $indent = $matches[1];
+                $reflector = $matches[2];
+                $class = $matches[3];
+
+                return $indent . '$laramagoReturnType = ' . $reflector . '->getReturnType();' . PHP_EOL
+                    . $indent . '/** @var \\ReflectionNamedType|null $laramagoReturnType */' . PHP_EOL
+                    . $indent . 'return $laramagoReturnType?->getName() === ' . $class . '::class;';
             },
             $source,
         ) ?? $source;
@@ -458,6 +481,34 @@ PHP;
         return $source;
     }
 
+    private function annotateClassExistsGuardedInstantiations(string $source): string
+    {
+        if (! str_contains($source, 'class_exists(') || ! str_contains($source, 'new $')) {
+            return $source;
+        }
+
+        preg_match_all('/\bclass_exists\(\s*(\$[A-Za-z_][A-Za-z0-9_]*)\s*(?:,|\))/', $source, $matches);
+        $variables = array_values(array_unique($matches[1] ?? []));
+
+        foreach ($variables as $variable) {
+            $source = $this->insertPlainClassStringAnnotationBeforeInstantiation(
+                $source,
+                substr($variable, 1),
+            );
+        }
+
+        return $source;
+    }
+
+    private function insertPlainClassStringAnnotationBeforeInstantiation(string $source, string $variable): string
+    {
+        return preg_replace_callback(
+            '/(^[ \t]*)(?!\/\*\*\s*@var\s+class-string(?:<[^>]+>)?\s+\$' . preg_quote($variable, '/') . '\s*\*\/\R)((?:(?:return\s+)|(?:\$[A-Za-z_][A-Za-z0-9_]*\s*=\s*)|(?:\$this->[A-Za-z_][A-Za-z0-9_]*\s*=\s*))new\s+\$' . preg_quote($variable, '/') . '\s*\()/m',
+            static fn (array $matches): string => $matches[1] . '/** @var class-string $' . $variable . ' */' . PHP_EOL . $matches[1] . $matches[2],
+            $source,
+        ) ?? $source;
+    }
+
     private function annotateLaravelReflectionRequestClassNames(string $source): string
     {
         if (! str_contains($source, 'Request::class') || ! str_contains($source, '->getType()->getName()')) {
@@ -482,7 +533,7 @@ PHP;
     private function insertClassStringAnnotationBeforeInstantiation(string $source, string $variable, string $class): string
     {
         return preg_replace_callback(
-            '/(^[ \t]*)(?!\/\*\*\s*@var\s+class-string<[^>]+>\s+\$' . preg_quote($variable, '/') . '\s*\*\/\R)((?:(?:return\s+)|(?:\$[A-Za-z_][A-Za-z0-9_]*\s*=\s*))new\s+\$' . preg_quote($variable, '/') . '\s*\()/m',
+            '/(^[ \t]*)(?!\/\*\*\s*@var\s+class-string<[^>]+>\s+\$' . preg_quote($variable, '/') . '\s*\*\/\R)((?:(?:return\s+)|(?:\$[A-Za-z_][A-Za-z0-9_]*\s*=\s*)|(?:\$this->[A-Za-z_][A-Za-z0-9_]*\s*=\s*))new\s+\$' . preg_quote($variable, '/') . '\s*\()/m',
             static fn (array $matches): string => $matches[1] . '/** @var class-string<' . $class . '> $' . $variable . ' */' . PHP_EOL . $matches[1] . $matches[2],
             $source,
         ) ?? $source;
