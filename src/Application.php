@@ -6,7 +6,7 @@ namespace Laramago;
 
 final class Application
 {
-    private const VERSION = '0.1.18';
+    private const VERSION = '0.1.19';
 
     private const CONFIG_FILE = 'mago.toml';
 
@@ -143,7 +143,7 @@ final class Application
             $paths = ['app'];
         }
 
-        $excludes = $this->neonListValue($source, 'excludePaths');
+        $excludes = $this->phpStanExcludePaths($source);
         $config = $this->renderProjectConfig($this->detectPhpVersion($projectRoot), $this->normalizePhpStanPaths($paths), ['vendor'], $this->normalizePhpStanPaths($excludes));
 
         if (file_put_contents($configPath, $config) === false) {
@@ -504,6 +504,82 @@ HELP);
         }
 
         return trim($matches[1]);
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function phpStanExcludePaths(string $source): array
+    {
+        $flatExcludes = $this->neonListValue($source, 'excludePaths');
+
+        if ($flatExcludes !== []) {
+            return $flatExcludes;
+        }
+
+        return $this->neonNestedListValues($source, 'excludePaths', ['analyse', 'analyseAndScan']);
+    }
+
+    /**
+     * @param list<string> $nestedKeys
+     * @return list<string>
+     */
+    private function neonNestedListValues(string $source, string $key, array $nestedKeys): array
+    {
+        $lines = preg_split('/\R/', $source);
+
+        if (! is_array($lines)) {
+            return [];
+        }
+
+        $values = [];
+        $inParent = false;
+        $parentIndent = 0;
+        $inNestedList = false;
+        $nestedIndent = 0;
+
+        foreach ($lines as $line) {
+            if (! $inParent && preg_match('/^(\s*)' . preg_quote($key, '/') . '\s*:\s*$/', $line, $matches) === 1) {
+                $inParent = true;
+                $parentIndent = strlen($matches[1]);
+                continue;
+            }
+
+            if (! $inParent) {
+                continue;
+            }
+
+            if (trim($line) === '') {
+                continue;
+            }
+
+            $lineIndent = strlen($line) - strlen(ltrim($line));
+
+            if ($lineIndent <= $parentIndent) {
+                break;
+            }
+
+            if (preg_match('/^(\s*)(' . implode('|', array_map(static fn (string $nestedKey): string => preg_quote($nestedKey, '/'), $nestedKeys)) . ')\s*:\s*$/', $line, $nestedMatches) === 1) {
+                $inNestedList = true;
+                $nestedIndent = strlen($nestedMatches[1]);
+                continue;
+            }
+
+            if (! $inNestedList) {
+                continue;
+            }
+
+            if ($lineIndent <= $nestedIndent) {
+                $inNestedList = false;
+                continue;
+            }
+
+            if (preg_match('/^\s*-\s*[\'"]?([^\'"#]+)[\'"]?/', $line, $valueMatches) === 1) {
+                $values[] = trim($valueMatches[1]);
+            }
+        }
+
+        return array_values(array_unique($values));
     }
 
     /**

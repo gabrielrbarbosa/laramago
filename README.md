@@ -143,7 +143,7 @@ Laramago does not exclude application paths by default. Add `--exclude=path/**` 
 
 ### `migrate-phpstan`
 
-Reads a PHPStan/Larastan NEON file and writes the equivalent Laramago `mago.toml` source settings. It imports common `parameters.paths`, `parameters.excludePaths`, and detects level 6 so it can print the matching explicit `--phpstan-level=6` migration command.
+Reads a PHPStan/Larastan NEON file and writes the equivalent Laramago `mago.toml` source settings. It imports common `parameters.paths`, flat `parameters.excludePaths`, nested `parameters.excludePaths.analyse` / `parameters.excludePaths.analyseAndScan`, and detects level 6 so it can print the matching explicit `--phpstan-level=6` migration command.
 
 By default it searches `phpstan.neon`, `phpstan.neon.dist`, `phpstan-ci.neon`, and `phpstan-parallel.neon`. Use `--phpstan-config=path/to/phpstan.neon` for a custom file.
 

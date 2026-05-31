@@ -212,11 +212,13 @@ parameters:
         - app/
     level: 6
     excludePaths:
-        - vendor/*
-        - storage/*
-        - database/*
-        - app/Legacy/*
-        - app/Services/NotaFiscal/*
+        analyse:
+            - vendor/*
+            - storage/*
+            - database/*
+            - app/Legacy/*
+        analyseAndScan:
+            - app/Services/NotaFiscal/*
 NEON);
 
     file_put_contents($project . '/composer.json', json_encode([
