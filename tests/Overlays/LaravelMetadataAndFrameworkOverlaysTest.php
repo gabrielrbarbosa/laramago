@@ -224,6 +224,7 @@ function testLaravelFrameworkOverlayGeneration(string $project, string $root): v
     mkdir($project . '/vendor/laravel/framework/src/Illuminate/Database/Eloquent', 0777, true);
     mkdir($project . '/vendor/laravel/framework/src/Illuminate/Database/Eloquent/Concerns', 0777, true);
     mkdir($project . '/vendor/laravel/framework/src/Illuminate/Database/Eloquent/Factories', 0777, true);
+    mkdir($project . '/vendor/laravel/framework/src/Illuminate/Database/Eloquent/Relations', 0777, true);
     mkdir($project . '/vendor/laravel/framework/src/Illuminate/Database/Query', 0777, true);
     mkdir($project . '/vendor/laravel/framework/src/Illuminate/Auth', 0777, true);
     mkdir($project . '/vendor/laravel/framework/src/Illuminate/Contracts/Broadcasting', 0777, true);
@@ -743,6 +744,16 @@ class Model
 }
 PHP);
 
+    file_put_contents($project . '/vendor/laravel/framework/src/Illuminate/Database/Eloquent/Relations/Relation.php', <<<'PHP'
+<?php
+
+namespace Illuminate\Database\Eloquent\Relations;
+
+abstract class Relation
+{
+}
+PHP);
+
     file_put_contents($project . '/vendor/laravel/framework/src/Illuminate/Database/Eloquent/Concerns/HasAttributes.php', <<<'PHP'
 <?php
 
@@ -973,7 +984,7 @@ PHP);
     $method = new ReflectionMethod($application, 'laravelFrameworkSubstitutions');
     $substitutions = $method->invoke($application, $project, []);
 
-    if (! is_array($substitutions) || count($substitutions) !== 64) {
+    if (! is_array($substitutions) || count($substitutions) !== 66) {
         fail('framework overlay generation returned unexpected substitutions');
     }
 
@@ -995,6 +1006,7 @@ PHP);
     $validationExceptionOverlay = file_get_contents($project . '/.laramago/cache/framework-overlays/ValidationException.php');
     $eloquentBuilderOverlay = file_get_contents($project . '/.laramago/cache/framework-overlays/Builder.php');
     $eloquentModelOverlay = file_get_contents($project . '/.laramago/cache/framework-overlays/EloquentModel.php');
+    $eloquentRelationOverlay = file_get_contents($project . '/.laramago/cache/framework-overlays/Relation.php');
     $hasAttributesOverlay = file_get_contents($project . '/.laramago/cache/framework-overlays/HasAttributes.php');
     $queryBuilderOverlay = file_get_contents($project . '/.laramago/cache/framework-overlays/QueryBuilder.php');
     $controllerMiddlewareOptionsOverlay = file_get_contents($project . '/.laramago/cache/framework-overlays/ControllerMiddlewareOptions.php');
@@ -1099,8 +1111,16 @@ PHP);
         fail('Eloquent builder overlay did not preserve source and add delegated chain methods');
     }
 
+    if (! str_contains($eloquentBuilderOverlay, 'public function whereBetween(string $column, mixed $values, string $boolean = \'and\', bool $not = false): \\Illuminate\\Database\\Eloquent\\Builder') || ! str_contains($eloquentBuilderOverlay, 'public function reorder(mixed $column = null, mixed $direction = \'asc\'): \\Illuminate\\Database\\Eloquent\\Builder')) {
+        fail('Eloquent builder overlay did not expose additional forwarded query builder chains');
+    }
+
     if (! is_string($eloquentModelOverlay) || ! str_contains($eloquentModelOverlay, '@param  array<array-key, mixed>  $attributes') || ! str_contains($eloquentModelOverlay, '@param  array<array-key, mixed>  $options') || ! str_contains($eloquentModelOverlay, 'public function loadMissing($relations, ...$additionalRelations)') || ! str_contains($eloquentModelOverlay, 'public function increment($column, $amount = 1, array $extra = [])') || ! str_contains($eloquentModelOverlay, 'public static function withoutGlobalScopes(?array $scopes = null)') || ! str_contains($eloquentModelOverlay, 'public static function where(mixed $column, mixed $operator = null, mixed $value = null, string $boolean = \'and\')') || ! str_contains($eloquentModelOverlay, 'public static function select(mixed ...$columns)') || ! str_contains($eloquentModelOverlay, 'public static function selectRaw(mixed $expression, array $bindings = [])') || ! str_contains($eloquentModelOverlay, 'public static function lockForUpdate()') || ! str_contains($eloquentModelOverlay, '@return \\Illuminate\\Database\\Eloquent\\Builder<static>') || ! str_contains($eloquentModelOverlay, '@return static|\\Illuminate\\Database\\Eloquent\\Collection<int, static>|null')) {
         fail('Eloquent model overlay did not expose dynamic static builder delegation');
+    }
+
+    if (! is_string($eloquentRelationOverlay) || ! str_contains($eloquentRelationOverlay, 'public function withoutGlobalScopes(?array $scopes = null): static') || ! str_contains($eloquentRelationOverlay, 'public function withoutGlobalScopesExcept(array $scopes = []): static')) {
+        fail('Eloquent relation overlay did not preserve decorated builder methods as relation chains');
     }
 
     if (! is_string($hasAttributesOverlay) || ! str_contains($hasAttributesOverlay, 'public function only($attributes, ...$additionalAttributes)') || ! str_contains($hasAttributesOverlay, 'public function except($attributes, ...$additionalAttributes)')) {

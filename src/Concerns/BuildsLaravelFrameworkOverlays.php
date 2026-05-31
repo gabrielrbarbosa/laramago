@@ -29,6 +29,7 @@ trait BuildsLaravelFrameworkOverlays
         $foundationHelpersPath = $projectRoot . '/vendor/laravel/framework/src/Illuminate/Foundation/helpers.php';
         $eloquentBuilderPath = $projectRoot . '/vendor/laravel/framework/src/Illuminate/Database/Eloquent/Builder.php';
         $eloquentModelPath = $projectRoot . '/vendor/laravel/framework/src/Illuminate/Database/Eloquent/Model.php';
+        $eloquentRelationPath = $projectRoot . '/vendor/laravel/framework/src/Illuminate/Database/Eloquent/Relations/Relation.php';
         $hasAttributesPath = $projectRoot . '/vendor/laravel/framework/src/Illuminate/Database/Eloquent/Concerns/HasAttributes.php';
         $queryBuilderPath = $projectRoot . '/vendor/laravel/framework/src/Illuminate/Database/Query/Builder.php';
         $controllerMiddlewareOptionsPath = $projectRoot . '/vendor/laravel/framework/src/Illuminate/Routing/ControllerMiddlewareOptions.php';
@@ -162,6 +163,14 @@ trait BuildsLaravelFrameworkOverlays
 
             if (is_string($eloquentModelSource)) {
                 $overlays[] = $this->writeFrameworkOverlay($projectRoot, 'EloquentModel.php', $eloquentModelPath, $this->renderEloquentModelFrameworkOverlay($eloquentModelSource));
+            }
+        }
+
+        if (is_file($eloquentRelationPath)) {
+            $eloquentRelationSource = file_get_contents($eloquentRelationPath);
+
+            if (is_string($eloquentRelationSource)) {
+                $overlays[] = $this->writeFrameworkOverlay($projectRoot, 'Relation.php', $eloquentRelationPath, $this->renderEloquentRelationOverlay($eloquentRelationSource));
             }
         }
 
@@ -333,11 +342,13 @@ trait BuildsLaravelFrameworkOverlays
             ' * @method $this orWhere(mixed $column, mixed $operator = null, mixed $value = null)',
             ' * @method $this whereIn(string $column, mixed $values, string $boolean = "and", bool $not = false)',
             ' * @method $this whereNotIn(string $column, mixed $values)',
+            ' * @method $this whereBetween(string $column, mixed $values, string $boolean = "and", bool $not = false)',
             ' * @method $this whereNull(string|array $columns, string $boolean = "and", bool $not = false)',
             ' * @method $this whereNotNull(string|array $columns)',
             ' * @method $this whereDate(string $column, mixed $operator, mixed $value = null, string $boolean = "and")',
             ' * @method $this select(mixed ...$columns)',
             ' * @method $this addSelect(array|string ...$columns)',
+            ' * @method $this reorder(mixed $column = null, mixed $direction = "asc")',
             ' * @method $this with(array|string ...$relations)',
             ' * @method $this selectRaw(mixed $expression, array $bindings = [])',
             ' * @method $this selectraw(mixed $expression, array $bindings = [])',
@@ -462,6 +473,18 @@ PHP,
         return $this;
     }
 PHP,
+            'whereBetween' => <<<'PHP'
+
+    /**
+     * Laramago overlay for forwarded query builder conditions.
+     *
+     * @return \Illuminate\Database\Eloquent\Builder<TModel>
+     */
+    public function whereBetween(string $column, mixed $values, string $boolean = 'and', bool $not = false): \Illuminate\Database\Eloquent\Builder
+    {
+        return $this;
+    }
+PHP,
             'whereNull' => <<<'PHP'
 
     /**
@@ -494,6 +517,18 @@ PHP,
      * @return \Illuminate\Database\Eloquent\Builder<TModel>
      */
     public function whereDate(string $column, mixed $operator, mixed $value = null, string $boolean = 'and'): \Illuminate\Database\Eloquent\Builder
+    {
+        return $this;
+    }
+PHP,
+            'reorder' => <<<'PHP'
+
+    /**
+     * Laramago overlay for forwarded query builder ordering.
+     *
+     * @return \Illuminate\Database\Eloquent\Builder<TModel>
+     */
+    public function reorder(mixed $column = null, mixed $direction = 'asc'): \Illuminate\Database\Eloquent\Builder
     {
         return $this;
     }
@@ -1095,6 +1130,40 @@ PHP);
         }
 
         return substr($source, 0, $position) . $code . PHP_EOL . substr($source, $position);
+    }
+
+    private function renderEloquentRelationOverlay(string $source): string
+    {
+        if (str_contains($source, 'function withoutGlobalScopes(')) {
+            return $source;
+        }
+
+        return $this->insertBeforeFinalClassBrace($source, <<<'PHP'
+
+    /**
+     * Laramago overlay for Laravel's decorated relation builder delegation.
+     */
+    public function withoutGlobalScope(mixed $scope): static
+    {
+        return $this;
+    }
+
+    /**
+     * Laramago overlay for Laravel's decorated relation builder delegation.
+     */
+    public function withoutGlobalScopes(?array $scopes = null): static
+    {
+        return $this;
+    }
+
+    /**
+     * Laramago overlay for Laravel's decorated relation builder delegation.
+     */
+    public function withoutGlobalScopesExcept(array $scopes = []): static
+    {
+        return $this;
+    }
+PHP);
     }
 
     private function renderHasAttributesOverlay(string $source): string

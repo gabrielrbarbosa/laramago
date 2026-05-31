@@ -251,7 +251,7 @@ PHP);
             && str_contains($overlay, "ltrim((string) strstr(\$model->path, '/img'), '/')")
             && str_contains($overlay, "\\Illuminate\\Support\\Facades\\Storage::disk('local')->put(\$model->path, (string) json_encode(\$model->payload))")
             && str_contains($overlay, "\\Illuminate\\Support\\Facades\\Storage::disk('r2')->get((string) strstr(\$model->path, '/img'))")
-            && str_contains($overlay, "mb_convert_encoding(\$model->body, 'UTF-8', (string) mb_detect_encoding(\$model->body))")
+            && str_contains($overlay, "\$encoding = (string) mb_convert_encoding(\$model->body, 'UTF-8', (string) mb_detect_encoding(\$model->body))")
             && str_contains($overlay, 'strtotime((string) $model->created_at)')
             && str_contains($overlay, "return (string) preg_replace('/[^a-z]/', '', (string) iconv('UTF-8', 'ASCII//TRANSLIT', \$value))")
             && substr_count($overlay, '@mago-ignore analysis:possibly-false-argument analysis:invalid-argument analysis:nullable-return-statement analysis:invalid-return-statement analysis:falsable-return-statement') === 6) {

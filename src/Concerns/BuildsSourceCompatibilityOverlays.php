@@ -562,6 +562,12 @@ trait BuildsSourceCompatibilityOverlays
         ) ?? $translated;
 
         $translated = preg_replace(
+            '/=\s*(?!\(string\)\s*)mb_convert_encoding\(/',
+            '= (string) mb_convert_encoding(',
+            $translated,
+        ) ?? $translated;
+
+        $translated = preg_replace(
             '/(\breturn\s+)(?!\(string\)\s*)preg_replace\(/',
             '$1(string) preg_replace(',
             $translated,
