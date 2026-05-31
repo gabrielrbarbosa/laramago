@@ -23,6 +23,7 @@ Mago 1.29 does not expose a Composer-loaded analyzer extension API equivalent to
 - generated Eloquent PHPDoc overlays from real application model metadata;
 - generated Laravel framework overlays for application-specific auth model types;
 - generated symbol stubs for excluded legacy application paths, so references stay resolvable without analyzing those files;
+- Composer `autoload` and `autoload-dev` PSR-4/classmap paths included for type discovery, so classes outside `app` such as seeders stay resolvable;
 - baseline usage for existing applications that already have analyzer debt or want to migrate gradually;
 - path translation so diagnostics point back to application files instead of generated cache files;
 - Composer commands that can replace existing `phpstan` scripts;
@@ -86,10 +87,11 @@ During `analyze`, `baseline`, and `verify-baseline`, Laramago:
 2. discovers Eloquent models in `app/Models`;
 3. reads database columns, casts, accessors, local scopes, and public relation methods;
 4. reads `config/auth.php` to detect the application auth user model;
-5. writes generated files to `.laramago/cache/model-overlays` and `.laramago/cache/framework-overlays`;
-6. writes lightweight symbol stubs for excluded application paths to `.laramago/cache/excluded-symbols`;
-7. passes overlays to Mago through `--substitute` and includes excluded symbol stubs for type discovery;
-8. translates baseline and diagnostic paths back to the original app files.
+5. reads Composer `autoload` and `autoload-dev` PSR-4/classmap paths for type discovery outside analyzed source paths;
+6. writes generated files to `.laramago/cache/model-overlays` and `.laramago/cache/framework-overlays`;
+7. writes lightweight symbol stubs for excluded application paths to `.laramago/cache/excluded-symbols`;
+8. passes overlays to Mago through `--substitute` and includes excluded symbol stubs for type discovery;
+9. translates baseline and diagnostic paths back to the original app files.
 
 The application source tree is not modified.
 
@@ -102,6 +104,7 @@ Generated overlays currently add:
 - Laravel `HasFactory` return types without app-level generic boilerplate;
 - Laravel `Scope` and Laravel Excel `FromCollection` compatibility without app-level generic boilerplate;
 - auth guard and facade return types for the configured Laravel user model;
+- Composer autoload and autoload-dev type discovery for application namespaces that live outside the analyzed source paths;
 - excluded-path symbol discovery so `exclude` can omit legacy code from analysis without turning referenced classes into false missing-class errors;
 - baseline and output path translation so generated overlay paths do not leak into application diagnostics.
 

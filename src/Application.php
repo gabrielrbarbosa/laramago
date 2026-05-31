@@ -6,7 +6,7 @@ namespace Laramago;
 
 final class Application
 {
-    private const VERSION = '0.1.17';
+    private const VERSION = '0.1.18';
 
     private const CONFIG_FILE = 'mago.toml';
 
@@ -717,6 +717,10 @@ TOML;
         $values = $this->projectConfigValues($projectRoot);
         $runtimeConfigPath = $projectRoot . '/' . self::RUNTIME_CONFIG_FILE;
         $includes = $values['includes'];
+        $includes = array_values(array_unique(array_merge(
+            $includes,
+            $this->composerAutoloadIncludes($projectRoot, $values['paths'], $includes),
+        )));
         $excludedSymbolInclude = $this->prepareExcludedSymbolStubs($projectRoot, $values['excludes']);
 
         if ($excludedSymbolInclude !== null) {
@@ -775,6 +779,118 @@ TOML;
         }
 
         return $values;
+    }
+
+    /**
+     * @param list<string> $sourcePaths
+     * @param list<string> $configuredIncludes
+     * @return list<string>
+     */
+    private function composerAutoloadIncludes(string $projectRoot, array $sourcePaths, array $configuredIncludes): array
+    {
+        $composerPath = $projectRoot . '/composer.json';
+
+        if (! is_file($composerPath)) {
+            return [];
+        }
+
+        try {
+            $composer = json_decode((string) file_get_contents($composerPath), true, 512, JSON_THROW_ON_ERROR);
+        } catch (\JsonException) {
+            return [];
+        }
+
+        if (! is_array($composer)) {
+            return [];
+        }
+
+        $paths = [];
+
+        foreach (['autoload', 'autoload-dev'] as $section) {
+            $autoload = $composer[$section] ?? null;
+
+            if (! is_array($autoload)) {
+                continue;
+            }
+
+            $psr4 = $autoload['psr-4'] ?? null;
+
+            if (is_array($psr4)) {
+                foreach ($psr4 as $path) {
+                    foreach ($this->composerAutoloadPathValues($path) as $autoloadPath) {
+                        $paths[] = $autoloadPath;
+                    }
+                }
+            }
+
+            $classmap = $autoload['classmap'] ?? null;
+
+            if (is_array($classmap)) {
+                foreach ($classmap as $path) {
+                    foreach ($this->composerAutoloadPathValues($path) as $autoloadPath) {
+                        $paths[] = $autoloadPath;
+                    }
+                }
+            }
+        }
+
+        $paths = array_values(array_unique(array_filter(
+            array_map($this->normalizeProjectPath(...), $paths),
+            fn (string $path): bool => $this->shouldIncludeComposerAutoloadPath($projectRoot, $path, $sourcePaths, $configuredIncludes),
+        )));
+
+        sort($paths);
+
+        return $paths;
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function composerAutoloadPathValues(mixed $value): array
+    {
+        if (is_string($value)) {
+            return [$value];
+        }
+
+        if (! is_array($value)) {
+            return [];
+        }
+
+        return array_values(array_filter($value, is_string(...)));
+    }
+
+    private function normalizeProjectPath(string $path): string
+    {
+        $path = trim(str_replace('\\', '/', $path));
+        $path = preg_replace('#^\./#', '', $path) ?? $path;
+
+        return rtrim($path, '/');
+    }
+
+    /**
+     * @param list<string> $sourcePaths
+     * @param list<string> $configuredIncludes
+     */
+    private function shouldIncludeComposerAutoloadPath(string $projectRoot, string $path, array $sourcePaths, array $configuredIncludes): bool
+    {
+        if ($path === '' || str_starts_with($path, '/') || str_starts_with($path, '../')) {
+            return false;
+        }
+
+        if (! is_dir($projectRoot . '/' . $path)) {
+            return false;
+        }
+
+        foreach (array_merge($sourcePaths, $configuredIncludes) as $existingPath) {
+            $existingPath = $this->normalizeProjectPath($existingPath);
+
+            if ($path === $existingPath || str_starts_with($path . '/', $existingPath . '/')) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /**

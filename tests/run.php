@@ -142,6 +142,23 @@ function testRuntimeConfigGeneration(string $project, string $root): void
 {
     require_once $root . '/src/Application.php';
 
+    mkdir($project . '/database/seeders', 0777, true);
+    file_put_contents($project . '/composer.json', json_encode([
+        'require' => [
+            'php' => '^8.5',
+        ],
+        'autoload' => [
+            'psr-4' => [
+                'App\\' => 'app/',
+            ],
+        ],
+        'autoload-dev' => [
+            'psr-4' => [
+                'Database\\Seeders\\' => 'database/seeders/',
+            ],
+        ],
+    ], JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR));
+
     $application = new Laramago\Application();
     $method = new ReflectionMethod($application, 'prepareRuntimeConfig');
     $runtimeConfig = $method->invoke($application, $project);
@@ -158,6 +175,10 @@ function testRuntimeConfigGeneration(string $project, string $root): void
 
     if (! str_contains($config, 'paths = ["app"]') || ! str_contains($config, 'php-version = "8.5.0"')) {
         fail('runtime config did not preserve project source settings');
+    }
+
+    if (! str_contains($config, 'includes = ["vendor", "database/seeders"]')) {
+        fail('runtime config did not include Composer autoload paths outside the analyzed source paths');
     }
 
     if (str_contains($config, 'ignore = [')) {
