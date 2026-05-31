@@ -314,3 +314,53 @@ PHP);
 
     fail('Laravel FormRequest overlay did not document dynamic request properties');
 }
+
+function testAllowDynamicPropertiesOverlayGeneration(string $project, string $root): void
+{
+    require_once $root . '/src/Application.php';
+
+    file_put_contents($project . '/app/UsesAllowDynamicProperties.php', <<<'PHP'
+<?php
+
+namespace App;
+
+use AllowDynamicProperties;
+
+#[AllowDynamicProperties]
+class UsesAllowDynamicProperties
+{
+    public function __construct()
+    {
+        $this->service = new \stdClass();
+    }
+
+    public function inspect(): mixed
+    {
+        return $this->service;
+    }
+}
+PHP);
+
+    $application = new Laramago\Application();
+    $method = new ReflectionMethod($application, 'phpStanPragmaSubstitutions');
+    $method->invoke($application, $project, [], []);
+
+    $map = json_decode((string) file_get_contents($project . '/.laramago/cache/phpstan-pragma-overlays.json'), true);
+
+    foreach (is_array($map) ? $map : [] as $entry) {
+        if (($entry['original'] ?? null) !== 'app/UsesAllowDynamicProperties.php' || ! is_string($entry['overlay'] ?? null)) {
+            continue;
+        }
+
+        $overlay = file_get_contents($project . '/' . $entry['overlay']);
+
+        if (is_string($overlay)
+            && str_contains($overlay, '@property mixed $service')
+            && str_contains($overlay, 'public function __get(string $key): mixed')
+            && str_contains($overlay, 'public function __set(string $key, mixed $value): void')) {
+            return;
+        }
+    }
+
+    fail('AllowDynamicProperties overlay did not expose dynamic property accessors');
+}

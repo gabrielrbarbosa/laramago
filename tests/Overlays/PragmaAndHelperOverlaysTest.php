@@ -403,6 +403,56 @@ PHP);
     fail('Laravel Excel event overlay did not annotate event callback variables');
 }
 
+function testLaravelValidationRuleCallbackOverlayGeneration(string $project, string $root): void
+{
+    require_once $root . '/src/Application.php';
+
+    file_put_contents($project . '/app/UsesValidationCallbacks.php', <<<'PHP'
+<?php
+
+namespace App;
+
+final class UsesValidationCallbacks
+{
+    public function rules(): array
+    {
+        return [
+            'name' => [
+                'required',
+                function ($attribute, $value, $fail): void {
+                    if ($value === '') {
+                        $fail("{$attribute} is invalid.");
+                    }
+                },
+            ],
+        ];
+    }
+}
+PHP);
+
+    $application = new Laramago\Application();
+    $method = new ReflectionMethod($application, 'phpStanPragmaSubstitutions');
+    $method->invoke($application, $project, [], []);
+
+    $map = json_decode((string) file_get_contents($project . '/.laramago/cache/phpstan-pragma-overlays.json'), true);
+
+    foreach (is_array($map) ? $map : [] as $entry) {
+        if (($entry['original'] ?? null) !== 'app/UsesValidationCallbacks.php' || ! is_string($entry['overlay'] ?? null)) {
+            continue;
+        }
+
+        $overlay = file_get_contents($project . '/' . $entry['overlay']);
+
+        if (is_string($overlay)
+            && str_contains($overlay, '/** @var callable $fail */')
+            && str_contains($overlay, '$fail("{$attribute} is invalid.");')) {
+            return;
+        }
+    }
+
+    fail('Laravel validation rule callback overlay did not annotate the $fail callable');
+}
+
 function testLaravelQueryBuilderClosureOverlayGeneration(string $project, string $root): void
 {
     require_once $root . '/src/Application.php';

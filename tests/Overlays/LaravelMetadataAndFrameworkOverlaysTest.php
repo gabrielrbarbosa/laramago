@@ -222,6 +222,7 @@ function testLaravelFrameworkOverlayGeneration(string $project, string $root): v
     mkdir($project . '/vendor/laravel/framework/src/Illuminate/Pagination', 0777, true);
     mkdir($project . '/vendor/laravel/framework/src/Illuminate/Routing', 0777, true);
     mkdir($project . '/vendor/laravel/framework/src/Illuminate/Support/Facades', 0777, true);
+    mkdir($project . '/vendor/laravel/framework/src/Illuminate/Validation', 0777, true);
     mkdir($project . '/vendor/laravel/socialite/src/Contracts', 0777, true);
     mkdir($project . '/vendor/laravel/socialite/src/Two', 0777, true);
     mkdir($project . '/vendor/nesbot/carbon/src/Carbon', 0777, true);
@@ -253,6 +254,25 @@ interface ShouldBroadcast
      * @return \Illuminate\Broadcasting\Channel|\Illuminate\Broadcasting\Channel[]|string[]|string
      */
     public function broadcastOn();
+}
+PHP);
+
+    file_put_contents($project . '/vendor/laravel/framework/src/Illuminate/Validation/ValidationException.php', <<<'PHP'
+<?php
+
+namespace Illuminate\Validation;
+
+class ValidationException extends \Exception
+{
+    /**
+     * Get all of the validation error messages.
+     *
+     * @return array
+     */
+    public function errors()
+    {
+        return [];
+    }
 }
 PHP);
 
@@ -699,7 +719,7 @@ PHP);
     $method = new ReflectionMethod($application, 'laravelFrameworkSubstitutions');
     $substitutions = $method->invoke($application, $project, []);
 
-    if (! is_array($substitutions) || count($substitutions) !== 56) {
+    if (! is_array($substitutions) || count($substitutions) !== 58) {
         fail('framework overlay generation returned unexpected substitutions');
     }
 
@@ -716,6 +736,7 @@ PHP);
     $foundationHelpersOverlay = file_get_contents($project . '/.laramago/cache/framework-overlays/FoundationHelpers.php');
     $notificationOverlay = file_get_contents($project . '/.laramago/cache/framework-overlays/Notification.php');
     $shouldBroadcastOverlay = file_get_contents($project . '/.laramago/cache/framework-overlays/ShouldBroadcast.php');
+    $validationExceptionOverlay = file_get_contents($project . '/.laramago/cache/framework-overlays/ValidationException.php');
     $eloquentBuilderOverlay = file_get_contents($project . '/.laramago/cache/framework-overlays/Builder.php');
     $eloquentModelOverlay = file_get_contents($project . '/.laramago/cache/framework-overlays/EloquentModel.php');
     $hasAttributesOverlay = file_get_contents($project . '/.laramago/cache/framework-overlays/HasAttributes.php');
@@ -782,6 +803,10 @@ PHP);
 
     if (! is_string($shouldBroadcastOverlay) || ! str_contains($shouldBroadcastOverlay, '@return mixed')) {
         fail('ShouldBroadcast overlay did not relax Laravel broadcast channel return docs');
+    }
+
+    if (! is_string($validationExceptionOverlay) || ! str_contains($validationExceptionOverlay, '@return array<string, list<string>>') || ! str_contains($validationExceptionOverlay, 'public function errors(): array')) {
+        fail('ValidationException overlay did not expose validation errors as a string-list map');
     }
 
     if (! is_string($socialiteProviderOverlay) || ! str_contains($socialiteProviderOverlay, '@return \\Laravel\\Socialite\\Contracts\\User|null') || ! str_contains($socialiteProviderOverlay, 'public function with(array $parameters): static;') || ! str_contains($socialiteProviderOverlay, 'public function scopes(array $scopes): static;')) {

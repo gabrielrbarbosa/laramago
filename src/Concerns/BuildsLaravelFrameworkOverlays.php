@@ -37,6 +37,7 @@ trait BuildsLaravelFrameworkOverlays
         $paginatorContractPath = $projectRoot . '/vendor/laravel/framework/src/Illuminate/Contracts/Pagination/Paginator.php';
         $notificationPath = $projectRoot . '/vendor/laravel/framework/src/Illuminate/Notifications/Notification.php';
         $shouldBroadcastPath = $projectRoot . '/vendor/laravel/framework/src/Illuminate/Contracts/Broadcasting/ShouldBroadcast.php';
+        $validationExceptionPath = $projectRoot . '/vendor/laravel/framework/src/Illuminate/Validation/ValidationException.php';
         $hasFactoryPath = $projectRoot . '/vendor/laravel/framework/src/Illuminate/Database/Eloquent/Factories/HasFactory.php';
         $scopePath = $projectRoot . '/vendor/laravel/framework/src/Illuminate/Database/Eloquent/Scope.php';
         $fromCollectionPath = $projectRoot . '/vendor/maatwebsite/excel/src/Concerns/FromCollection.php';
@@ -222,6 +223,14 @@ trait BuildsLaravelFrameworkOverlays
 
             if (is_string($shouldBroadcastSource)) {
                 $overlays[] = $this->writeFrameworkOverlay($projectRoot, 'ShouldBroadcast.php', $shouldBroadcastPath, $this->renderShouldBroadcastOverlay($shouldBroadcastSource));
+            }
+        }
+
+        if (is_file($validationExceptionPath)) {
+            $validationExceptionSource = file_get_contents($validationExceptionPath);
+
+            if (is_string($validationExceptionSource)) {
+                $overlays[] = $this->writeFrameworkOverlay($projectRoot, 'ValidationException.php', $validationExceptionPath, $this->renderValidationExceptionOverlay($validationExceptionSource));
             }
         }
 
@@ -914,6 +923,24 @@ PHP;
             '@return mixed',
             $source,
         );
+    }
+
+    private function renderValidationExceptionOverlay(string $source): string
+    {
+        $source = preg_replace(
+            '/\/\*\*\s*\n\s+\* Get all of the validation error messages\.\s*\n\s+\*\s*\n\s+\* @return array\s*\n\s+\*\/\s*\n\s+public function errors\(\)/m',
+            <<<'PHP'
+    /**
+     * Get all of the validation error messages.
+     *
+     * @return array<string, list<string>>
+     */
+    public function errors(): array
+PHP,
+            $source,
+        );
+
+        return is_string($source) ? $source : '';
     }
 
     private function notificationDynamicMembers(string $projectRoot, array $arguments): array

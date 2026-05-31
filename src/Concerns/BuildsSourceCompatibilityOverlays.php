@@ -49,6 +49,7 @@ trait BuildsSourceCompatibilityOverlays
                 $translated = $this->translateLaravelDateHelperCalls($translated);
                 $translated = $this->annotateLaravelCollectionMacroClosures($translated);
                 $translated = $this->annotateLaravelExcelEventClosures($translated);
+                $translated = $this->annotateLaravelValidationRuleClosures($translated);
                 $translated = $this->annotateLaravelQueryBuilderClosures($translated);
                 $translated = $this->annotateLaravelJoinClauseClosures($translated);
                 $translated = $this->annotateLaravelForeachObjectRows($translated);
@@ -60,6 +61,7 @@ trait BuildsSourceCompatibilityOverlays
                 $translated = $this->annotateLaravelJsonResourceDynamicMembers($translated, $relativePath);
                 $translated = $this->annotateLaravelCollectionItemObjectClosures($translated);
                 $translated = $this->annotateLaravelFormRequestDynamicProperties($translated, $relativePath, $projectRoot);
+                $translated = $this->annotateAllowDynamicPropertiesClasses($translated);
                 $minimumAliases = $translated === $source ? 2 : 1;
                 $overlay = $this->insertTraitSelfCallMethods($this->insertCaseInsensitiveMethodAliases($translated, $caseInsensitiveAliasCandidates, $minimumAliases));
 
@@ -439,6 +441,21 @@ trait BuildsSourceCompatibilityOverlays
         }
 
         return $translated;
+    }
+
+    private function annotateLaravelValidationRuleClosures(string $source): string
+    {
+        if (! str_contains($source, '$fail') || ! str_contains($source, 'function')) {
+            return $source;
+        }
+
+        $translated = preg_replace_callback(
+            '/((?:static\s+)?function\s*\(\s*\$[A-Za-z_][A-Za-z0-9_]*\s*,\s*\$[A-Za-z_][A-Za-z0-9_]*\s*,\s*\$fail\s*\)(?:\s*use\s*\([^)]*\))?\s*(?::\s*[^{]+)?\{)(?!\s*\/\*\*\s*@var\s+callable\s+\$fail)/m',
+            static fn (array $matches): string => $matches[1] . PHP_EOL . '                /** @var callable $fail */',
+            $source,
+        );
+
+        return is_string($translated) ? $translated : $source;
     }
 
     private function annotateLaravelQueryBuilderClosures(string $source): string
@@ -898,6 +915,65 @@ PHP);
         }
 
         return $source;
+    }
+
+    private function annotateAllowDynamicPropertiesClasses(string $source): string
+    {
+        if (! str_contains($source, 'AllowDynamicProperties') || ! str_contains($source, 'class ')) {
+            return $source;
+        }
+
+        if (preg_match('/#\[\s*\\\\?AllowDynamicProperties\s*\]\s*(?:(?:abstract|final|readonly)\s+)*class\s+([A-Za-z_][A-Za-z0-9_]*)/m', $source, $classMatches) !== 1) {
+            return $source;
+        }
+
+        if (preg_match_all('/\$this\s*->\s*([A-Za-z_][A-Za-z0-9_]*)\b(?!\s*\()/', $source, $matches) !== 0) {
+            $declaredProperties = $this->declaredProperties($source);
+            $properties = [];
+
+            foreach ($matches[1] as $property) {
+                if (isset($declaredProperties[$property])) {
+                    continue;
+                }
+
+                $properties[$property] = true;
+            }
+
+            if ($properties !== []) {
+                $source = $this->insertClassDocblockLines(
+                    $source,
+                    $classMatches[1],
+                    array_map(static fn (string $property): string => ' * @property mixed $' . $property, array_keys($properties)),
+                );
+            }
+        }
+
+        $methods = [];
+
+        if (! str_contains($source, 'function __get(')) {
+            $methods[] = <<<'PHP'
+
+    public function __get(string $key): mixed
+    {
+        return null;
+    }
+PHP;
+        }
+
+        if (! str_contains($source, 'function __set(')) {
+            $methods[] = <<<'PHP'
+
+    public function __set(string $key, mixed $value): void
+    {
+    }
+PHP;
+        }
+
+        if ($methods === []) {
+            return $source;
+        }
+
+        return $this->insertBeforeFinalClassBrace($source, implode(PHP_EOL, $methods));
     }
 
     private function usedTraitDeclaredProperties(string $projectRoot, string $source): array
