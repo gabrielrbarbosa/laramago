@@ -41,6 +41,8 @@ Mago 1.29 does not expose a Composer-loaded analyzer extension API equivalent to
 - Composer commands that can replace existing `phpstan` scripts;
 - a small public surface that can absorb native Mago extension hooks when Mago exposes them.
 
+See [CHANGELOG.md](CHANGELOG.md) for release notes.
+
 ## Installation
 
 ```bash
