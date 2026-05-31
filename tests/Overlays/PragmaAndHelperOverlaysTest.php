@@ -174,6 +174,59 @@ PHP);
     }
 }
 
+function testInternalFunctionCompatibilityOverlayGeneration(string $project, string $root): void
+{
+    require_once $root . '/src/Application.php';
+
+    file_put_contents($project . '/app/UsesInternalFunctions.php', <<<'PHP'
+<?php
+
+namespace App;
+
+final class UsesInternalFunctions
+{
+    public function handle(object $model, object $response): array
+    {
+        $year = date('Y', strtotime($model->created_at));
+        $decoded = json_decode($response->getBody(), true);
+
+        return [$year, $decoded];
+    }
+
+    public function normalize(string $value): string
+    {
+        return preg_replace('/[^a-z]/', '', iconv('UTF-8', 'ASCII//TRANSLIT', $value));
+    }
+}
+PHP);
+
+    $application = new Laramago\Application();
+    $method = new ReflectionMethod($application, 'phpStanPragmaSubstitutions');
+    $method->invoke($application, $project, [], []);
+
+    $map = json_decode((string) file_get_contents($project . '/.laramago/cache/phpstan-pragma-overlays.json'), true);
+    $foundOverlay = false;
+
+    foreach (is_array($map) ? $map : [] as $entry) {
+        if (($entry['original'] ?? null) !== 'app/UsesInternalFunctions.php' || ! is_string($entry['overlay'] ?? null)) {
+            continue;
+        }
+
+        $overlay = file_get_contents($project . '/' . $entry['overlay']);
+
+        if (is_string($overlay)
+            && str_contains($overlay, 'date(\'Y\', strtotime((string) $model->created_at))')
+            && str_contains($overlay, 'json_decode((string) $response->getBody(), true)')
+            && substr_count($overlay, '@mago-ignore possibly-false-argument invalid-argument nullable-return-statement invalid-return-statement falsable-return-statement') === 3) {
+            $foundOverlay = true;
+        }
+    }
+
+    if (! $foundOverlay) {
+        fail('source compatibility overlay did not normalize internal function stringable/false-returning pipelines');
+    }
+}
+
 function testLaravelHttpClientWrapperReturnTypeOverlayGeneration(string $project, string $root): void
 {
     require_once $root . '/src/Application.php';

@@ -52,6 +52,8 @@ trait BuildsSourceCompatibilityOverlays
                 $translated = $this->removeObjectAccessStringInterpolations($translated);
                 $translated = $this->translateLaravelDateHelperCalls($translated);
                 $translated = $this->rewriteCarbonInstanceStaticCalls($translated);
+                $translated = $this->normalizeStringableInternalFunctionArguments($translated);
+                $translated = $this->ignoreFalseReturningInternalFunctionPipelines($translated);
                 $translated = $this->rewriteLaravelHttpClientWrapperReturnTypes($translated);
                 $translated = $this->annotateLaravelHttpClientWrapperAssignments($translated, $projectRoot);
                 $translated = $this->annotateLaravelCollectionMacroClosures($translated);
@@ -476,6 +478,85 @@ trait BuildsSourceCompatibilityOverlays
             ],
             $source,
         );
+    }
+
+    private function normalizeStringableInternalFunctionArguments(string $source): string
+    {
+        if (! str_contains($source, 'strtotime(') && ! str_contains($source, 'json_decode(')) {
+            return $source;
+        }
+
+        $translated = preg_replace(
+            '/json_decode\(\s*([^,\r\n;]+->\s*getBody\s*\(\s*\))\s*,/',
+            'json_decode((string) $1,',
+            $source,
+        ) ?? $source;
+
+        $translated = preg_replace_callback(
+            '/strtotime\(\s*(?!\(string\))([^,\r\n;]+?)\s*(?=[,)])/',
+            static function (array $matches): string {
+                $argument = trim($matches[1]);
+
+                if ($argument === '' || preg_match('/^[\'"]/', $argument) === 1 || is_numeric($argument)) {
+                    return $matches[0];
+                }
+
+                return 'strtotime((string) ' . $argument;
+            },
+            $translated,
+        );
+
+        return is_string($translated) ? $translated : $source;
+    }
+
+    private function ignoreFalseReturningInternalFunctionPipelines(string $source): string
+    {
+        if (! str_contains($source, 'strtotime(') && ! str_contains($source, 'preg_replace(') && ! str_contains($source, 'json_decode(')) {
+            return $source;
+        }
+
+        $lines = preg_split('/(\R)/', $source, -1, PREG_SPLIT_DELIM_CAPTURE);
+
+        if (! is_array($lines)) {
+            return $source;
+        }
+
+        $translated = '';
+
+        for ($index = 0; $index < count($lines); $index += 2) {
+            $line = (string) $lines[$index];
+            $lineEnding = (string) ($lines[$index + 1] ?? '');
+
+            if ($this->needsFalseReturningInternalFunctionPragma($line)) {
+                preg_match('/^\s*/', $line, $matches);
+                $translated .= ($matches[0] ?? '') . '// @mago-ignore possibly-false-argument invalid-argument nullable-return-statement invalid-return-statement falsable-return-statement' . $lineEnding;
+            }
+
+            $translated .= $line . $lineEnding;
+        }
+
+        return $translated;
+    }
+
+    private function needsFalseReturningInternalFunctionPragma(string $line): bool
+    {
+        if (str_contains($line, '@mago-ignore')) {
+            return false;
+        }
+
+        if (str_contains($line, 'date(') && str_contains($line, 'strtotime(')) {
+            return true;
+        }
+
+        if (str_contains($line, 'strtotime(') && str_contains($line, '(string)')) {
+            return true;
+        }
+
+        if (str_contains($line, 'json_decode(') && str_contains($line, '->getBody(')) {
+            return true;
+        }
+
+        return str_contains($line, 'preg_replace(') && (str_contains($line, 'iconv(') || str_contains($line, 'mb_convert_encoding('));
     }
 
     private function translateLaravelCarbonImports(string $source): string
