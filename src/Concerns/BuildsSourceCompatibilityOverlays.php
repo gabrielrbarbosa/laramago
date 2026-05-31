@@ -46,10 +46,12 @@ trait BuildsSourceCompatibilityOverlays
                 }
 
                 $translated = $this->translatePhpStanPragmas($source);
+                $translated = $this->translateLarastanPseudoTypes($translated);
                 $translated = $this->translateLaravelDateHelperCalls($translated);
                 $translated = $this->rewriteLaravelHttpClientWrapperReturnTypes($translated);
                 $translated = $this->annotateLaravelHttpClientWrapperAssignments($translated, $projectRoot);
                 $translated = $this->annotateLaravelCollectionMacroClosures($translated);
+                $translated = $this->annotateLaravelCollectionStringCallbacks($translated);
                 $translated = $this->annotateLaravelExcelEventClosures($translated);
                 $translated = $this->annotateLaravelValidationRuleClosures($translated);
                 $translated = $this->annotateLaravelQueryBuilderClosures($translated);
@@ -201,6 +203,11 @@ trait BuildsSourceCompatibilityOverlays
         }
 
         return $translated;
+    }
+
+    private function translateLarastanPseudoTypes(string $source): string
+    {
+        return preg_replace('/\bmodel-property\s*<\s*[^>\r\n*]+\s*>/', 'string', $source) ?? $source;
     }
 
     private function translateLaravelDateHelperCalls(string $source): string
@@ -645,6 +652,56 @@ trait BuildsSourceCompatibilityOverlays
                 }
 
                 return $matches[1][0] . '$' . $variable . $matches[3][0] . PHP_EOL . '                /** @var object $' . $variable . ' */';
+            },
+            $source,
+            -1,
+            $count,
+            PREG_OFFSET_CAPTURE,
+        );
+
+        return is_string($translated) ? $translated : $source;
+    }
+
+    private function annotateLaravelCollectionStringCallbacks(string $source): string
+    {
+        if (! str_contains($source, 'function') || ! str_contains($source, '->')) {
+            return $source;
+        }
+
+        $methods = [
+            'each',
+            'filter',
+            'map',
+            'mapWithKeys',
+            'reject',
+            'transform',
+        ];
+        $methodPattern = implode('|', array_map(static fn (string $method): string => preg_quote($method, '/'), $methods));
+
+        $translated = preg_replace_callback(
+            '/(->\s*(?:' . $methodPattern . ')\s*\(\s*(?:static\s+)?function\s*\(\s*)\$([A-Za-z_][A-Za-z0-9_]*)(\s*(?:,[^)]*)?\)\s*(?:use\s*\([^)]*\)\s*)?(?::\s*[^{]+)?\{)(?!\s*\/\*\*\s*@var\s+[^*]*\$[A-Za-z_][A-Za-z0-9_]*)/ms',
+            static function (array $matches) use ($source): string {
+                $matched = $matches[0][0];
+                $offset = $matches[0][1];
+                $variable = $matches[2][0];
+                $bodyPreview = substr($source, $offset + strlen($matched), 1200);
+                $closureEnd = strpos($bodyPreview, '});');
+
+                if ($closureEnd !== false) {
+                    $bodyPreview = substr($bodyPreview, 0, $closureEnd);
+                }
+
+                $variablePattern = preg_quote('$' . $variable, '/');
+
+                if (str_contains($bodyPreview, '$' . $variable . '->')) {
+                    return $matched;
+                }
+
+                if (preg_match('/(?:\\\\?Illuminate\\\\Support\\\\Str::(?:limit|lower|upper|headline|title|slug|snake|studly|camel|ucfirst)|\b(?:strlen|substr|trim|ltrim|rtrim|strtolower|strtoupper|ucfirst|str_starts_with|str_ends_with|str_contains|explode)\s*\()\s*' . $variablePattern . '\b/', $bodyPreview) !== 1) {
+                    return $matched;
+                }
+
+                return $matches[1][0] . '$' . $variable . $matches[3][0] . PHP_EOL . '                /** @var string $' . $variable . ' */';
             },
             $source,
             -1,

@@ -21,6 +21,7 @@ trait BuildsLaravelFrameworkOverlays
         $httpFacadePath = $projectRoot . '/vendor/laravel/framework/src/Illuminate/Support/Facades/Http.php';
         $pendingRequestPath = $projectRoot . '/vendor/laravel/framework/src/Illuminate/Http/Client/PendingRequest.php';
         $optionalPath = $projectRoot . '/vendor/laravel/framework/src/Illuminate/Support/Optional.php';
+        $supportCollectionPath = $projectRoot . '/vendor/laravel/framework/src/Illuminate/Collections/Collection.php';
         $supportCarbonPath = $projectRoot . '/vendor/laravel/framework/src/Illuminate/Support/Carbon.php';
         $baseCarbonPath = $projectRoot . '/vendor/nesbot/carbon/src/Carbon/Carbon.php';
         $baseCarbonImmutablePath = $projectRoot . '/vendor/nesbot/carbon/src/Carbon/CarbonImmutable.php';
@@ -99,6 +100,14 @@ trait BuildsLaravelFrameworkOverlays
             }
         }
 
+        if (is_file($supportCollectionPath)) {
+            $supportCollectionSource = file_get_contents($supportCollectionPath);
+
+            if (is_string($supportCollectionSource)) {
+                $overlays[] = $this->writeFrameworkOverlay($projectRoot, 'SupportCollection.php', $supportCollectionPath, $this->renderSupportCollectionOverlay($supportCollectionSource, $projectRoot, $arguments));
+            }
+        }
+
         if (is_file($applicationContractPath)) {
             $applicationContractSource = file_get_contents($applicationContractPath);
 
@@ -135,7 +144,7 @@ trait BuildsLaravelFrameworkOverlays
             $eloquentBuilderSource = file_get_contents($eloquentBuilderPath);
 
             if (is_string($eloquentBuilderSource)) {
-                $overlays[] = $this->writeFrameworkOverlay($projectRoot, 'Builder.php', $eloquentBuilderPath, $this->renderEloquentBuilderOverlay($eloquentBuilderSource));
+                $overlays[] = $this->writeFrameworkOverlay($projectRoot, 'Builder.php', $eloquentBuilderPath, $this->renderEloquentBuilderOverlay($eloquentBuilderSource, $projectRoot, $arguments));
             }
         }
 
@@ -285,7 +294,7 @@ trait BuildsLaravelFrameworkOverlays
         return $substitutions;
     }
 
-    private function renderEloquentBuilderOverlay(string $source): string
+    private function renderEloquentBuilderOverlay(string $source, string $projectRoot, array $arguments): string
     {
         $source = str_replace(
             [
@@ -303,7 +312,7 @@ trait BuildsLaravelFrameworkOverlays
             $source,
         );
 
-        $source = $this->insertClassDocblockLines($source, 'Builder', [
+        $methodLines = [
             ' * @method $this join(string $table, mixed $first, ?string $operator = null, mixed $second = null, string $type = "inner", bool $where = false)',
             ' * @method $this leftJoin(string $table, mixed $first, ?string $operator = null, mixed $second = null)',
             ' * @method $this rightJoin(string $table, mixed $first, ?string $operator = null, mixed $second = null)',
@@ -331,7 +340,12 @@ trait BuildsLaravelFrameworkOverlays
             ' * @method $this onlytrashed()',
             ' * @method \Illuminate\Database\Query\Builder toBase()',
             ' * @method \Illuminate\Database\Query\Builder tobase()',
-        ]);
+        ];
+
+        $source = $this->insertClassDocblockLines($source, 'Builder', array_merge(
+            $methodLines,
+            $this->projectEloquentScopeMethodLines($projectRoot, $arguments),
+        ));
 
         if (! str_contains($source, 'function first(')) {
             $source = $this->insertBeforeFinalClassBrace($source, <<<'PHP'
@@ -493,6 +507,71 @@ PHP);
             'methods' => $methodNames,
             'properties' => $propertyNames,
         ];
+    }
+
+    private function renderSupportCollectionOverlay(string $source, string $projectRoot, array $arguments): string
+    {
+        $source = str_replace(
+            '@return static<array-key, mixed>',
+            '@return \Illuminate\Support\Collection<array-key, mixed>',
+            $source,
+        );
+
+        $lines = $this->projectCollectionMacroMethodLines($projectRoot, $arguments);
+
+        if ($lines === []) {
+            return $source;
+        }
+
+        return $this->insertClassDocblockLines($source, 'Collection', $lines);
+    }
+
+    private function projectCollectionMacroMethodLines(string $projectRoot, array $arguments): array
+    {
+        $macros = [];
+        $seenFiles = [];
+        $config = $this->projectConfigValues($projectRoot);
+
+        foreach ($this->sourceOverlayPaths($projectRoot, $arguments, $config['paths']) as $path) {
+            foreach ($this->sourcePhpFiles($projectRoot, $path) as $file) {
+                if (isset($seenFiles[$file])) {
+                    continue;
+                }
+
+                $seenFiles[$file] = true;
+                $relativePath = ltrim(substr($file, strlen($projectRoot)), '/');
+
+                if ($this->isExcludedProjectPath($relativePath, $config['excludes'])) {
+                    continue;
+                }
+
+                $source = file_get_contents($file);
+
+                if (! is_string($source) || ! str_contains($source, 'macro(')) {
+                    continue;
+                }
+
+                if (preg_match_all('/(?:\\\\?Illuminate\\\\Support\\\\)?Collection::macro\s*\(\s*[\'"]([A-Za-z_][A-Za-z0-9_]*)[\'"]/', $source, $matches) === false) {
+                    continue;
+                }
+
+                foreach ($matches[1] ?? [] as $macro) {
+                    $macros[$macro] = true;
+                }
+            }
+        }
+
+        $lines = [];
+
+        foreach (array_keys($macros) as $macro) {
+            $lines[] = $macro === 'paginate'
+                ? ' * @method \Illuminate\Pagination\LengthAwarePaginator paginate(mixed $perPage = null, mixed $total = null, mixed $page = null, string $pageName = "page")'
+                : ' * @method mixed ' . $macro . '(mixed ...$parameters)';
+        }
+
+        sort($lines);
+
+        return $lines;
     }
 
     private function renderApplicationContractOverlay(string $source): string
@@ -881,6 +960,64 @@ PHP);
             ' * @method \Illuminate\Database\Query\Builder toBase()',
             ' * @method \Illuminate\Database\Query\Builder tobase()',
         ]);
+    }
+
+    private function projectEloquentScopeMethodLines(string $projectRoot, array $arguments): array
+    {
+        $scopes = [];
+        $seenFiles = [];
+        $config = $this->projectConfigValues($projectRoot);
+
+        foreach ($this->sourceOverlayPaths($projectRoot, $arguments, $config['paths']) as $path) {
+            foreach ($this->sourcePhpFiles($projectRoot, $path) as $file) {
+                if (isset($seenFiles[$file])) {
+                    continue;
+                }
+
+                $seenFiles[$file] = true;
+                $relativePath = ltrim(substr($file, strlen($projectRoot)), '/');
+
+                if ($this->isExcludedProjectPath($relativePath, $config['excludes'])) {
+                    continue;
+                }
+
+                $source = file_get_contents($file);
+
+                if (! is_string($source) || (! str_contains($source, 'scope') && ! str_contains($source, 'Scope'))) {
+                    continue;
+                }
+
+                if (preg_match_all('/\bfunction\s+scope([A-Z][A-Za-z0-9_]*)\s*\(/', $source, $matches) !== false) {
+                    foreach ($matches[1] ?? [] as $scope) {
+                        $scopes[lcfirst($scope)] = true;
+                    }
+                }
+
+                if (preg_match_all('/#\[\s*(?:\\\\?Illuminate\\\\Database\\\\Eloquent\\\\Attributes\\\\)?Scope\s*\]\s*(?:(?:public|protected|private)\s+)?function\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(/', $source, $matches) !== false) {
+                    foreach ($matches[1] ?? [] as $scope) {
+                        $scopes[$scope] = true;
+                    }
+                }
+            }
+        }
+
+        foreach (array_keys($scopes) as $scope) {
+            $lowercaseScope = strtolower($scope);
+
+            if ($lowercaseScope !== $scope) {
+                $scopes[$lowercaseScope] = true;
+            }
+        }
+
+        $lines = [];
+
+        foreach (array_keys($scopes) as $scope) {
+            $lines[] = ' * @method \Illuminate\Database\Eloquent\Builder<TModel> ' . $scope . '(mixed ...$parameters)';
+        }
+
+        sort($lines);
+
+        return $lines;
     }
 
     private function renderControllerMiddlewareOptionsOverlay(string $source): string

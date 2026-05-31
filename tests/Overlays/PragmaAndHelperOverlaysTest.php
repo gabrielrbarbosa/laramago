@@ -28,6 +28,14 @@ final class PhpStanIgnored
     {
         return $this->missing(); // @phpstan-ignore-line
     }
+
+    /**
+     * @param model-property<User> $column
+     */
+    public function larastanColumn(string $column): string
+    {
+        return $column;
+    }
 }
 PHP);
 
@@ -49,6 +57,10 @@ PHP);
 
     if (! is_string($overlay) || substr_count($overlay, '@mago-ignore all') !== 2) {
         fail('PHPStan pragma overlay generation did not translate ignore comments');
+    }
+
+    if (str_contains($overlay, 'model-property<User>') || ! str_contains($overlay, '@param string $column')) {
+        fail('source compatibility overlay did not translate Larastan model-property pseudo-types');
     }
 
     if (! str_contains($overlay, '@method mixed getuser(mixed ...$arguments)')) {

@@ -219,6 +219,7 @@ function testLaravelFrameworkOverlayGeneration(string $project, string $root): v
     mkdir($project . '/vendor/laravel/framework/src/Illuminate/Http/Client', 0777, true);
     mkdir($project . '/vendor/laravel/framework/src/Illuminate/Http/Concerns', 0777, true);
     mkdir($project . '/vendor/laravel/framework/src/Illuminate/Http/Resources/Json', 0777, true);
+    mkdir($project . '/vendor/laravel/framework/src/Illuminate/Collections', 0777, true);
     mkdir($project . '/vendor/laravel/framework/src/Illuminate/Notifications', 0777, true);
     mkdir($project . '/vendor/laravel/framework/src/Illuminate/Pagination', 0777, true);
     mkdir($project . '/vendor/laravel/framework/src/Illuminate/Routing', 0777, true);
@@ -227,6 +228,8 @@ function testLaravelFrameworkOverlayGeneration(string $project, string $root): v
     mkdir($project . '/vendor/laravel/socialite/src/Contracts', 0777, true);
     mkdir($project . '/vendor/laravel/socialite/src/Two', 0777, true);
     mkdir($project . '/vendor/nesbot/carbon/src/Carbon', 0777, true);
+    mkdir($project . '/app/Models/Ticket', 0777, true);
+    mkdir($project . '/app/Providers', 0777, true);
 
     file_put_contents($project . '/config/auth.php', <<<'PHP'
 <?php
@@ -240,6 +243,50 @@ return [
         ],
     ],
 ];
+PHP);
+
+    file_put_contents($project . '/app/Models/Ticket/InteracaoTicket.php', <<<'PHP'
+<?php
+
+namespace App\Models\Ticket;
+
+use App\Models\Usuario\Usuario;
+use Illuminate\Database\Eloquent\Attributes\Scope;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Model;
+
+class InteracaoTicket extends Model
+{
+    #[Scope]
+    protected function visibleTo(Builder $query, Usuario $user): Builder
+    {
+        return $query;
+    }
+
+    public function scopeForCustomer(Builder $query, int $customerId): Builder
+    {
+        return $query;
+    }
+}
+PHP);
+
+    file_put_contents($project . '/app/Providers/AppServiceProvider.php', <<<'PHP'
+<?php
+
+namespace App\Providers;
+
+use Illuminate\Support\Collection;
+use Illuminate\Support\ServiceProvider;
+
+class AppServiceProvider extends ServiceProvider
+{
+    public function boot(): void
+    {
+        Collection::macro('paginate', function ($perPage, $total = null, $page = null, $pageName = 'page') {
+            return null;
+        });
+    }
+}
 PHP);
 
     file_put_contents($project . '/vendor/laravel/framework/src/Illuminate/Contracts/Auth/Guard.php', '<?php');
@@ -690,6 +737,22 @@ trait InteractsWithInput
 }
 PHP);
 
+    file_put_contents($project . '/vendor/laravel/framework/src/Illuminate/Collections/Collection.php', <<<'PHP'
+<?php
+
+namespace Illuminate\Support;
+
+class Collection
+{
+    /**
+     * @return static<array-key, mixed>
+     */
+    public function pluck($value, $key = null)
+    {
+    }
+}
+PHP);
+
     file_put_contents($project . '/vendor/laravel/framework/src/Illuminate/Http/Resources/Json/ResourceCollection.php', <<<'PHP'
 <?php
 
@@ -740,7 +803,7 @@ PHP);
     $method = new ReflectionMethod($application, 'laravelFrameworkSubstitutions');
     $substitutions = $method->invoke($application, $project, []);
 
-    if (! is_array($substitutions) || count($substitutions) !== 60) {
+    if (! is_array($substitutions) || count($substitutions) !== 62) {
         fail('framework overlay generation returned unexpected substitutions');
     }
 
@@ -751,6 +814,7 @@ PHP);
     $httpOverlay = file_get_contents($project . '/.laramago/cache/framework-overlays/Http.php');
     $pendingRequestOverlay = file_get_contents($project . '/.laramago/cache/framework-overlays/PendingRequest.php');
     $optionalOverlay = file_get_contents($project . '/.laramago/cache/framework-overlays/Optional.php');
+    $supportCollectionOverlay = file_get_contents($project . '/.laramago/cache/framework-overlays/SupportCollection.php');
     $supportCarbonOverlay = file_get_contents($project . '/.laramago/cache/framework-overlays/SupportCarbon.php');
     $baseCarbonOverlay = file_get_contents($project . '/.laramago/cache/framework-overlays/BaseCarbon.php');
     $baseCarbonImmutableOverlay = file_get_contents($project . '/.laramago/cache/framework-overlays/BaseCarbonImmutable.php');
@@ -803,6 +867,10 @@ PHP);
         fail('Optional overlay did not document project-used dynamic optional members');
     }
 
+    if (! is_string($supportCollectionOverlay) || ! str_contains($supportCollectionOverlay, '@method \\Illuminate\\Pagination\\LengthAwarePaginator paginate(') || ! str_contains($supportCollectionOverlay, '@return \\Illuminate\\Support\\Collection<array-key, mixed>')) {
+        fail('Support collection overlay did not document project collection macros');
+    }
+
     if (! is_string($applicationContractOverlay) || ! str_contains($applicationContractOverlay, 'public function isProduction(): bool;')) {
         fail('application contract overlay did not expose production environment helper');
     }
@@ -843,7 +911,7 @@ PHP);
         fail('auth facade overlay leaked optional vendor implementation details');
     }
 
-    if (! is_string($eloquentBuilderOverlay) || ! str_contains($eloquentBuilderOverlay, '@method $this leftJoin(') || ! str_contains($eloquentBuilderOverlay, '@method $this select(mixed ...$columns)') || ! str_contains($eloquentBuilderOverlay, '@method $this selectRaw(mixed $expression, array $bindings = [])') || ! str_contains($eloquentBuilderOverlay, '@method $this withoutglobalscopes(') || ! str_contains($eloquentBuilderOverlay, '@mixin \\Illuminate\\Database\\Query\\Builder') || ! str_contains($eloquentBuilderOverlay, '@param  int|string|null|\\Closure  $perPage') || ! str_contains($eloquentBuilderOverlay, '@return TModel|null') || ! str_contains($eloquentBuilderOverlay, 'public function first($columns = [\'*\'])')) {
+    if (! is_string($eloquentBuilderOverlay) || ! str_contains($eloquentBuilderOverlay, '@method $this leftJoin(') || ! str_contains($eloquentBuilderOverlay, '@method $this select(mixed ...$columns)') || ! str_contains($eloquentBuilderOverlay, '@method $this selectRaw(mixed $expression, array $bindings = [])') || ! str_contains($eloquentBuilderOverlay, '@method $this withoutglobalscopes(') || ! str_contains($eloquentBuilderOverlay, '@method \\Illuminate\\Database\\Eloquent\\Builder<TModel> visibleTo(mixed ...$parameters)') || ! str_contains($eloquentBuilderOverlay, '@method \\Illuminate\\Database\\Eloquent\\Builder<TModel> visibleto(mixed ...$parameters)') || ! str_contains($eloquentBuilderOverlay, '@method \\Illuminate\\Database\\Eloquent\\Builder<TModel> forCustomer(mixed ...$parameters)') || ! str_contains($eloquentBuilderOverlay, '@mixin \\Illuminate\\Database\\Query\\Builder') || ! str_contains($eloquentBuilderOverlay, '@param  int|string|null|\\Closure  $perPage') || ! str_contains($eloquentBuilderOverlay, '@return TModel|null') || ! str_contains($eloquentBuilderOverlay, 'public function first($columns = [\'*\'])')) {
         fail('Eloquent builder overlay did not preserve source and add delegated chain methods');
     }
 
