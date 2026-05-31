@@ -152,6 +152,10 @@ function testRuntimeConfigGeneration(string $project, string $root): void
     if (! str_contains($config, 'paths = ["app"]') || ! str_contains($config, 'php-version = "8.5.0"')) {
         fail('runtime config did not preserve project source settings');
     }
+
+    if (! str_contains($config, '"mixed-argument"') || str_contains($config, '{ code = "mixed-argument"')) {
+        fail('runtime config did not use Mago global ignore syntax for app-wide compatibility codes');
+    }
 }
 
 function testModelDocblockIncludesLaravelMagic(string $root): void

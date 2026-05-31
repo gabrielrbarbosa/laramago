@@ -6,7 +6,7 @@ namespace Laramago;
 
 final class Application
 {
-    private const VERSION = '0.1.7';
+    private const VERSION = '0.1.8';
 
     private const CONFIG_FILE = 'mago.toml';
 
@@ -525,27 +525,27 @@ no-isset = { allow-array-checks = true }
 [analyzer]
 plugins = []
 ignore = [
-  { code = "mixed-argument", in = "app/" },
-  { code = "mixed-assignment", in = "app/" },
-  { code = "possibly-invalid-argument", in = "app/" },
-  { code = "invalid-array-element-key", in = "app/" },
-  { code = "less-specific-return-statement", in = "app/" },
-  { code = "mixed-return-statement", in = "app/" },
-  { code = "non-documented-method", in = "app/" },
-  { code = "non-documented-property", in = "app/" },
-  { code = "mixed-property-type-coercion", in = "app/" },
-  { code = "invalid-property-write", in = "app/" },
+  "mixed-argument",
+  "mixed-assignment",
+  "possibly-invalid-argument",
+  "invalid-array-element-key",
+  "less-specific-return-statement",
+  "mixed-return-statement",
+  "non-documented-method",
+  "non-documented-property",
+  "mixed-property-type-coercion",
+  "invalid-property-write",
   { code = "non-existent-property", in = "app/*/Concerns/*" },
-  { code = "mixed-operand", in = "app/" },
-  { code = "mixed-method-access", in = "app/" },
-  { code = "non-existent-method", in = "app/" },
-  { code = "possibly-null-operand", in = "app/" },
-  { code = "invalid-return-statement", in = "app/" },
-  { code = "possibly-null-argument", in = "app/" },
-  { code = "ambiguous-object-method-access", in = "app/" },
-  { code = "possible-method-access-on-null", in = "app/" },
-  { code = "no-value", in = "app/" },
-  { code = "falsable-return-statement", in = "app/" },
+  "mixed-operand",
+  "mixed-method-access",
+  "non-existent-method",
+  "possibly-null-operand",
+  "invalid-return-statement",
+  "possibly-null-argument",
+  "ambiguous-object-method-access",
+  "possible-method-access-on-null",
+  "no-value",
+  "falsable-return-statement",
 ]
 find-unused-definitions = true
 find-unused-expressions = false
