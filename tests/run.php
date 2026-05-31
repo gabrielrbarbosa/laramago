@@ -68,6 +68,9 @@ testProjectLockSerializesCacheCommands($project, $binary);
 testProjectClassDiscoveryUsesConfiguredSourcePaths($project, $root);
 testAnalysisIgnoresStaleRuntimeBaseline($project, $root);
 testPhpStanPragmaOverlayGeneration($project, $root);
+testCaseInsensitiveOverlaySkipsSingleAliasFiles($project, $root);
+testCaseInsensitiveOverlayRespectsExcludes($project, $root);
+testTraitSelfCallOverlayGeneration($project, $root);
 testLaravelMetadataInferenceHelpers($root);
 testModelDocblockIncludesLaravelMagic($root);
 testLaravelFrameworkOverlayGeneration($project, $root);
@@ -417,8 +420,16 @@ function testExcludedSymbolStubGeneration(string $project, string $root): void
 
 namespace App\Excluded;
 
-final class LegacyService
+final class LegacyService extends BaseService implements LegacyContract
 {
+    public function __construct(public int $tenantId = 0)
+    {
+    }
+
+    public function getUser(int $id): mixed
+    {
+        return null;
+    }
 }
 PHP);
 
@@ -450,7 +461,7 @@ TOML);
 
     $stub = file_get_contents($stubs[0]);
 
-    if (! is_string($stub) || ! str_contains($stub, 'namespace App\Excluded;') || ! str_contains($stub, 'class LegacyService')) {
+    if (! is_string($stub) || ! str_contains($stub, 'namespace App\Excluded;') || ! str_contains($stub, 'final class LegacyService extends BaseService implements LegacyContract') || ! str_contains($stub, 'public function __construct(public int $tenantId = 0) {}') || ! str_contains($stub, 'public function getUser(int $id): mixed {}')) {
         fail('excluded symbol stub generation wrote an unexpected stub');
     }
 }
@@ -643,10 +654,15 @@ namespace App;
 
 final class PhpStanIgnored
 {
+    public function getUser(): mixed
+    {
+        return null;
+    }
+
     public function nextLine(): void
     {
         // @phpstan-ignore-next-line
-        $this->missing();
+        $this->getuser();
     }
 
     public function sameLine(): mixed
@@ -675,6 +691,180 @@ PHP);
     if (! is_string($overlay) || substr_count($overlay, '@mago-ignore all') !== 2) {
         fail('PHPStan pragma overlay generation did not translate ignore comments');
     }
+
+    if (! str_contains($overlay, '@method mixed getuser(mixed ...$arguments)')) {
+        fail('source compatibility overlay did not add case-insensitive method aliases');
+    }
+}
+
+function testCaseInsensitiveOverlaySkipsSingleAliasFiles(string $project, string $root): void
+{
+    require_once $root . '/src/Application.php';
+
+    file_put_contents($project . '/app/OneAlias.php', <<<'PHP'
+<?php
+
+namespace App;
+
+final class OneAlias
+{
+    public function getUser(): mixed
+    {
+        return null;
+    }
+
+    public function run(): void
+    {
+        $this->getUser();
+    }
+}
+PHP);
+
+    file_put_contents($project . '/app/TwoAliases.php', <<<'PHP'
+<?php
+
+namespace App;
+
+final class TwoAliases
+{
+    public function getUser(): mixed
+    {
+        return null;
+    }
+
+    public function getToken(): mixed
+    {
+        return null;
+    }
+
+    public function run(): void
+    {
+        $this->getUser();
+        $this->getToken();
+    }
+}
+PHP);
+
+    $application = new Laramago\Application();
+    $method = new ReflectionMethod($application, 'phpStanPragmaSubstitutions');
+    $method->invoke($application, $project, [], []);
+
+    $map = json_decode((string) file_get_contents($project . '/.laramago/cache/phpstan-pragma-overlays.json'), true);
+    $originals = array_column(is_array($map) ? $map : [], 'original');
+
+    if (in_array('app/OneAlias.php', $originals, true)) {
+        fail('case-insensitive overlay should skip source files with only one alias');
+    }
+
+    if (! in_array('app/TwoAliases.php', $originals, true)) {
+        fail('case-insensitive overlay should include source files with multiple aliases');
+    }
+}
+
+function testCaseInsensitiveOverlayRespectsExcludes(string $project, string $root): void
+{
+    require_once $root . '/src/Application.php';
+
+    $configPath = $project . '/mago.toml';
+    $originalConfig = file_get_contents($configPath);
+
+    if (! is_string($originalConfig)) {
+        fail('unable to read test project config');
+    }
+
+    file_put_contents($configPath, <<<'TOML'
+version = "1"
+php-version = "8.5.0"
+
+[source]
+workspace = "."
+paths = ["app"]
+includes = []
+excludes = ["app/Excluded/**"]
+
+[source.glob]
+literal-separator = true
+TOML);
+
+    if (! is_dir($project . '/app/Excluded')) {
+        mkdir($project . '/app/Excluded');
+    }
+    file_put_contents($project . '/app/Excluded/TwoAliases.php', <<<'PHP'
+<?php
+
+namespace App\Excluded;
+
+final class TwoAliases
+{
+    public function getUser(): mixed
+    {
+        return null;
+    }
+
+    public function getToken(): mixed
+    {
+        return null;
+    }
+
+    public function run(): void
+    {
+        $this->getUser();
+        $this->getToken();
+    }
+}
+PHP);
+
+    $application = new Laramago\Application();
+    $method = new ReflectionMethod($application, 'phpStanPragmaSubstitutions');
+    $method->invoke($application, $project, [], []);
+
+    file_put_contents($configPath, $originalConfig);
+
+    $map = json_decode((string) file_get_contents($project . '/.laramago/cache/phpstan-pragma-overlays.json'), true);
+    $originals = array_column(is_array($map) ? $map : [], 'original');
+
+    if (in_array('app/Excluded/TwoAliases.php', $originals, true)) {
+        fail('case-insensitive overlay should not substitute excluded files');
+    }
+}
+
+function testTraitSelfCallOverlayGeneration(string $project, string $root): void
+{
+    require_once $root . '/src/Application.php';
+
+    file_put_contents($project . '/app/RequiresHostMethods.php', <<<'PHP'
+<?php
+
+namespace App;
+
+trait RequiresHostMethods
+{
+    public function indexName(): string
+    {
+        return $this->getTable();
+    }
+}
+PHP);
+
+    $application = new Laramago\Application();
+    $method = new ReflectionMethod($application, 'phpStanPragmaSubstitutions');
+    $method->invoke($application, $project, [], []);
+
+    $map = json_decode((string) file_get_contents($project . '/.laramago/cache/phpstan-pragma-overlays.json'), true);
+
+    foreach (is_array($map) ? $map : [] as $entry) {
+        if (($entry['original'] ?? null) !== 'app/RequiresHostMethods.php' || ! is_string($entry['overlay'] ?? null)) {
+            continue;
+        }
+
+        $overlay = file_get_contents($project . '/' . $entry['overlay']);
+
+        if (is_string($overlay) && str_contains($overlay, '@method mixed gettable(mixed ...$arguments)')) {
+            return;
+        }
+    }
+
+    fail('trait self-call overlay did not declare host-provided methods');
 }
 
 function testLaravelMetadataInferenceHelpers(string $root): void
@@ -893,6 +1083,7 @@ PHP);
 
 use Illuminate\Contracts\Auth\Factory as AuthFactory;
 use Illuminate\Contracts\Auth\Guard;
+use Carbon\CarbonInterface;
 
 if (! function_exists('auth')) {
     /**
@@ -904,6 +1095,43 @@ if (! function_exists('auth')) {
     function auth($guard = null): AuthFactory|Guard
     {
     }
+}
+
+if (! function_exists('now')) {
+    function now($tz = null): CarbonInterface
+    {
+    }
+}
+
+if (! function_exists('today')) {
+    function today($tz = null): CarbonInterface
+    {
+    }
+}
+PHP);
+
+    file_put_contents($project . '/vendor/laravel/framework/src/Illuminate/Support/Facades/Http.php', <<<'PHP'
+<?php
+
+namespace Illuminate\Support\Facades;
+
+/**
+ * @method static \Illuminate\Http\Client\Response|\GuzzleHttp\Promise\PromiseInterface get(string $url, array|string|null $query = null)
+ * @method static \Illuminate\Http\Client\Response|\GuzzleHttp\Promise\PromiseInterface post(string $url, array|\JsonSerializable|\Illuminate\Contracts\Support\Arrayable $data = [])
+ * @method static \Illuminate\Http\Client\Response|\Illuminate\Http\Client\Promises\LazyPromise send(string $method, string $url, array $options = [])
+ */
+class Http
+{
+}
+PHP);
+
+    file_put_contents($project . '/vendor/laravel/framework/src/Illuminate/Support/Carbon.php', <<<'PHP'
+<?php
+
+namespace Illuminate\Support;
+
+class Carbon extends \Carbon\Carbon
+{
 }
 PHP);
 
@@ -1008,13 +1236,15 @@ PHP);
     $method = new ReflectionMethod($application, 'laravelFrameworkSubstitutions');
     $substitutions = $method->invoke($application, $project, []);
 
-    if (! is_array($substitutions) || count($substitutions) !== 24) {
+    if (! is_array($substitutions) || count($substitutions) !== 28) {
         fail('framework overlay generation returned unexpected substitutions');
     }
 
     $guardOverlay = file_get_contents($project . '/.laramago/cache/framework-overlays/Guard.php');
     $authManagerOverlay = file_get_contents($project . '/.laramago/cache/framework-overlays/AuthManager.php');
     $authOverlay = file_get_contents($project . '/.laramago/cache/framework-overlays/Auth.php');
+    $httpOverlay = file_get_contents($project . '/.laramago/cache/framework-overlays/Http.php');
+    $supportCarbonOverlay = file_get_contents($project . '/.laramago/cache/framework-overlays/SupportCarbon.php');
     $foundationHelpersOverlay = file_get_contents($project . '/.laramago/cache/framework-overlays/FoundationHelpers.php');
     $eloquentBuilderOverlay = file_get_contents($project . '/.laramago/cache/framework-overlays/Builder.php');
     $eloquentModelOverlay = file_get_contents($project . '/.laramago/cache/framework-overlays/EloquentModel.php');
@@ -1037,19 +1267,27 @@ PHP);
         fail('auth facade overlay did not use the configured auth model');
     }
 
-    if (! is_string($foundationHelpersOverlay) || ! str_contains($foundationHelpersOverlay, '@return ($guard is null ? \\Illuminate\\Auth\\AuthManager : \\Illuminate\\Contracts\\Auth\\Guard)') || ! str_contains($foundationHelpersOverlay, 'function auth($guard = null): \\Illuminate\\Auth\\AuthManager|Guard')) {
+    if (! is_string($foundationHelpersOverlay) || ! str_contains($foundationHelpersOverlay, '@return ($guard is null ? \\Illuminate\\Auth\\AuthManager : \\Illuminate\\Contracts\\Auth\\Guard)') || ! str_contains($foundationHelpersOverlay, 'function auth($guard = null): \\Illuminate\\Auth\\AuthManager|Guard') || ! str_contains($foundationHelpersOverlay, 'function now($tz = null): \\Illuminate\\Support\\Carbon')) {
         fail('foundation helpers overlay did not expose the default auth manager return type');
+    }
+
+    if (! is_string($httpOverlay) || ! str_contains($httpOverlay, '@method static \\Illuminate\\Http\\Client\\Response get(') || ! str_contains($httpOverlay, '@method static \\Illuminate\\Http\\Client\\Response send(')) {
+        fail('HTTP facade overlay did not expose synchronous response return types');
+    }
+
+    if (! is_string($supportCarbonOverlay) || ! str_contains($supportCarbonOverlay, '@method float diffinseconds(') || ! str_contains($supportCarbonOverlay, '@method $this startofmonth(')) {
+        fail('support Carbon overlay did not expose lowercase Carbon method aliases');
     }
 
     if (str_contains($authOverlay, 'Laravel\\Ui\\UiServiceProvider')) {
         fail('auth facade overlay leaked optional vendor implementation details');
     }
 
-    if (! is_string($eloquentBuilderOverlay) || ! str_contains($eloquentBuilderOverlay, '@method $this leftJoin(') || ! str_contains($eloquentBuilderOverlay, '@method $this select(array|string ...$columns)') || ! str_contains($eloquentBuilderOverlay, '@mixin \\Illuminate\\Database\\Query\\Builder')) {
+    if (! is_string($eloquentBuilderOverlay) || ! str_contains($eloquentBuilderOverlay, '@method $this leftJoin(') || ! str_contains($eloquentBuilderOverlay, '@method $this select(array|string ...$columns)') || ! str_contains($eloquentBuilderOverlay, '@method $this withoutglobalscopes(') || ! str_contains($eloquentBuilderOverlay, '@mixin \\Illuminate\\Database\\Query\\Builder')) {
         fail('Eloquent builder overlay did not preserve source and add delegated chain methods');
     }
 
-    if (! is_string($eloquentModelOverlay) || ! str_contains($eloquentModelOverlay, 'public function loadMissing($relations, ...$additionalRelations)')) {
+    if (! is_string($eloquentModelOverlay) || ! str_contains($eloquentModelOverlay, 'public function loadMissing($relations, ...$additionalRelations)') || ! str_contains($eloquentModelOverlay, 'public static function withoutGlobalScopes(?array $scopes = null)')) {
         fail('Eloquent model overlay did not expose variadic relation loaders');
     }
 
@@ -1057,7 +1295,7 @@ PHP);
         fail('HasAttributes overlay did not expose variadic attribute selectors');
     }
 
-    if (! is_string($queryBuilderOverlay) || ! str_contains($queryBuilderOverlay, 'public function select($columns = [\'*\'], ...$additionalColumns)') || ! str_contains($queryBuilderOverlay, 'public function addSelect($column, ...$additionalColumns)') || ! str_contains($queryBuilderOverlay, 'public function distinct(...$columns)')) {
+    if (! is_string($queryBuilderOverlay) || ! str_contains($queryBuilderOverlay, 'public function select($columns = [\'*\'], ...$additionalColumns)') || ! str_contains($queryBuilderOverlay, 'public function addSelect($column, ...$additionalColumns)') || ! str_contains($queryBuilderOverlay, 'public function distinct(...$columns)') || ! str_contains($queryBuilderOverlay, '@method $this whereintegernotinraw(')) {
         fail('query builder overlay did not expose variadic column selectors');
     }
 

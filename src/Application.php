@@ -6,7 +6,7 @@ namespace Laramago;
 
 final class Application
 {
-    private const VERSION = '0.1.37';
+    private const VERSION = '0.1.38';
 
     private const CONFIG_FILE = 'mago.toml';
 
@@ -29,6 +29,8 @@ final class Application
     private const PHPSTAN_PRAGMA_OVERLAY_MAP = '.laramago/cache/phpstan-pragma-overlays.json';
 
     private const EXCLUDED_SYMBOL_DIR = '.laramago/cache/excluded-symbols';
+
+    private const LARAVEL_SYMBOL_DIR = '.laramago/cache/laravel-symbols';
 
     private const RUNTIME_CONFIG_FILE = '.laramago/cache/mago.toml';
 
@@ -211,7 +213,7 @@ final class Application
             $command = [$mago, '--config', $runtimeConfig, 'analyze'];
             $command = array_merge(
                 $command,
-                $this->defaultAnalyzeFlags($projectRoot, $arguments, $modelSubstitutions !== []),
+                $this->defaultAnalyzeFlags($projectRoot, $arguments, $substitutions !== []),
                 $substitutions,
                 $this->stripLaramagoOptions($arguments),
             );
@@ -250,11 +252,14 @@ final class Application
             ];
 
             $substitutions = $this->laravelModelSubstitutions($projectRoot, $arguments);
-            $command = array_merge(
-                $command,
+            $allSubstitutions = array_merge(
                 $substitutions,
                 $this->laravelFrameworkSubstitutions($projectRoot, $arguments),
                 $this->phpStanPragmaSubstitutions($projectRoot, $arguments, $this->substitutionOriginalPaths($substitutions)),
+            );
+            $command = array_merge(
+                $command,
+                $allSubstitutions,
             );
 
             if (is_file($projectRoot . '/' . $baselinePath) && ! in_array('--force', $arguments, true)) {
@@ -265,7 +270,7 @@ final class Application
 
             $exitCode = $this->process($command, $projectRoot);
 
-            if ($exitCode === 0 && $substitutions !== []) {
+            if ($exitCode === 0 && $allSubstitutions !== []) {
                 $this->translateBaselinePaths($projectRoot, overlayToOriginal: true, source: self::BASELINE_FILE, target: self::BASELINE_FILE);
             }
 
@@ -828,11 +833,17 @@ TOML;
             $this->composerAutoloadIncludes($projectRoot, $values['paths'], $includes),
         )));
         $excludedSymbolInclude = $this->prepareExcludedSymbolStubs($projectRoot, $values['excludes']);
+        $laravelSymbolInclude = $this->prepareLaravelSymbolStubs($projectRoot);
 
         if ($excludedSymbolInclude !== null) {
             $includes[] = $excludedSymbolInclude;
-            $includes = array_values(array_unique($includes));
         }
+
+        if ($laravelSymbolInclude !== null) {
+            $includes[] = $laravelSymbolInclude;
+        }
+
+        $includes = array_values(array_unique($includes));
 
         $this->ensureDirectory(dirname($runtimeConfigPath));
         file_put_contents($runtimeConfigPath, $this->renderRuntimeConfig(
@@ -1087,7 +1098,19 @@ TOML;
                 'in' => self::PHPSTAN_PRAGMA_OVERLAY_DIR . '/',
             ],
             [
+                'code' => 'possibly-non-existent-method',
+                'in' => self::PHPSTAN_PRAGMA_OVERLAY_DIR . '/',
+            ],
+            [
+                'code' => 'missing-return-statement',
+                'in' => self::EXCLUDED_SYMBOL_DIR . '/',
+            ],
+            [
                 'code' => 'too-few-arguments',
+                'in' => self::FRAMEWORK_OVERLAY_DIR . '/',
+            ],
+            [
+                'code' => 'too-many-arguments',
                 'in' => self::FRAMEWORK_OVERLAY_DIR . '/',
             ],
             [
@@ -1108,6 +1131,14 @@ TOML;
             ],
             [
                 'code' => 'invalid-param-tag',
+                'in' => self::FRAMEWORK_OVERLAY_DIR . '/',
+            ],
+            [
+                'code' => 'deprecated-method',
+                'in' => self::FRAMEWORK_OVERLAY_DIR . '/',
+            ],
+            [
+                'code' => 'unimplemented-abstract-method',
                 'in' => self::FRAMEWORK_OVERLAY_DIR . '/',
             ],
         ]);
@@ -1439,6 +1470,8 @@ TOML;
         $guardPath = $projectRoot . '/vendor/laravel/framework/src/Illuminate/Contracts/Auth/Guard.php';
         $authManagerPath = $projectRoot . '/vendor/laravel/framework/src/Illuminate/Auth/AuthManager.php';
         $authFacadePath = $projectRoot . '/vendor/laravel/framework/src/Illuminate/Support/Facades/Auth.php';
+        $httpFacadePath = $projectRoot . '/vendor/laravel/framework/src/Illuminate/Support/Facades/Http.php';
+        $supportCarbonPath = $projectRoot . '/vendor/laravel/framework/src/Illuminate/Support/Carbon.php';
         $foundationHelpersPath = $projectRoot . '/vendor/laravel/framework/src/Illuminate/Foundation/helpers.php';
         $eloquentBuilderPath = $projectRoot . '/vendor/laravel/framework/src/Illuminate/Database/Eloquent/Builder.php';
         $eloquentModelPath = $projectRoot . '/vendor/laravel/framework/src/Illuminate/Database/Eloquent/Model.php';
@@ -1476,6 +1509,22 @@ TOML;
                 if (is_string($foundationHelpersSource)) {
                     $overlays[] = $this->writeFrameworkOverlay($projectRoot, 'FoundationHelpers.php', $foundationHelpersPath, $this->renderFoundationHelpersOverlay($foundationHelpersSource));
                 }
+            }
+        }
+
+        if (is_file($httpFacadePath)) {
+            $httpFacadeSource = file_get_contents($httpFacadePath);
+
+            if (is_string($httpFacadeSource)) {
+                $overlays[] = $this->writeFrameworkOverlay($projectRoot, 'Http.php', $httpFacadePath, $this->renderHttpFacadeOverlay($httpFacadeSource));
+            }
+        }
+
+        if (is_file($supportCarbonPath)) {
+            $supportCarbonSource = file_get_contents($supportCarbonPath);
+
+            if (is_string($supportCarbonSource)) {
+                $overlays[] = $this->writeFrameworkOverlay($projectRoot, 'SupportCarbon.php', $supportCarbonPath, $this->renderSupportCarbonOverlay($supportCarbonSource));
             }
         }
 
@@ -1558,6 +1607,23 @@ TOML;
             ' * @method $this select(array|string ...$columns)',
             ' * @method $this addSelect(array|string ...$columns)',
             ' * @method $this with(array|string ...$relations)',
+            ' * @method $this selectRaw(string $expression, array $bindings = [])',
+            ' * @method $this selectraw(string $expression, array $bindings = [])',
+            ' * @method $this whereLike(string $column, mixed $value, bool $caseSensitive = false, string $boolean = "and", bool $not = false)',
+            ' * @method $this whereIntegerInRaw(string $column, mixed $values, string $boolean = "and", bool $not = false)',
+            ' * @method $this whereIntegerNotInRaw(string $column, mixed $values, string $boolean = "and")',
+            ' * @method $this whereintegerinraw(string $column, mixed $values, string $boolean = "and", bool $not = false)',
+            ' * @method $this whereintegernotinraw(string $column, mixed $values, string $boolean = "and")',
+            ' * @method $this withoutGlobalScope(mixed $scope)',
+            ' * @method $this withoutGlobalScopes(array|null $scopes = null)',
+            ' * @method $this withoutglobalscope(mixed $scope)',
+            ' * @method $this withoutglobalscopes(array|null $scopes = null)',
+            ' * @method $this onlyTrashed()',
+            ' * @method $this withTrashed(bool $withTrashed = true)',
+            ' * @method $this withoutTrashed()',
+            ' * @method $this onlytrashed()',
+            ' * @method \Illuminate\Database\Query\Builder toBase()',
+            ' * @method \Illuminate\Database\Query\Builder tobase()',
         ]);
     }
 
@@ -1577,18 +1643,99 @@ TOML;
             [
                 '@return ($guard is null ? \Illuminate\Contracts\Auth\Factory : \Illuminate\Contracts\Auth\Guard)',
                 'function auth($guard = null): AuthFactory|Guard',
+                'function now($tz = null): CarbonInterface',
+                'function today($tz = null): CarbonInterface',
             ],
             [
                 '@return ($guard is null ? \Illuminate\Auth\AuthManager : \Illuminate\Contracts\Auth\Guard)',
                 'function auth($guard = null): \Illuminate\Auth\AuthManager|Guard',
+                'function now($tz = null): \Illuminate\Support\Carbon',
+                'function today($tz = null): \Illuminate\Support\Carbon',
             ],
             $source,
         );
     }
 
-    private function renderEloquentModelFrameworkOverlay(string $source): string
+    private function renderHttpFacadeOverlay(string $source): string
     {
         return str_replace(
+            [
+                '\Illuminate\Http\Client\Response|\GuzzleHttp\Promise\PromiseInterface get(',
+                '\Illuminate\Http\Client\Response|\GuzzleHttp\Promise\PromiseInterface head(',
+                '\Illuminate\Http\Client\Response|\GuzzleHttp\Promise\PromiseInterface post(',
+                '\Illuminate\Http\Client\Response|\GuzzleHttp\Promise\PromiseInterface patch(',
+                '\Illuminate\Http\Client\Response|\GuzzleHttp\Promise\PromiseInterface put(',
+                '\Illuminate\Http\Client\Response|\GuzzleHttp\Promise\PromiseInterface delete(',
+                '\Illuminate\Http\Client\Response|\Illuminate\Http\Client\Promises\LazyPromise send(',
+            ],
+            [
+                '\Illuminate\Http\Client\Response get(',
+                '\Illuminate\Http\Client\Response head(',
+                '\Illuminate\Http\Client\Response post(',
+                '\Illuminate\Http\Client\Response patch(',
+                '\Illuminate\Http\Client\Response put(',
+                '\Illuminate\Http\Client\Response delete(',
+                '\Illuminate\Http\Client\Response send(',
+            ],
+            $source,
+        );
+    }
+
+    private function renderSupportCarbonOverlay(string $source): string
+    {
+        return $this->insertClassDocblockLines($source, 'Carbon', [
+            ' * @method static \Illuminate\Support\Carbon parse(mixed $time = null, mixed $timezone = null)',
+            ' * @method static \Illuminate\Support\Carbon createfromformat(string $format, mixed $time, mixed $timezone = null)',
+            ' * @method static \Illuminate\Support\Carbon now(mixed $timezone = null)',
+            ' * @method static \Illuminate\Support\Carbon today(mixed $timezone = null)',
+            ' * @method static \Illuminate\Support\Carbon tomorrow(mixed $timezone = null)',
+            ' * @method static \Illuminate\Support\Carbon yesterday(mixed $timezone = null)',
+            ' * @method static \Illuminate\Support\Carbon make(mixed $var, mixed $timezone = null)',
+            ' * @method static \Illuminate\Support\Carbon instance(\DateTimeInterface $date)',
+            ' * @method static \Illuminate\Support\Carbon createfrominterface(\DateTimeInterface $date)',
+            ' * @method static \Illuminate\Support\Carbon createfromtimestamp(mixed $timestamp, mixed $timezone = null)',
+            ' * @method static \Illuminate\Support\Carbon createfromtimestampms(mixed $timestamp, mixed $timezone = null)',
+            ' * @method static \Illuminate\Support\Carbon createfromdate(?int $year = null, ?int $month = null, ?int $day = null, mixed $timezone = null)',
+            ' * @method static \Illuminate\Support\Carbon createfromtime(?int $hour = null, ?int $minute = null, ?int $second = null, ?int $microsecond = null, mixed $timezone = null)',
+            ' * @method static \Illuminate\Support\Carbon create(int $year = 0, int $month = 1, int $day = 1, int $hour = 0, int $minute = 0, int $second = 0, mixed $timezone = null)',
+            ' * @method float diffinseconds(mixed $date = null, bool $absolute = false)',
+            ' * @method $this addseconds(int|float $value = 1)',
+            ' * @method $this addminutes(int|float $value = 1)',
+            ' * @method $this addhours(int|float $value = 1)',
+            ' * @method $this adddays(int|float $value = 1)',
+            ' * @method $this addday()',
+            ' * @method $this addmonths(int|float $value = 1)',
+            ' * @method $this addmonth()',
+            ' * @method $this addmonthnooverflow(int|float $value = 1)',
+            ' * @method $this addyears(int|float $value = 1)',
+            ' * @method $this addyear()',
+            ' * @method $this subseconds(int|float $value = 1)',
+            ' * @method $this subminutes(int|float $value = 1)',
+            ' * @method $this subhours(int|float $value = 1)',
+            ' * @method $this subdays(int|float $value = 1)',
+            ' * @method $this subday()',
+            ' * @method $this submonths(int|float $value = 1)',
+            ' * @method $this submonth()',
+            ' * @method $this submonthnooverflow(int|float $value = 1)',
+            ' * @method $this subyears(int|float $value = 1)',
+            ' * @method $this subyear()',
+            ' * @method $this startofday()',
+            ' * @method $this endofday()',
+            ' * @method $this startofmonth()',
+            ' * @method $this endofmonth()',
+            ' * @method $this firstofmonth(mixed $dayOfWeek = null)',
+            ' * @method $this lastofmonth(mixed $dayOfWeek = null)',
+            ' * @method mixed weekday(?int $value = null)',
+            ' * @method string todatetimestring(string $unitPrecision = "second")',
+            ' * @method string toiso8601string()',
+            ' * @method string torfc2822string()',
+            ' * @method string gettranslatedmonthname(?string $context = null, ?string $key = null, mixed $locale = null)',
+        ]);
+    }
+
+    private function renderEloquentModelFrameworkOverlay(string $source): string
+    {
+        $source = str_replace(
             [
                 'public function load($relations)',
                 'public function loadMissing($relations)',
@@ -1601,6 +1748,45 @@ TOML;
             ],
             $source,
         );
+
+        return $this->insertBeforeFinalClassBrace($source, <<<'PHP'
+
+    /**
+     * Laramago overlay for Laravel's dynamic static builder delegation.
+     */
+    public static function create(array $attributes = []): static
+    {
+        return new static;
+    }
+
+    /**
+     * Laramago overlay for Laravel's dynamic static builder delegation.
+     */
+    public static function withoutGlobalScope(mixed $scope): \Illuminate\Database\Eloquent\Builder
+    {
+        return static::query();
+    }
+
+    /**
+     * Laramago overlay for Laravel's dynamic static builder delegation.
+     */
+    public static function withoutGlobalScopes(?array $scopes = null): \Illuminate\Database\Eloquent\Builder
+    {
+        return static::query();
+    }
+
+PHP);
+    }
+
+    private function insertBeforeFinalClassBrace(string $source, string $code): string
+    {
+        $position = strrpos($source, '}');
+
+        if ($position === false) {
+            return $source;
+        }
+
+        return substr($source, 0, $position) . $code . PHP_EOL . substr($source, $position);
     }
 
     private function renderHasAttributesOverlay(string $source): string
@@ -1620,7 +1806,7 @@ TOML;
 
     private function renderQueryBuilderOverlay(string $source): string
     {
-        return str_replace(
+        $source = str_replace(
             [
                 'public function select($columns = [\'*\'])',
                 'public function addSelect($column)',
@@ -1633,6 +1819,22 @@ TOML;
             ],
             $source,
         );
+
+        return $this->insertClassDocblockLines($source, 'Builder', [
+            ' * @method $this selectRaw(string $expression, array $bindings = [])',
+            ' * @method $this selectraw(string $expression, array $bindings = [])',
+            ' * @method $this whereLike(string $column, mixed $value, bool $caseSensitive = false, string $boolean = "and", bool $not = false)',
+            ' * @method $this whereIntegerInRaw(string $column, mixed $values, string $boolean = "and", bool $not = false)',
+            ' * @method $this whereIntegerNotInRaw(string $column, mixed $values, string $boolean = "and")',
+            ' * @method $this whereintegerinraw(string $column, mixed $values, string $boolean = "and", bool $not = false)',
+            ' * @method $this whereintegernotinraw(string $column, mixed $values, string $boolean = "and")',
+            ' * @method $this withoutGlobalScope(mixed $scope)',
+            ' * @method $this withoutGlobalScopes(array|null $scopes = null)',
+            ' * @method $this withoutglobalscope(mixed $scope)',
+            ' * @method $this withoutglobalscopes(array|null $scopes = null)',
+            ' * @method \Illuminate\Database\Query\Builder toBase()',
+            ' * @method \Illuminate\Database\Query\Builder tobase()',
+        ]);
     }
 
     private function renderControllerMiddlewareOptionsOverlay(string $source): string
@@ -1817,6 +2019,7 @@ PHP;
         }
 
         $overlayDirectory = $projectRoot . '/' . self::PHPSTAN_PRAGMA_OVERLAY_DIR;
+        $caseInsensitiveAliasCandidates = $this->caseInsensitiveMethodAliasCandidates($projectRoot);
 
         if (is_dir($overlayDirectory)) {
             $this->removeDirectory($overlayDirectory);
@@ -1825,27 +2028,36 @@ PHP;
         $substitutions = [];
         $pathMap = [];
         $seenFiles = [];
+        $config = $this->projectConfigValues($projectRoot);
+        $excludes = $config['excludes'];
 
-        foreach ($this->projectConfigValues($projectRoot)['paths'] as $path) {
+        foreach ($config['paths'] as $path) {
             foreach ($this->sourcePhpFiles($projectRoot, $path) as $file) {
                 if (isset($seenFiles[$file]) || isset($skippedOriginalPaths[$file])) {
+                    continue;
+                }
+
+                $relativePath = ltrim(substr($file, strlen($projectRoot)), '/');
+
+                if ($this->isExcludedProjectPath($relativePath, $excludes)) {
                     continue;
                 }
 
                 $seenFiles[$file] = true;
                 $source = file_get_contents($file);
 
-                if (! is_string($source) || ! str_contains($source, '@phpstan-ignore')) {
+                if (! is_string($source)) {
                     continue;
                 }
 
-                $overlay = $this->translatePhpStanPragmas($source);
+                $translated = $this->translatePhpStanPragmas($source);
+                $minimumAliases = $translated === $source ? 2 : 1;
+                $overlay = $this->insertTraitSelfCallMethods($this->insertCaseInsensitiveMethodAliases($translated, $caseInsensitiveAliasCandidates, $minimumAliases));
 
                 if ($overlay === $source) {
                     continue;
                 }
 
-                $relativePath = ltrim(substr($file, strlen($projectRoot)), '/');
                 $overlayRelativePath = self::PHPSTAN_PRAGMA_OVERLAY_DIR . '/' . sha1($relativePath) . '.php';
                 $this->ensureDirectory($overlayDirectory);
                 file_put_contents($projectRoot . '/' . $overlayRelativePath, $overlay);
@@ -1863,6 +2075,42 @@ PHP;
         file_put_contents($projectRoot . '/' . self::PHPSTAN_PRAGMA_OVERLAY_MAP, json_encode($pathMap, JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR));
 
         return $substitutions;
+    }
+
+    /**
+     * @param list<string> $excludes
+     */
+    private function isExcludedProjectPath(string $path, array $excludes): bool
+    {
+        $path = $this->normalizeProjectPath($path);
+
+        foreach ($excludes as $exclude) {
+            $exclude = $this->normalizeProjectPath($exclude);
+
+            if ($exclude === '') {
+                continue;
+            }
+
+            if (str_ends_with($exclude, '/**')) {
+                $directory = rtrim(substr($exclude, 0, -3), '/');
+
+                if ($path === $directory || str_starts_with($path, $directory . '/')) {
+                    return true;
+                }
+
+                continue;
+            }
+
+            if ($path === $exclude || str_starts_with($path, rtrim($exclude, '/') . '/')) {
+                return true;
+            }
+
+            if (fnmatch($exclude, $path, FNM_PATHNAME)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -2137,6 +2385,85 @@ PHP;
         return $written > 0 ? self::EXCLUDED_SYMBOL_DIR : null;
     }
 
+    private function prepareLaravelSymbolStubs(string $projectRoot): ?string
+    {
+        $symbolDirectory = $projectRoot . '/' . self::LARAVEL_SYMBOL_DIR;
+
+        if (is_dir($symbolDirectory)) {
+            $this->removeDirectory($symbolDirectory);
+        }
+
+        $aliases = [
+            'App' => 'Illuminate\\Support\\Facades\\App',
+            'Arr' => 'Illuminate\\Support\\Arr',
+            'Artisan' => 'Illuminate\\Support\\Facades\\Artisan',
+            'Auth' => 'Illuminate\\Support\\Facades\\Auth',
+            'Blade' => 'Illuminate\\Support\\Facades\\Blade',
+            'Cache' => 'Illuminate\\Support\\Facades\\Cache',
+            'Config' => 'Illuminate\\Support\\Facades\\Config',
+            'Cookie' => 'Illuminate\\Support\\Facades\\Cookie',
+            'Crypt' => 'Illuminate\\Support\\Facades\\Crypt',
+            'Date' => 'Illuminate\\Support\\Facades\\Date',
+            'DB' => 'Illuminate\\Support\\Facades\\DB',
+            'Event' => 'Illuminate\\Support\\Facades\\Event',
+            'File' => 'Illuminate\\Support\\Facades\\File',
+            'Gate' => 'Illuminate\\Support\\Facades\\Gate',
+            'Hash' => 'Illuminate\\Support\\Facades\\Hash',
+            'Http' => 'Illuminate\\Support\\Facades\\Http',
+            'Lang' => 'Illuminate\\Support\\Facades\\Lang',
+            'Log' => 'Illuminate\\Support\\Facades\\Log',
+            'Mail' => 'Illuminate\\Support\\Facades\\Mail',
+            'Notification' => 'Illuminate\\Support\\Facades\\Notification',
+            'Password' => 'Illuminate\\Support\\Facades\\Password',
+            'Process' => 'Illuminate\\Support\\Facades\\Process',
+            'Queue' => 'Illuminate\\Support\\Facades\\Queue',
+            'RateLimiter' => 'Illuminate\\Support\\Facades\\RateLimiter',
+            'Redirect' => 'Illuminate\\Support\\Facades\\Redirect',
+            'Request' => 'Illuminate\\Support\\Facades\\Request',
+            'Response' => 'Illuminate\\Support\\Facades\\Response',
+            'Route' => 'Illuminate\\Support\\Facades\\Route',
+            'Schedule' => 'Illuminate\\Support\\Facades\\Schedule',
+            'Schema' => 'Illuminate\\Support\\Facades\\Schema',
+            'Session' => 'Illuminate\\Support\\Facades\\Session',
+            'Storage' => 'Illuminate\\Support\\Facades\\Storage',
+            'Str' => 'Illuminate\\Support\\Str',
+            'URL' => 'Illuminate\\Support\\Facades\\URL',
+            'Validator' => 'Illuminate\\Support\\Facades\\Validator',
+            'View' => 'Illuminate\\Support\\Facades\\View',
+        ];
+
+        $written = 0;
+
+        foreach ($aliases as $alias => $target) {
+            $path = $this->laravelClassPath($projectRoot, $target);
+
+            if ($path === null || ! is_file($path)) {
+                continue;
+            }
+
+            $this->ensureDirectory($symbolDirectory);
+            file_put_contents($symbolDirectory . '/' . $alias . '.php', <<<PHP
+<?php
+
+class {$alias} extends \\{$target}
+{
+}
+PHP);
+            $written++;
+        }
+
+        return $written > 0 ? self::LARAVEL_SYMBOL_DIR : null;
+    }
+
+    private function laravelClassPath(string $projectRoot, string $class): ?string
+    {
+        if (! str_starts_with($class, 'Illuminate\\')) {
+            return null;
+        }
+
+        return $projectRoot . '/vendor/laravel/framework/src/Illuminate/' . str_replace('\\', '/', substr($class, strlen('Illuminate\\'))) . '.php';
+    }
+
     private function baseDirectoryFromGlob(string $path): string
     {
         $globPosition = strcspn($path, '*?[');
@@ -2157,23 +2484,95 @@ PHP;
             return null;
         }
 
-        if (preg_match('/^(?:abstract\s+|final\s+|readonly\s+)*(class|interface|trait|enum)\s+([A-Za-z_][A-Za-z0-9_]*)\b/m', $source, $classMatches) !== 1) {
+        if (preg_match('/^((?:(?:abstract|final|readonly)\s+)*(class|interface|trait|enum)\s+[A-Za-z_][A-Za-z0-9_]*(?:\s+[^{;]+)?)/m', $source, $classMatches) !== 1) {
             return null;
         }
 
-        $kind = $classMatches[1];
-        $name = $classMatches[2];
+        $declaration = trim($classMatches[1]);
+        $kind = $classMatches[2];
         $namespace = trim($namespaceMatches[1]);
+        $methods = $this->publicMethodStubs($source, $kind);
 
         return <<<PHP
 <?php
 
 namespace {$namespace};
 
-{$kind} {$name}
+{$declaration}
 {
+{$methods}
 }
 PHP;
+    }
+
+    private function publicMethodStubs(string $source, string $kind): string
+    {
+        $tokens = token_get_all($source);
+        $methods = [];
+        $count = count($tokens);
+
+        for ($index = 0; $index < $count; $index++) {
+            if (! is_array($tokens[$index]) || $tokens[$index][0] !== T_PUBLIC) {
+                continue;
+            }
+
+            $cursor = $this->nextMeaningfulTokenIndex($tokens, $index + 1);
+
+            if ($cursor === null) {
+                continue;
+            }
+
+            if (is_array($tokens[$cursor]) && in_array($tokens[$cursor][0], [T_STATIC, T_ABSTRACT, T_FINAL], true)) {
+                $cursor = $this->nextMeaningfulTokenIndex($tokens, $cursor + 1);
+            }
+
+            if ($cursor === null || ! is_array($tokens[$cursor]) || $tokens[$cursor][0] !== T_FUNCTION) {
+                continue;
+            }
+
+            $signature = '';
+
+            for ($cursor = $index; $cursor < $count; $cursor++) {
+                $token = $tokens[$cursor];
+                $text = is_array($token) ? $token[1] : $token;
+
+                if ($text === '{' || $text === ';') {
+                    break;
+                }
+
+                $signature .= $text;
+            }
+
+            $signature = trim(preg_replace('/\s+/', ' ', $signature) ?? $signature);
+
+            if ($signature === '') {
+                continue;
+            }
+
+            $methods[] = '    ' . $signature . ($kind === 'interface' ? ';' : ' {}');
+        }
+
+        return $methods === [] ? '' : implode(PHP_EOL, $methods) . PHP_EOL;
+    }
+
+    /**
+     * @param list<array|string> $tokens
+     */
+    private function nextMeaningfulTokenIndex(array $tokens, int $start): ?int
+    {
+        $count = count($tokens);
+
+        for ($index = $start; $index < $count; $index++) {
+            $token = $tokens[$index];
+
+            if (is_array($token) && in_array($token[0], [T_WHITESPACE, T_COMMENT, T_DOC_COMMENT], true)) {
+                continue;
+            }
+
+            return $index;
+        }
+
+        return null;
     }
 
     /**
@@ -2228,8 +2627,172 @@ PHP;
             $lines[] = ' * @method static \\Illuminate\\Database\\Eloquent\\Builder<static> ' . $scope['name'] . '(' . $scope['parameters'] . ')';
         }
 
+        foreach ($this->caseInsensitiveMethodAliasLines($source) as $method) {
+            $lines[] = $method;
+        }
+
         $docblock = '/**' . PHP_EOL . implode(PHP_EOL, $lines) . PHP_EOL . ' */' . PHP_EOL;
         return $this->insertClassDocblockLines($source, $shortClass, $lines, $docblock);
+    }
+
+    /**
+     * @param array<string, true>|null $candidates
+     */
+    private function insertCaseInsensitiveMethodAliases(string $source, ?array $candidates = null, int $minimumAliases = 1): string
+    {
+        $lines = $this->caseInsensitiveMethodAliasLines($source, $candidates);
+
+        if (count($lines) < $minimumAliases) {
+            return $source;
+        }
+
+        if (preg_match('/^(?:(?:abstract|final|readonly)\s+)*class\s+([A-Za-z_][A-Za-z0-9_]*)\b/m', $source, $matches) !== 1) {
+            return $source;
+        }
+
+        return $this->insertClassDocblockLines($source, $matches[1], $lines);
+    }
+
+    private function insertTraitSelfCallMethods(string $source): string
+    {
+        if (preg_match('/^trait\s+([A-Za-z_][A-Za-z0-9_]*)\b/m', $source, $traitMatches) !== 1) {
+            return $source;
+        }
+
+        if (preg_match_all('/^\s*(?:public|protected|private)\s+(?:static\s+)?function\s+&?\s*([A-Za-z_][A-Za-z0-9_]*)\s*\(/m', $source, $methodMatches) === false) {
+            return $source;
+        }
+
+        $defined = [];
+
+        foreach ($methodMatches[1] ?? [] as $method) {
+            $defined[strtolower($method)] = true;
+        }
+
+        if (preg_match_all('/\$this\s*->\s*([A-Za-z_][A-Za-z0-9_]*)\s*\(/', $source, $callMatches) === 0) {
+            return $source;
+        }
+
+        $lines = [];
+        $seen = [];
+
+        foreach ($callMatches[1] as $method) {
+            $alias = strtolower($method);
+
+            if (isset($defined[$alias]) || isset($seen[$alias]) || str_starts_with($alias, '__')) {
+                continue;
+            }
+
+            $seen[$alias] = true;
+            $lines[] = ' * @method mixed ' . $alias . '(mixed ...$arguments)';
+        }
+
+        if ($lines === []) {
+            return $source;
+        }
+
+        return $this->insertTraitDocblockLines($source, $traitMatches[1], $lines);
+    }
+
+    /**
+     * @param list<string> $lines
+     */
+    private function insertTraitDocblockLines(string $source, string $shortTrait, array $lines): string
+    {
+        $pattern = '/^trait\s+' . preg_quote($shortTrait, '/') . '\b/m';
+
+        if (preg_match($pattern, $source, $matches, PREG_OFFSET_CAPTURE) !== 1) {
+            return $source;
+        }
+
+        $declarationOffset = $matches[0][1];
+        $existingDocblock = $this->classDocblockBeforeOffset($source, $declarationOffset);
+
+        if ($existingDocblock !== null) {
+            $mergedDocblock = $this->mergeGeneratedDocblockLines($existingDocblock['docblock'], $lines);
+
+            return substr($source, 0, $existingDocblock['offset']) . $mergedDocblock . substr($source, $declarationOffset);
+        }
+
+        $docblock = '/**' . PHP_EOL . ' * @laramago-generated' . PHP_EOL . implode(PHP_EOL, $lines) . PHP_EOL . ' */' . PHP_EOL;
+
+        return substr($source, 0, $declarationOffset) . $docblock . substr($source, $declarationOffset);
+    }
+
+    /**
+     * @return array<string, true>
+     */
+    private function caseInsensitiveMethodAliasCandidates(string $projectRoot): array
+    {
+        $candidates = [];
+        $seenFiles = [];
+
+        foreach ($this->projectConfigValues($projectRoot)['paths'] as $path) {
+            foreach ($this->sourcePhpFiles($projectRoot, $path) as $file) {
+                if (isset($seenFiles[$file])) {
+                    continue;
+                }
+
+                $seenFiles[$file] = true;
+                $source = file_get_contents($file);
+
+                if (! is_string($source)) {
+                    continue;
+                }
+
+                if (preg_match_all('/(?:->|::)\s*([A-Za-z_][A-Za-z0-9_]*)\s*\(/', $source, $matches) === 0) {
+                    continue;
+                }
+
+                foreach ($matches[1] as $method) {
+                    $candidates[strtolower($method)] = true;
+                }
+            }
+        }
+
+        return $candidates;
+    }
+
+    /**
+     * @param array<string, true>|null $candidates
+     * @return list<string>
+     */
+    private function caseInsensitiveMethodAliasLines(string $source, ?array $candidates = null): array
+    {
+        if (preg_match('/^(?:(?:abstract|final|readonly)\s+)*class\s+[A-Za-z_][A-Za-z0-9_]*\b/m', $source) !== 1) {
+            return [];
+        }
+
+        if (preg_match_all('/^\s*public\s+(static\s+)?function\s+&?\s*([A-Za-z_][A-Za-z0-9_]*)\s*\(/m', $source, $matches, PREG_SET_ORDER) === 0) {
+            return [];
+        }
+
+        $lines = [];
+        $seen = [];
+
+        foreach ($matches as $match) {
+            $method = $match[2];
+            $alias = strtolower($method);
+
+            if ($alias === $method || str_starts_with($method, '__')) {
+                continue;
+            }
+
+            if ($candidates !== null && ! isset($candidates[$alias])) {
+                continue;
+            }
+
+            $key = (($match[1] ?? '') !== '' ? 'static ' : '') . $alias;
+
+            if (isset($seen[$key])) {
+                continue;
+            }
+
+            $seen[$key] = true;
+            $lines[] = ' * @method ' . (($match[1] ?? '') !== '' ? 'static ' : '') . 'mixed ' . $alias . '(mixed ...$arguments)';
+        }
+
+        return $lines;
     }
 
     /**
@@ -2282,19 +2845,38 @@ PHP;
             ' * @method static \\Illuminate\\Database\\Eloquent\\Builder<static> with(array|string ...$relations)',
             ' * @method static \\Illuminate\\Database\\Eloquent\\Builder<static> withCount(array|string $relations)',
             ' * @method static \\Illuminate\\Database\\Eloquent\\Builder<static> select(array|string ...$columns)',
+            ' * @method static \\Illuminate\\Database\\Eloquent\\Builder<static> selectRaw(string $expression, array $bindings = [])',
+            ' * @method static \\Illuminate\\Database\\Eloquent\\Builder<static> selectraw(string $expression, array $bindings = [])',
             ' * @method static \\Illuminate\\Database\\Eloquent\\Builder<static> orderBy(string $column, string $direction = "asc")',
+            ' * @method static \\Illuminate\\Database\\Eloquent\\Builder<static> orderByRaw(string $sql, array $bindings = [])',
             ' * @method static \\Illuminate\\Database\\Eloquent\\Builder<static> latest(string|null $column = null)',
             ' * @method static \\Illuminate\\Database\\Eloquent\\Builder<static> oldest(string|null $column = null)',
             ' * @method static \\Illuminate\\Database\\Eloquent\\Builder<static> limit(int $value)',
             ' * @method static \\Illuminate\\Database\\Eloquent\\Builder<static> take(int $value)',
             ' * @method static \\Illuminate\\Database\\Eloquent\\Builder<static> offset(int $value)',
             ' * @method static \\Illuminate\\Database\\Eloquent\\Builder<static> skip(int $value)',
+            ' * @method static \\Illuminate\\Database\\Eloquent\\Builder<static> whereLike(string $column, mixed $value, bool $caseSensitive = false, string $boolean = "and", bool $not = false)',
+            ' * @method static \\Illuminate\\Database\\Eloquent\\Builder<static> wherelike(string $column, mixed $value, bool $caseSensitive = false, string $boolean = "and", bool $not = false)',
+            ' * @method static \\Illuminate\\Database\\Eloquent\\Builder<static> whereIntegerInRaw(string $column, mixed $values, string $boolean = "and", bool $not = false)',
+            ' * @method static \\Illuminate\\Database\\Eloquent\\Builder<static> whereIntegerNotInRaw(string $column, mixed $values, string $boolean = "and")',
+            ' * @method static \\Illuminate\\Database\\Eloquent\\Builder<static> whereintegerinraw(string $column, mixed $values, string $boolean = "and", bool $not = false)',
+            ' * @method static \\Illuminate\\Database\\Eloquent\\Builder<static> whereintegernotinraw(string $column, mixed $values, string $boolean = "and")',
+            ' * @method static \\Illuminate\\Database\\Eloquent\\Builder<static> withoutGlobalScope(mixed $scope)',
+            ' * @method static \\Illuminate\\Database\\Eloquent\\Builder<static> withoutGlobalScopes(array|null $scopes = null)',
+            ' * @method static \\Illuminate\\Database\\Eloquent\\Builder<static> withoutglobalscope(mixed $scope)',
+            ' * @method static \\Illuminate\\Database\\Eloquent\\Builder<static> withoutglobalscopes(array|null $scopes = null)',
+            ' * @method static \\Illuminate\\Database\\Eloquent\\Builder<static> onlyTrashed()',
+            ' * @method static \\Illuminate\\Database\\Eloquent\\Builder<static> withTrashed(bool $withTrashed = true)',
+            ' * @method static \\Illuminate\\Database\\Eloquent\\Builder<static> withoutTrashed()',
+            ' * @method static \\Illuminate\\Database\\Eloquent\\Builder<static> onlytrashed()',
             ' * @method static self create(array $attributes = null)',
             ' * @method static self forceCreate(array $attributes)',
             ' * @method static static|null first(array|string $columns = ["*"])',
             ' * @method static self firstOrFail(array|string $columns = ["*"])',
+            ' * @method static self findorfail(mixed $id, array|string $columns = ["*"])',
             ' * @method static static|null firstWhere(mixed $column, mixed $operator = null, mixed $value = null, string $boolean = "and")',
             ' * @method static self firstOrCreate(array $attributes = null, array $values = null)',
+            ' * @method static self firstOrNew(array $attributes = null, array $values = null)',
             ' * @method static self updateOrCreate(array $attributes, array $values = null)',
             ' * @method static self sole(array|string $columns = ["*"])',
             ' * @method static \\Illuminate\\Database\\Eloquent\\Collection all(array|string $columns = ["*"])',
