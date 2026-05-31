@@ -843,6 +843,44 @@ TOML);
     }
 }
 
+function testCodesCommandDoesNotRequireConfiguredSources(string $project, string $binary): void
+{
+    $emptyProject = $project . '/empty-codes-project';
+    mkdir($emptyProject . '/app', 0777, true);
+    file_put_contents($emptyProject . '/composer.json', json_encode([
+        'require' => [
+            'php' => '^8.5',
+        ],
+    ], JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR));
+    file_put_contents($emptyProject . '/mago.toml', <<<'TOML'
+version = "1"
+php-version = "8.5.0"
+
+[source]
+workspace = "."
+paths = ["app"]
+includes = ["vendor"]
+excludes = []
+
+[source.glob]
+literal-separator = true
+TOML);
+
+    $result = captureRun([PHP_BINARY, $binary, 'codes', '--project=' . $emptyProject]);
+
+    if ($result['exitCode'] !== 0) {
+        fail('codes command should not require configured source paths to contain PHP files');
+    }
+
+    if (str_contains($result['output'], 'No PHP files found in the configured Laramago source paths.')) {
+        fail('codes command should bypass the empty-source analysis guard');
+    }
+
+    if (! str_contains($result['output'], 'mixed-argument')) {
+        fail('codes command should list analyzer issue codes');
+    }
+}
+
 function testPhpStanLevelAnalyzeRunsEndToEnd(string $project, string $binary): void
 {
     $fixture = $project . '/level-fixture';

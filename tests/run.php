@@ -111,6 +111,7 @@ testProjectLockSerializesCacheCommands($project, $binary);
 testProjectClassDiscoveryUsesConfiguredSourcePaths($project, $root);
 testAnalysisIgnoresStaleRuntimeBaseline($project, $root);
 testAnalyzeFailsWhenConfiguredSourcesAreEmpty($project, $binary);
+testCodesCommandDoesNotRequireConfiguredSources($project, $binary);
 testPhpStanLevelAnalyzeRunsEndToEnd($project, $binary);
 testPhpStanPragmaOverlayGeneration($project, $root);
 testLaravelDateHelperOverlayGeneration($project, $root);

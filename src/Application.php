@@ -501,6 +501,10 @@ HELP);
      */
     private function analysisHasSourceFiles(string $projectRoot, array $arguments, bool $emitFailure = true): bool
     {
+        if (in_array('--list-codes', $arguments, true)) {
+            return true;
+        }
+
         foreach ($this->explicitAnalysisTargets($arguments) as $target) {
             if ($this->pathContainsPhpFiles($projectRoot, $target)) {
                 return true;
