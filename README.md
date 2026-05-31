@@ -13,7 +13,7 @@ Laravel-aware static analysis for [Mago](https://github.com/carthage-software/ma
 
 Laramago is a Composer package that gives Laravel applications a practical migration path from Larastan/PHPStan to Mago. It ships a Laravel runtime preset, a stable `vendor/bin/laramago` command, generated Eloquent model metadata overlays, and a baseline workflow designed for existing applications with real legacy noise.
 
-The goal is simple: keep the developer workflow that teams already use for static analysis, but run it on Mago's fast analyzer.
+The goal is simple: keep the developer workflow that teams already use for static analysis, but run it on Mago's fast analyzer without baking one project's strictness level into the package.
 
 ## Status
 
@@ -23,7 +23,7 @@ Mago 1.29 does not expose a Composer-loaded analyzer extension API equivalent to
 - generated Eloquent PHPDoc overlays from real application model metadata;
 - generated Laravel framework overlays for application-specific auth model types;
 - generated symbol stubs for excluded legacy application paths, so references stay resolvable without analyzing those files;
-- optional baseline usage for teams that want to track warning/help-level cleanup separately;
+- baseline usage for existing applications that already have analyzer debt or want to migrate gradually;
 - path translation so diagnostics point back to application files instead of generated cache files;
 - Composer commands that can replace existing `phpstan` scripts;
 - a small public surface that can absorb native Mago extension hooks when Mago exposes them.
@@ -44,22 +44,28 @@ Generate the project source configuration:
 vendor/bin/laramago init
 ```
 
-For most legacy Laravel applications, the Larastan-compatible preset should be enough for CI without a baseline:
+Run analysis:
 
 ```bash
 vendor/bin/laramago analyze --reporting-format=count
 ```
 
-If you want to suppress warning/help-level cleanup while you migrate gradually, create a baseline:
+To mimic a PHPStan/Larastan level 6 gate during migration, opt in explicitly:
 
 ```bash
-vendor/bin/laramago baseline
+vendor/bin/laramago analyze --phpstan-level=6 --reporting-format=count
 ```
 
-Run analysis:
+For existing applications, create a baseline when Mago reports issues that are not part of the migration scope yet:
 
 ```bash
-vendor/bin/laramago analyze
+vendor/bin/laramago baseline --phpstan-level=6
+```
+
+Then run analysis normally:
+
+```bash
+vendor/bin/laramago analyze --phpstan-level=6
 ```
 
 When `laramago-analyzer-baseline.toml` exists, `laramago analyze` automatically passes it to Mago. Laramago also writes a generated runtime config to `.laramago/cache/mago.toml` and passes that file to Mago, so application repositories only need to keep project-specific source settings in `mago.toml`.
@@ -110,8 +116,8 @@ vendor/bin/laramago analyze --no-laravel-framework-overlays
 ```bash
 vendor/bin/laramago init [--force] [--source=app] [--exclude=path/**]
 vendor/bin/laramago prepare
-vendor/bin/laramago analyze [mago analyze options] [path ...]
-vendor/bin/laramago baseline [--force]
+vendor/bin/laramago analyze [--phpstan-level=6] [mago analyze options] [path ...]
+vendor/bin/laramago baseline [--force] [--phpstan-level=6]
 vendor/bin/laramago verify-baseline
 vendor/bin/laramago doctor
 vendor/bin/laramago count [path ...]
@@ -156,10 +162,10 @@ Keep your existing Composer script names if your team and CI already call them:
 ```json
 {
   "scripts": {
-    "phpstan": "vendor/bin/laramago analyze --reporting-format=count",
-    "phpstan:ci": "vendor/bin/laramago analyze --reporting-format=count",
-    "phpstan:ci:debug": "vendor/bin/laramago analyze --reporting-format=short",
-    "laramago:baseline": "vendor/bin/laramago baseline"
+    "phpstan": "vendor/bin/laramago analyze --phpstan-level=6 --reporting-format=count",
+    "phpstan:ci": "vendor/bin/laramago analyze --phpstan-level=6 --reporting-format=count",
+    "phpstan:ci:debug": "vendor/bin/laramago analyze --phpstan-level=6 --reporting-format=short",
+    "laramago:baseline": "vendor/bin/laramago baseline --phpstan-level=6"
   }
 }
 ```
@@ -172,7 +178,7 @@ A typical CI static-analysis lane only needs:
 
 ```bash
 composer install --no-interaction --prefer-dist
-vendor/bin/laramago analyze --reporting-format=count
+vendor/bin/laramago analyze --phpstan-level=6 --reporting-format=count
 ```
 
 Commit these files:
@@ -205,14 +211,17 @@ The committed `mago.toml` should stay small and project-specific:
 - vendor included for type discovery;
 - app-specific excluded paths, if needed.
 
-Laramago owns the compatibility policy. During `analyze`, `baseline`, and `verify-baseline`, it generates `.laramago/cache/mago.toml` with:
+Laramago owns Laravel integration, not your project's strictness level. During `analyze`, `baseline`, and `verify-baseline`, it generates `.laramago/cache/mago.toml` with:
 
 - Laravel linter integration enabled;
 - Pint-compatible formatter defaults;
 - analyzer settings suitable for legacy Laravel applications;
-- Larastan/PHPStan-compatibility analyzer codes for legacy Laravel projects, including the broad PHPStan categories commonly ignored or not emitted in level 6 Larastan configs;
 - excluded-path symbol stubs added to runtime includes when project excludes are present;
 - the project source settings copied from the committed `mago.toml`.
+
+Analyzer issue codes are not globally ignored by the package. Use `laramago-analyzer-baseline.toml`, project `mago.toml` settings, or Mago flags such as `--minimum-fail-level` and `--minimum-report-level` to choose the strictness that fits your team.
+
+The `--phpstan-level=6` option is an explicit migration preset for projects that previously used a PHPStan/Larastan level 6 gate. It is opt-in so Laramago stays level agnostic for new projects and stricter teams.
 
 You can pass additional Mago flags directly through `laramago analyze`.
 

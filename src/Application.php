@@ -6,7 +6,7 @@ namespace Laramago;
 
 final class Application
 {
-    private const VERSION = '0.1.12';
+    private const VERSION = '0.1.13';
 
     private const CONFIG_FILE = 'mago.toml';
 
@@ -119,7 +119,7 @@ final class Application
             return 1;
         }
 
-        $runtimeConfig = $this->prepareRuntimeConfig($projectRoot);
+        $runtimeConfig = $this->prepareRuntimeConfig($projectRoot, $arguments);
         $modelSubstitutions = $this->laravelModelSubstitutions($projectRoot, $arguments);
         $frameworkSubstitutions = $this->laravelFrameworkSubstitutions($projectRoot, $arguments);
         $substitutions = array_merge($modelSubstitutions, $frameworkSubstitutions);
@@ -149,7 +149,7 @@ final class Application
         }
 
         $baselinePath = self::BASELINE_FILE;
-        $runtimeConfig = $this->prepareRuntimeConfig($projectRoot);
+        $runtimeConfig = $this->prepareRuntimeConfig($projectRoot, $arguments);
         $command = [
             $mago,
             '--config',
@@ -196,7 +196,7 @@ final class Application
         $modelSubstitutions = $this->laravelModelSubstitutions($projectRoot, $arguments);
         $substitutions = array_merge($modelSubstitutions, $this->laravelFrameworkSubstitutions($projectRoot, $arguments));
 
-        $runtimeConfig = $this->prepareRuntimeConfig($projectRoot);
+        $runtimeConfig = $this->prepareRuntimeConfig($projectRoot, $arguments);
 
         return $this->process(array_merge([
             $mago,
@@ -270,7 +270,7 @@ final class Application
             return $failed ? 1 : 0;
         }
 
-        $runtimeConfig = $this->prepareRuntimeConfig($projectRoot);
+        $runtimeConfig = $this->prepareRuntimeConfig($projectRoot, $arguments);
         $modelSubstitutions = $this->laravelModelSubstitutions($projectRoot, $arguments);
         $frameworkSubstitutions = $this->laravelFrameworkSubstitutions($projectRoot, $arguments);
         $this->line('OK   Prepared Laramago runtime config: ' . $runtimeConfig);
@@ -288,8 +288,8 @@ Laramago
 Usage:
   laramago init [--force] [--source=app] [--exclude=path/**]
   laramago prepare
-  laramago analyze [--no-laravel-model-overlays] [--no-laravel-framework-overlays] [mago analyze options] [path ...]
-  laramago baseline [--force]
+  laramago analyze [--phpstan-level=6] [--no-laravel-model-overlays] [--no-laravel-framework-overlays] [mago analyze options] [path ...]
+  laramago baseline [--force] [--phpstan-level=6]
   laramago verify-baseline
   laramago doctor
   laramago count [path ...]
@@ -406,7 +406,10 @@ literal-separator = true
 TOML;
     }
 
-    private function prepareRuntimeConfig(string $projectRoot): string
+    /**
+     * @param list<string> $arguments
+     */
+    private function prepareRuntimeConfig(string $projectRoot, array $arguments = []): string
     {
         $values = $this->projectConfigValues($projectRoot);
         $runtimeConfigPath = $projectRoot . '/' . self::RUNTIME_CONFIG_FILE;
@@ -424,6 +427,7 @@ TOML;
             $values['paths'],
             $includes,
             $values['excludes'],
+            $arguments,
         ));
 
         return self::RUNTIME_CONFIG_FILE;
@@ -474,12 +478,14 @@ TOML;
      * @param list<string> $sourcePaths
      * @param list<string> $includes
      * @param list<string> $excludes
+     * @param list<string> $arguments
      */
-    private function renderRuntimeConfig(string $phpVersion, array $sourcePaths, array $includes, array $excludes): string
+    private function renderRuntimeConfig(string $phpVersion, array $sourcePaths, array $includes, array $excludes, array $arguments = []): string
     {
         $paths = $this->tomlArray($sourcePaths);
         $includesValue = $this->tomlArray($includes);
         $excludesValue = $this->tomlArray($excludes);
+        $ignoreBlock = $this->renderAnalyzerIgnoreBlock($this->phpStanCompatibilityIgnores($arguments));
 
         return <<<TOML
 version = "1"
@@ -523,78 +529,7 @@ no-isset = { allow-array-checks = true }
 
 [analyzer]
 plugins = []
-ignore = [
-  "mixed-argument",
-  "mixed-assignment",
-  "mixed-array-access",
-  "mixed-array-assignment",
-  "invalid-argument",
-  "invalid-array-access",
-  "invalid-array-element",
-  "possibly-invalid-argument",
-  "possibly-false-argument",
-  "invalid-array-element-key",
-  "invalid-array-index",
-  "invalid-callable",
-  "invalid-destructuring-source",
-  "invalid-iterator",
-  "invalid-method-access",
-  "invalid-member-selector",
-  "invalid-operand",
-  "invalid-pass-by-reference",
-  "invalid-property-access",
-  "invalid-property-assignment-value",
-  "invalid-property-read",
-  "invalid-type-cast",
-  "false-operand",
-  "incompatible-return-type",
-  "less-specific-return-statement",
-  "less-specific-argument",
-  "less-specific-nested-argument-type",
-  "less-specific-nested-return-statement",
-  "match-not-exhaustive",
-  "mismatched-array-index",
-  "mixed-return-statement",
-  "mixed-array-index",
-  "non-documented-method",
-  "non-documented-property",
-  "mixed-property-type-coercion",
-  "invalid-property-write",
-  "missing-return-statement",
-  "never-return",
-  "non-existent-class",
-  "non-existent-class-constant",
-  "non-existent-class-like",
-  "non-existent-property",
-  "mixed-operand",
-  "mixed-property-access",
-  "mixed-method-access",
-  "non-existent-method",
-  "null-argument",
-  "null-array-index",
-  "null-operand",
-  "nullable-return-statement",
-  "possibly-null-property-access",
-  "possibly-null-operand",
-  "property-type-coercion",
-  "dynamic-static-method-call",
-  "docblock-type-mismatch",
-  "impossible-assignment",
-  "impossible-type-comparison",
-  "invalid-return-statement",
-  "possibly-null-argument",
-  "ambiguous-object-method-access",
-  "possible-method-access-on-null",
-  "no-value",
-  "falsable-return-statement",
-  "template-constraint-violation",
-  "too-many-arguments",
-  "undefined-int-array-index",
-  "undefined-variable",
-  "unknown-class-instantiation",
-  "unknown-member-selector-type",
-  "unreachable-else-clause",
-]
+{$ignoreBlock}
 find-unused-definitions = true
 find-unused-expressions = false
 analyze-dead-code = false
@@ -608,6 +543,83 @@ no-boolean-literal-comparison = false
 check-missing-type-hints = false
 register-super-globals = true
 TOML;
+    }
+
+    /**
+     * @param list<string> $arguments
+     * @return list<string>
+     */
+    private function phpStanCompatibilityIgnores(array $arguments): array
+    {
+        $level = null;
+
+        foreach ($arguments as $argument) {
+            if (str_starts_with($argument, '--phpstan-level=')) {
+                $level = substr($argument, strlen('--phpstan-level='));
+                break;
+            }
+        }
+
+        if ($level !== '6') {
+            return [];
+        }
+
+        return [
+            'mixed-argument',
+            'mixed-assignment',
+            'mixed-array-access',
+            'mixed-array-assignment',
+            'invalid-argument',
+            'invalid-array-access',
+            'possibly-invalid-argument',
+            'possibly-false-argument',
+            'invalid-array-element-key',
+            'invalid-callable',
+            'invalid-iterator',
+            'invalid-method-access',
+            'invalid-pass-by-reference',
+            'invalid-property-access',
+            'less-specific-return-statement',
+            'less-specific-argument',
+            'less-specific-nested-argument-type',
+            'less-specific-nested-return-statement',
+            'mixed-return-statement',
+            'non-documented-method',
+            'non-documented-property',
+            'mixed-property-type-coercion',
+            'invalid-property-write',
+            'non-existent-property',
+            'mixed-operand',
+            'mixed-property-access',
+            'mixed-method-access',
+            'non-existent-method',
+            'nullable-return-statement',
+            'possibly-null-property-access',
+            'possibly-null-operand',
+            'invalid-return-statement',
+            'possibly-null-argument',
+            'ambiguous-object-method-access',
+            'possible-method-access-on-null',
+            'no-value',
+            'falsable-return-statement',
+            'template-constraint-violation',
+            'too-many-arguments',
+        ];
+    }
+
+    /**
+     * @param list<string> $codes
+     */
+    private function renderAnalyzerIgnoreBlock(array $codes): string
+    {
+        if ($codes === []) {
+            return '';
+        }
+
+        return 'ignore = [' . PHP_EOL
+            . implode(PHP_EOL, array_map(static fn (string $code): string => '  "' . $code . '",', $codes))
+            . PHP_EOL
+            . ']';
     }
 
     private function tomlStringValue(string $config, string $key): ?string
@@ -1300,6 +1312,7 @@ PHP;
         return array_values(array_filter(
             $arguments,
             static fn (string $argument): bool => ! str_starts_with($argument, '--project=')
+                && ! str_starts_with($argument, '--phpstan-level=')
                 && $argument !== '--force'
                 && $argument !== '--no-laravel-model-overlays'
                 && $argument !== '--no-laravel-framework-overlays'

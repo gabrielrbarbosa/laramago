@@ -158,26 +158,23 @@ function testRuntimeConfigGeneration(string $project, string $root): void
         fail('runtime config did not preserve project source settings');
     }
 
+    if (str_contains($config, 'ignore = [')) {
+        fail('runtime config should not include package-level analyzer ignores');
+    }
+
+    $levelRuntimeConfig = $method->invoke($application, $project, ['--phpstan-level=6']);
+    $levelConfig = file_get_contents($project . '/' . $levelRuntimeConfig);
+
     foreach ([
         '"mixed-argument"',
         '"invalid-argument"',
-        '"invalid-iterator"',
-        '"mixed-array-access"',
-        '"mixed-array-assignment"',
-        '"mixed-property-access"',
-        '"non-existent-class"',
+        '"non-existent-method"',
         '"non-existent-property"',
-        '"null-operand"',
-        '"undefined-variable"',
         '"too-many-arguments"',
     ] as $expected) {
-        if (! str_contains($config, $expected)) {
-            fail('runtime config missed an app-wide mixed compatibility ignore: ' . $expected);
+        if (! is_string($levelConfig) || ! str_contains($levelConfig, $expected)) {
+            fail('runtime config missed an explicit PHPStan level 6 compatibility ignore: ' . $expected);
         }
-    }
-
-    if (str_contains($config, '{ code = "mixed-argument"')) {
-        fail('runtime config did not use Mago global ignore syntax for app-wide compatibility codes');
     }
 }
 
