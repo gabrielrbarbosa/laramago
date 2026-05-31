@@ -6,7 +6,7 @@ namespace Laramago;
 
 final class Application
 {
-    private const VERSION = '0.1.9';
+    private const VERSION = '0.1.10';
 
     private const CONFIG_FILE = 'mago.toml';
 
@@ -517,6 +517,8 @@ plugins = []
 ignore = [
   "mixed-argument",
   "mixed-assignment",
+  "mixed-array-access",
+  "mixed-array-assignment",
   "possibly-invalid-argument",
   "invalid-array-element-key",
   "less-specific-return-statement",
@@ -527,6 +529,7 @@ ignore = [
   "invalid-property-write",
   { code = "non-existent-property", in = "app/*/Concerns/*" },
   "mixed-operand",
+  "mixed-property-access",
   "mixed-method-access",
   "non-existent-method",
   "possibly-null-operand",

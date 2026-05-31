@@ -157,7 +157,13 @@ function testRuntimeConfigGeneration(string $project, string $root): void
         fail('runtime config did not preserve project source settings');
     }
 
-    if (! str_contains($config, '"mixed-argument"') || str_contains($config, '{ code = "mixed-argument"')) {
+    foreach (['"mixed-argument"', '"mixed-array-access"', '"mixed-array-assignment"', '"mixed-property-access"'] as $expected) {
+        if (! str_contains($config, $expected)) {
+            fail('runtime config missed an app-wide mixed compatibility ignore: ' . $expected);
+        }
+    }
+
+    if (str_contains($config, '{ code = "mixed-argument"')) {
         fail('runtime config did not use Mago global ignore syntax for app-wide compatibility codes');
     }
 }

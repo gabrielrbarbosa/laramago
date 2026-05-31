@@ -201,7 +201,7 @@ Laramago owns the compatibility policy. During `analyze`, `baseline`, and `verif
 - Laravel linter integration enabled;
 - Pint-compatible formatter defaults;
 - analyzer settings suitable for legacy Laravel applications;
-- Larastan-compatibility mixed-type analyzer codes ignored with Mago's global ignore syntax;
+- Larastan-compatibility mixed-type analyzer codes, including mixed array/property access noise, ignored with Mago's global ignore syntax;
 - the project source settings copied from the committed `mago.toml`.
 
 You can pass additional Mago flags directly through `laramago analyze`.
