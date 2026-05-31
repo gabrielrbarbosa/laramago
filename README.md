@@ -154,7 +154,7 @@ vendor/bin/laramago migrate-phpstan [--force] [--phpstan-config=phpstan.neon] [-
 vendor/bin/laramago prepare
 vendor/bin/laramago analyze [--phpstan-level=0..10|max] [--no-phpstan-pragma-overlays] [mago analyze options] [path ...]
 vendor/bin/laramago baseline [--force] [--phpstan-level=0..10|max]
-vendor/bin/laramago verify-baseline
+vendor/bin/laramago verify-baseline [--phpstan-level=0..10|max]
 vendor/bin/laramago doctor
 vendor/bin/laramago count [path ...]
 vendor/bin/laramago codes [path ...]
@@ -192,6 +192,8 @@ Generates `laramago-analyzer-baseline.toml`. With model overlays enabled, the co
 ### `verify-baseline`
 
 Runs Mago baseline verification using the same Laramago runtime mapping as `analyze`.
+
+If the baseline was generated for a PHPStan/Larastan migration level, pass the same `--phpstan-level` value when verifying it. For example, a baseline generated with `vendor/bin/laramago baseline --phpstan-level=6` should be verified with `vendor/bin/laramago verify-baseline --phpstan-level=6`.
 
 ### `doctor`
 

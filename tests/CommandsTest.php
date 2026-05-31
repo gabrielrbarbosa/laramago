@@ -693,4 +693,22 @@ PHP);
     if ($levelResult['exitCode'] !== 0 || ! str_contains($levelResult['output'], 'No issues found.')) {
         fail('PHPStan level 6 analysis should pass the end-to-end migration fixture');
     }
+
+    $baselineResult = captureRun([PHP_BINARY, $binary, 'baseline', '--project=' . $fixture, '--phpstan-level=6', '--force']);
+
+    if ($baselineResult['exitCode'] !== 0 || ! is_file($fixture . '/laramago-analyzer-baseline.toml')) {
+        fail('PHPStan level 6 baseline should be generated for the end-to-end migration fixture');
+    }
+
+    $strictVerifyResult = captureRun([PHP_BINARY, $binary, 'verify-baseline', '--project=' . $fixture]);
+
+    if ($strictVerifyResult['exitCode'] === 0 || ! str_contains($strictVerifyResult['output'], 'Baseline is outdated')) {
+        fail('strict baseline verification should not silently pass a PHPStan level 6 migration baseline');
+    }
+
+    $levelVerifyResult = captureRun([PHP_BINARY, $binary, 'verify-baseline', '--project=' . $fixture, '--phpstan-level=6']);
+
+    if ($levelVerifyResult['exitCode'] !== 0 || ! str_contains($levelVerifyResult['output'], 'Baseline is up to date')) {
+        fail('PHPStan level 6 baseline verification should pass with the same migration profile');
+    }
 }

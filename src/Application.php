@@ -411,7 +411,7 @@ Usage:
   laramago prepare
   laramago analyze [--phpstan-level=0..10|max] [--no-laravel-model-overlays] [--no-laravel-framework-overlays] [--no-phpstan-pragma-overlays] [mago analyze options] [path ...]
   laramago baseline [--force] [--phpstan-level=0..10|max]
-  laramago verify-baseline
+  laramago verify-baseline [--phpstan-level=0..10|max]
   laramago doctor
   laramago count [path ...]
   laramago codes [path ...]
