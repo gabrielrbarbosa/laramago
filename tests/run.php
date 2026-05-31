@@ -57,6 +57,7 @@ testBaselinePathTranslation($project, $root);
 testOutputPathTranslation($project, $root);
 testRuntimeConfigGeneration($project, $root);
 testModelDocblockIncludesLaravelMagic($root);
+testLaravelFrameworkOverlayGeneration($project, $root);
 
 cleanup($project);
 echo "OK\n";
@@ -198,6 +199,82 @@ PHP;
         if (! str_contains($overlay, $expected)) {
             fail('model docblock overlay missed expected Laravel magic: ' . $expected);
         }
+    }
+}
+
+function testLaravelFrameworkOverlayGeneration(string $project, string $root): void
+{
+    require_once $root . '/src/Application.php';
+
+    mkdir($project . '/config', 0777, true);
+    mkdir($project . '/vendor/laravel/framework/src/Illuminate/Contracts/Auth', 0777, true);
+    mkdir($project . '/vendor/laravel/framework/src/Illuminate/Support/Facades', 0777, true);
+
+    file_put_contents($project . '/config/auth.php', <<<'PHP'
+<?php
+
+use App\Models\Usuario\Usuario;
+
+return [
+    'providers' => [
+        'users' => [
+            'model' => Usuario::class,
+        ],
+    ],
+];
+PHP);
+
+    file_put_contents($project . '/vendor/laravel/framework/src/Illuminate/Contracts/Auth/Guard.php', <<<'PHP'
+<?php
+
+namespace Illuminate\Contracts\Auth;
+
+interface Guard
+{
+    /**
+     * @return \Illuminate\Contracts\Auth\Authenticatable|null
+     */
+    public function user();
+}
+PHP);
+
+    file_put_contents($project . '/vendor/laravel/framework/src/Illuminate/Support/Facades/Auth.php', <<<'PHP'
+<?php
+
+namespace Illuminate\Support\Facades;
+
+/**
+ * @method static \Illuminate\Contracts\Auth\Authenticatable|null user()
+ * @method static \Illuminate\Contracts\Auth\Authenticatable authenticate()
+ */
+class Auth
+{
+}
+PHP);
+
+    $application = new Laramago\Application();
+    $method = new ReflectionMethod($application, 'laravelFrameworkSubstitutions');
+    $substitutions = $method->invoke($application, $project, []);
+
+    if (! is_array($substitutions) || count($substitutions) !== 4) {
+        fail('framework overlay generation returned unexpected substitutions');
+    }
+
+    $guardOverlay = file_get_contents($project . '/.laramago/cache/framework-overlays/Guard.php');
+    $authOverlay = file_get_contents($project . '/.laramago/cache/framework-overlays/Auth.php');
+
+    if (! is_string($guardOverlay) || ! str_contains($guardOverlay, '@return \\App\\Models\\Usuario\\Usuario|null')) {
+        fail('guard overlay did not use the configured auth model');
+    }
+
+    if (! is_string($authOverlay) || ! str_contains($authOverlay, '@method static \\App\\Models\\Usuario\\Usuario|null user()')) {
+        fail('auth facade overlay did not use the configured auth model');
+    }
+
+    $disabled = $method->invoke($application, $project, ['--no-laravel-framework-overlays']);
+
+    if ($disabled !== []) {
+        fail('framework overlays were not disabled by option');
     }
 }
 

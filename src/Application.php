@@ -6,7 +6,7 @@ namespace Laramago;
 
 final class Application
 {
-    private const VERSION = '0.1.3';
+    private const VERSION = '0.1.4';
 
     private const CONFIG_FILE = 'mago.toml';
 
@@ -17,6 +17,8 @@ final class Application
     private const MODEL_OVERLAY_DIR = '.laramago/cache/model-overlays';
 
     private const MODEL_OVERLAY_MAP = '.laramago/cache/model-overlays.json';
+
+    private const FRAMEWORK_OVERLAY_DIR = '.laramago/cache/framework-overlays';
 
     private const RUNTIME_CONFIG_FILE = '.laramago/cache/mago.toml';
 
@@ -92,9 +94,11 @@ final class Application
     private function prepare(array $arguments): int
     {
         $projectRoot = $this->projectRoot($arguments);
-        $substitutions = $this->laravelModelSubstitutions($projectRoot, $arguments);
+        $modelSubstitutions = $this->laravelModelSubstitutions($projectRoot, $arguments);
+        $frameworkSubstitutions = $this->laravelFrameworkSubstitutions($projectRoot, $arguments);
 
-        $this->line('Prepared ' . (int) (count($substitutions) / 2) . ' Laravel model overlays.');
+        $this->line('Prepared ' . (int) (count($modelSubstitutions) / 2) . ' Laravel model overlays.');
+        $this->line('Prepared ' . (int) (count($frameworkSubstitutions) / 2) . ' Laravel framework overlays.');
 
         return 0;
     }
@@ -114,11 +118,13 @@ final class Application
         }
 
         $runtimeConfig = $this->prepareRuntimeConfig($projectRoot);
-        $substitutions = $this->laravelModelSubstitutions($projectRoot, $arguments);
+        $modelSubstitutions = $this->laravelModelSubstitutions($projectRoot, $arguments);
+        $frameworkSubstitutions = $this->laravelFrameworkSubstitutions($projectRoot, $arguments);
+        $substitutions = array_merge($modelSubstitutions, $frameworkSubstitutions);
         $command = [$mago, '--config', $runtimeConfig, 'analyze'];
         $command = array_merge(
             $command,
-            $this->defaultAnalyzeFlags($projectRoot, $arguments, $substitutions !== []),
+            $this->defaultAnalyzeFlags($projectRoot, $arguments, $modelSubstitutions !== []),
             $substitutions,
             $this->stripLaramagoOptions($arguments),
         );
@@ -154,7 +160,7 @@ final class Application
         ];
 
         $substitutions = $this->laravelModelSubstitutions($projectRoot, $arguments);
-        $command = array_merge($command, $substitutions);
+        $command = array_merge($command, $substitutions, $this->laravelFrameworkSubstitutions($projectRoot, $arguments));
 
         if (is_file($projectRoot . '/' . $baselinePath) && ! in_array('--force', $arguments, true)) {
             $command[] = '--backup-baseline';
@@ -185,7 +191,8 @@ final class Application
             return 1;
         }
 
-        $substitutions = $this->laravelModelSubstitutions($projectRoot, $arguments);
+        $modelSubstitutions = $this->laravelModelSubstitutions($projectRoot, $arguments);
+        $substitutions = array_merge($modelSubstitutions, $this->laravelFrameworkSubstitutions($projectRoot, $arguments));
 
         $runtimeConfig = $this->prepareRuntimeConfig($projectRoot);
 
@@ -194,7 +201,7 @@ final class Application
             '--config',
             $runtimeConfig,
             'analyze',
-        ], $this->defaultAnalyzeFlags($projectRoot, $arguments, $substitutions !== []), [
+        ], $this->defaultAnalyzeFlags($projectRoot, $arguments, $modelSubstitutions !== []), [
             '--verify-baseline',
             '--reporting-format=count',
         ], $substitutions, $this->stripLaramagoOptions($arguments)), $projectRoot);
@@ -262,9 +269,11 @@ final class Application
         }
 
         $runtimeConfig = $this->prepareRuntimeConfig($projectRoot);
-        $substitutions = $this->laravelModelSubstitutions($projectRoot, $arguments);
+        $modelSubstitutions = $this->laravelModelSubstitutions($projectRoot, $arguments);
+        $frameworkSubstitutions = $this->laravelFrameworkSubstitutions($projectRoot, $arguments);
         $this->line('OK   Prepared Laramago runtime config: ' . $runtimeConfig);
-        $this->line('OK   Prepared ' . (int) (count($substitutions) / 2) . ' Laravel model overlays.');
+        $this->line('OK   Prepared ' . (int) (count($modelSubstitutions) / 2) . ' Laravel model overlays.');
+        $this->line('OK   Prepared ' . (int) (count($frameworkSubstitutions) / 2) . ' Laravel framework overlays.');
 
         return $failed ? 1 : 0;
     }
@@ -277,7 +286,7 @@ Laramago
 Usage:
   laramago init [--force] [--source=app] [--exclude=path/**]
   laramago prepare
-  laramago analyze [mago analyze options] [path ...]
+  laramago analyze [--no-laravel-model-overlays] [--no-laravel-framework-overlays] [mago analyze options] [path ...]
   laramago baseline [--force]
   laramago verify-baseline
   laramago doctor
@@ -285,7 +294,7 @@ Usage:
   laramago codes [path ...]
   laramago clear
 
-The analyze command automatically uses laramago-analyzer-baseline.toml and Laravel model overlays when available.
+The analyze command automatically uses laramago-analyzer-baseline.toml, Laravel model overlays, and Laravel framework overlays when available.
 HELP);
 
         return 0;
@@ -714,6 +723,148 @@ TOML;
     }
 
     /**
+     * @param list<string> $arguments
+     * @return list<string>
+     */
+    private function laravelFrameworkSubstitutions(string $projectRoot, array $arguments): array
+    {
+        if (in_array('--no-laravel-framework-overlays', $arguments, true)) {
+            return [];
+        }
+
+        $authModel = $this->detectAuthUserModel($projectRoot);
+
+        if ($authModel === null) {
+            return [];
+        }
+
+        $authModel = '\\' . ltrim($authModel, '\\');
+        $overlays = [];
+
+        $guardPath = $projectRoot . '/vendor/laravel/framework/src/Illuminate/Contracts/Auth/Guard.php';
+        $authFacadePath = $projectRoot . '/vendor/laravel/framework/src/Illuminate/Support/Facades/Auth.php';
+
+        if (is_file($guardPath)) {
+            $guardSource = file_get_contents($guardPath);
+
+            if (is_string($guardSource)) {
+                $guardSource = str_replace(
+                    '@return \Illuminate\Contracts\Auth\Authenticatable|null',
+                    '@return ' . $authModel . '|null',
+                    $guardSource,
+                );
+
+                $overlays[] = $this->writeFrameworkOverlay($projectRoot, 'Guard.php', $guardPath, $guardSource);
+            }
+        }
+
+        if (is_file($authFacadePath)) {
+            $authFacadeSource = file_get_contents($authFacadePath);
+
+            if (is_string($authFacadeSource)) {
+                $replacements = [
+                    '@method static \Illuminate\Contracts\Auth\Authenticatable|null user()' => '@method static ' . $authModel . '|null user()',
+                    '@method static \Illuminate\Contracts\Auth\Authenticatable|null getUser()' => '@method static ' . $authModel . '|null getUser()',
+                    '@method static \Illuminate\Contracts\Auth\Authenticatable authenticate()' => '@method static ' . $authModel . ' authenticate()',
+                    '@method static \Illuminate\Contracts\Auth\Authenticatable getLastAttempted()' => '@method static ' . $authModel . '|null getLastAttempted()',
+                    '@method static \Illuminate\Contracts\Auth\Authenticatable|false loginUsingId(mixed $id, bool $remember = false)' => '@method static ' . $authModel . '|false loginUsingId(mixed $id, bool $remember = false)',
+                    '@method static \Illuminate\Contracts\Auth\Authenticatable|false onceUsingId(mixed $id)' => '@method static ' . $authModel . '|false onceUsingId(mixed $id)',
+                    '@method static \Illuminate\Contracts\Auth\Authenticatable|null logoutOtherDevices(string $password)' => '@method static ' . $authModel . '|null logoutOtherDevices(string $password)',
+                ];
+
+                $authFacadeSource = str_replace(array_keys($replacements), array_values($replacements), $authFacadeSource);
+
+                $overlays[] = $this->writeFrameworkOverlay($projectRoot, 'Auth.php', $authFacadePath, $authFacadeSource);
+            }
+        }
+
+        $substitutions = [];
+
+        foreach ($overlays as $overlay) {
+            if ($overlay === null) {
+                continue;
+            }
+
+            $substitutions[] = '--substitute';
+            $substitutions[] = $overlay['original'] . '=' . $overlay['overlay'];
+        }
+
+        return $substitutions;
+    }
+
+    /**
+     * @return array{original: string, overlay: string}|null
+     */
+    private function writeFrameworkOverlay(string $projectRoot, string $fileName, string $originalPath, string $source): ?array
+    {
+        $overlayPath = $projectRoot . '/' . self::FRAMEWORK_OVERLAY_DIR . '/' . $fileName;
+        $this->ensureDirectory(dirname($overlayPath));
+
+        if (file_put_contents($overlayPath, $source) === false) {
+            return null;
+        }
+
+        return [
+            'original' => $originalPath,
+            'overlay' => $overlayPath,
+        ];
+    }
+
+    private function detectAuthUserModel(string $projectRoot): ?string
+    {
+        $configPath = $projectRoot . '/config/auth.php';
+
+        if (! is_file($configPath)) {
+            return is_file($projectRoot . '/app/Models/User.php') ? 'App\\Models\\User' : null;
+        }
+
+        $source = file_get_contents($configPath);
+
+        if (! is_string($source)) {
+            return null;
+        }
+
+        if (preg_match('/[\'"]model[\'"]\s*=>\s*([A-Za-z_\\\\][A-Za-z0-9_\\\\]*)::class/', $source, $matches) === 1) {
+            $class = $matches[1];
+
+            if (str_contains($class, '\\')) {
+                return ltrim($class, '\\');
+            }
+
+            return $this->importedClassName($source, $class) ?? 'App\\Models\\' . $class;
+        }
+
+        if (preg_match('/[\'"]model[\'"]\s*=>\s*[\'"]([^\'"]+)[\'"]/', $source, $matches) === 1) {
+            return str_replace('\\\\', '\\', $matches[1]);
+        }
+
+        return is_file($projectRoot . '/app/Models/User.php') ? 'App\\Models\\User' : null;
+    }
+
+    private function importedClassName(string $source, string $shortName): ?string
+    {
+        if (preg_match_all('/^use\s+([^;]+);/m', $source, $matches) === 0) {
+            return null;
+        }
+
+        foreach ($matches[1] as $import) {
+            $import = trim($import);
+            $alias = $import;
+
+            if (preg_match('/^(.+)\s+as\s+([A-Za-z_][A-Za-z0-9_]*)$/i', $import, $aliasMatches) === 1) {
+                $import = trim($aliasMatches[1]);
+                $alias = trim($aliasMatches[2]);
+            }
+
+            if (substr($alias, strrpos($alias, '\\') === false ? 0 : strrpos($alias, '\\') + 1) === $shortName) {
+                return ltrim($import, '\\');
+            }
+        }
+
+        return null;
+    }
+
+    /**
      * @return list<array{file: string, class: string}>
      */
     private function discoverClasses(string $directory, string $relativeDirectory): array
@@ -903,6 +1054,7 @@ TOML;
             static fn (string $argument): bool => ! str_starts_with($argument, '--project=')
                 && $argument !== '--force'
                 && $argument !== '--no-laravel-model-overlays'
+                && $argument !== '--no-laravel-framework-overlays'
         ));
     }
 

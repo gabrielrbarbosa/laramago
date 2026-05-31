@@ -21,6 +21,7 @@ Mago 1.29 does not expose a Composer-loaded analyzer extension API equivalent to
 
 - a Laravel-oriented runtime Mago preset managed by Laramago;
 - generated Eloquent PHPDoc overlays from real application model metadata;
+- generated Laravel framework overlays for application-specific auth model types;
 - automatic baseline usage for existing projects;
 - path translation so diagnostics point back to application files instead of generated cache files;
 - Composer commands that can replace existing `phpstan` scripts;
@@ -65,9 +66,10 @@ During `analyze`, `baseline`, and `verify-baseline`, Laramago:
 1. boots the Laravel application;
 2. discovers Eloquent models in `app/Models`;
 3. reads database columns, casts, accessors, local scopes, and public relation methods;
-4. writes generated files to `.laramago/cache/model-overlays`;
-5. passes those files to Mago through `--substitute`;
-6. translates baseline and diagnostic paths back to the original app files.
+4. reads `config/auth.php` to detect the application auth user model;
+5. writes generated files to `.laramago/cache/model-overlays` and `.laramago/cache/framework-overlays`;
+6. passes those files to Mago through `--substitute`;
+7. translates baseline and diagnostic paths back to the original app files.
 
 The application source tree is not modified.
 
@@ -77,12 +79,19 @@ Generated overlays currently add:
 - `@property-read` entries for legacy `getFooAttribute()` accessors and `Attribute` accessors;
 - `@property-read` entries for Eloquent relations;
 - `@method static` entries for classic `scopeFoo()` local scopes and Laravel `#[Scope]` methods;
+- auth guard and facade return types for the configured Laravel user model;
 - baseline and output path translation so generated overlay paths do not leak into application diagnostics.
 
 Disable overlays when you want raw Mago behavior:
 
 ```bash
 vendor/bin/laramago analyze --no-laravel-model-overlays
+```
+
+Disable Laravel framework overlays when you want raw framework vendor types:
+
+```bash
+vendor/bin/laramago analyze --no-laravel-framework-overlays
 ```
 
 ## Commands
