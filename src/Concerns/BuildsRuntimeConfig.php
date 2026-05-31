@@ -436,7 +436,7 @@ TOML;
     {
         $level = $this->phpStanCompatibilityLevel($arguments);
 
-        if ($level === null || $level >= 9) {
+        if ($level === null) {
             return [];
         }
 
@@ -544,10 +544,6 @@ TOML;
             'too-many-arguments',
         ];
 
-        if ($level <= 7) {
-            return $ignores;
-        }
-
         $levelEightReportedCodes = [
             'falsable-return-statement',
             'false-operand',
@@ -570,7 +566,29 @@ TOML;
             'possibly-null-property-access',
         ];
 
-        return array_values(array_diff($ignores, $levelEightReportedCodes));
+        if ($level <= 7) {
+            return $ignores;
+        }
+
+        if ($level === 8) {
+            return array_values(array_diff($ignores, $levelEightReportedCodes));
+        }
+
+        $levelNineReportedCodes = array_merge($levelEightReportedCodes, [
+            'mixed-argument',
+            'mixed-assignment',
+            'mixed-array-access',
+            'mixed-array-assignment',
+            'mixed-array-index',
+            'mixed-clone',
+            'mixed-method-access',
+            'mixed-operand',
+            'mixed-property-access',
+            'mixed-property-type-coercion',
+            'mixed-return-statement',
+        ]);
+
+        return array_values(array_diff($ignores, $levelNineReportedCodes));
     }
 
     private function usesPhpStanCompatibilityProfile(array $arguments): bool

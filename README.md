@@ -195,7 +195,7 @@ Laramago owns Laravel integration, not your project's strictness level. During `
 
 Laramago's default analyzer profile intentionally suppresses Laravel dynamic-data diagnostics that Mago cannot model without framework-specific analyzer extensions yet, while keeping concrete type mismatches and control-flow issues visible. It also leaves unused-definition detection off by default for PHPStan/Larastan parity. Use `laramago-analyzer-baseline.toml`, `--find-unused-definitions`, project `mago.toml` settings, or Mago flags such as `--minimum-fail-level` and `--minimum-report-level` for project-specific debt that is outside the shared Laravel compatibility profile.
 
-The `--phpstan-level` option is an explicit migration preset for projects that previously used a PHPStan/Larastan level gate. It is opt-in so Laramago stays level agnostic for new projects and stricter teams. `--phpstan-level=max` keeps Mago's native strictness, while lower migration levels progressively suppress Mago checks that PHPStan/Larastan would not normally fail at that level.
+The `--phpstan-level` option is an explicit migration preset for projects that previously used a PHPStan/Larastan level gate. It is opt-in so Laramago stays level agnostic for new projects and stricter teams. `--phpstan-level=max` follows PHPStan's highest level, while running without `--phpstan-level` keeps Mago's native strictness.
 
 You can pass additional Mago flags directly through `laramago analyze`.
 

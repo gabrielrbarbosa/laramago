@@ -363,6 +363,8 @@ NEON);
     $method = new ReflectionMethod($application, 'phpStanCompatibilityIgnores');
     $levelIgnores = $method->invoke($application, ['--phpstan-level=6']);
     $levelEightIgnores = $method->invoke($application, ['--phpstan-level=8']);
+    $levelNineIgnores = $method->invoke($application, ['--phpstan-level=9']);
+    $levelTenIgnores = $method->invoke($application, ['--phpstan-level=10']);
     $maxIgnores = $method->invoke($application, ['--phpstan-level=max']);
     $unsupportedIgnores = $method->invoke($application, ['--phpstan-level=custom']);
 
@@ -374,8 +376,12 @@ NEON);
         fail('PHPStan level 8 compatibility should keep mixed compatibility while reporting nullable issues');
     }
 
-    if ($maxIgnores !== []) {
-        fail('PHPStan max compatibility should use native Mago strictness');
+    if (! is_array($levelNineIgnores) || in_array('mixed-argument', $levelNineIgnores, true) || in_array('possibly-null-argument', $levelNineIgnores, true) || ! in_array('invalid-property-assignment-value', $levelNineIgnores, true)) {
+        fail('PHPStan level 9 compatibility should report mixed/nullability issues while keeping Laravel compatibility ignores');
+    }
+
+    if ($levelTenIgnores !== $levelNineIgnores || $maxIgnores !== $levelTenIgnores) {
+        fail('PHPStan level 10 and max compatibility should follow the highest PHPStan migration profile');
     }
 
     if ($unsupportedIgnores !== []) {
@@ -699,6 +705,12 @@ PHP);
 
     if ($levelResult['exitCode'] !== 0 || ! str_contains($levelResult['output'], 'No issues found.')) {
         fail('PHPStan level 6 analysis should pass the end-to-end migration fixture');
+    }
+
+    $levelNineResult = captureRun([PHP_BINARY, $binary, 'analyze', '--project=' . $fixture, '--phpstan-level=9', '--reporting-format=short']);
+
+    if ($levelNineResult['exitCode'] === 0 || ! str_contains($levelNineResult['output'], 'strictReturn') || str_contains($levelNineResult['output'], '$columns')) {
+        fail('PHPStan level 9 analysis should report strict return issues without falling back to raw mixed-data noise');
     }
 
     $baselineResult = captureRun([PHP_BINARY, $binary, 'baseline', '--project=' . $fixture, '--phpstan-level=6', '--force']);
