@@ -536,6 +536,12 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 
+/**
+ * Existing model annotations should survive generated overlays.
+ *
+ * @mixin \Illuminate\Database\Eloquent\Builder<Product>
+ * @method static \Illuminate\Database\Eloquent\Builder<Product> visible()
+ */
 class Product extends Model
 {
 }
@@ -570,10 +576,20 @@ PHP;
         '@method static static|null findOrFail(mixed $id, array|string $columns = ["*"])',
         '@method \\Laravel\\Sanctum\\NewAccessToken createToken(string $name, array $abilities = ["*"], ?\\DateTimeInterface $expiresAt = null)',
         '@method static \\Illuminate\\Database\\Eloquent\\Builder<static> active(bool $onlyVisible = null)',
+        '@mixin \\Illuminate\\Database\\Eloquent\\Builder<Product>',
+        '@method static \\Illuminate\\Database\\Eloquent\\Builder<Product> visible()',
     ] as $expected) {
         if (! str_contains($overlay, $expected)) {
             fail('model docblock overlay missed expected Laravel magic: ' . $expected);
         }
+    }
+
+    if (substr_count($overlay, '/**') !== 1) {
+        fail('model docblock overlay should merge with the existing class docblock');
+    }
+
+    if (strpos($overlay, '@mixin \\Illuminate\\Database\\Eloquent\\Builder<Product>') > strpos($overlay, '@laramago-generated')) {
+        fail('model docblock overlay should preserve existing annotations before generated metadata');
     }
 }
 

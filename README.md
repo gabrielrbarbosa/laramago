@@ -103,6 +103,7 @@ Generated overlays currently add:
 - `@property-read` entries for legacy `getFooAttribute()` accessors and `Attribute` accessors;
 - `@property-read` entries for Eloquent relations;
 - `@method static` entries for common static Eloquent model calls such as `create`, `firstOrFail`, `find`, and `findOrFail`;
+- merged generated metadata with existing model class PHPDoc, so project annotations such as `@mixin`, `@method`, `@property`, and generic hints stay visible;
 - `createToken` return types for models using Laravel Sanctum's `HasApiTokens` trait;
 - `@method static` entries for classic `scopeFoo()` local scopes and Laravel `#[Scope]` methods;
 - Laravel `HasFactory` return types without app-level generic boilerplate;

@@ -6,7 +6,7 @@ namespace Laramago;
 
 final class Application
 {
-    private const VERSION = '0.1.26';
+    private const VERSION = '0.1.27';
 
     private const CONFIG_FILE = 'mago.toml';
 
@@ -1791,7 +1791,6 @@ PHP;
     private function insertModelDocblock(string $source, string $shortClass, array $properties, array $accessors, array $relations, array $scopes, bool $usesSanctumApiTokens = false): string
     {
         $lines = [
-            '/**',
             ' * @laramago-generated',
         ];
 
@@ -1837,16 +1836,62 @@ PHP;
             $lines[] = ' * @method static \\Illuminate\\Database\\Eloquent\\Builder<static> ' . $scope['name'] . '(' . $scope['parameters'] . ')';
         }
 
-        $lines[] = ' */';
-
-        $docblock = implode(PHP_EOL, $lines) . PHP_EOL;
-        $pattern = '/^((?:abstract|final)\s+)?class\s+' . preg_quote($shortClass, '/') . '\b/m';
+        $docblock = '/**' . PHP_EOL . implode(PHP_EOL, $lines) . PHP_EOL . ' */' . PHP_EOL;
+        $pattern = '/^(?:(?:abstract|final|readonly)\s+)*class\s+' . preg_quote($shortClass, '/') . '\b/m';
 
         if (preg_match($pattern, $source, $matches, PREG_OFFSET_CAPTURE) !== 1) {
             return $source;
         }
 
-        return substr($source, 0, $matches[0][1]) . $docblock . substr($source, $matches[0][1]);
+        $declarationOffset = $matches[0][1];
+        $existingDocblock = $this->classDocblockBeforeOffset($source, $declarationOffset);
+
+        if ($existingDocblock !== null) {
+            $mergedDocblock = $this->mergeGeneratedDocblockLines($existingDocblock['docblock'], $lines);
+
+            return substr($source, 0, $existingDocblock['offset']) . $mergedDocblock . substr($source, $declarationOffset);
+        }
+
+        return substr($source, 0, $declarationOffset) . $docblock . substr($source, $declarationOffset);
+    }
+
+    /**
+     * @return array{offset: int, docblock: string}|null
+     */
+    private function classDocblockBeforeOffset(string $source, int $offset): ?array
+    {
+        $prefix = substr($source, 0, $offset);
+
+        if (preg_match('/(\/\*\*.*?\*\/)\s*$/s', $prefix, $matches, PREG_OFFSET_CAPTURE) !== 1) {
+            return null;
+        }
+
+        return [
+            'offset' => $matches[1][1],
+            'docblock' => $matches[1][0],
+        ];
+    }
+
+    /**
+     * @param list<string> $generatedLines
+     */
+    private function mergeGeneratedDocblockLines(string $docblock, array $generatedLines): string
+    {
+        $merged = preg_replace('/\s*\*\/\s*$/', '', rtrim($docblock));
+
+        if (! is_string($merged)) {
+            return $docblock;
+        }
+
+        foreach ($generatedLines as $line) {
+            if (str_contains($merged, trim($line))) {
+                continue;
+            }
+
+            $merged .= PHP_EOL . $line;
+        }
+
+        return $merged . PHP_EOL . ' */' . PHP_EOL;
     }
 
     /**
