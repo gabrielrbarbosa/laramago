@@ -48,6 +48,7 @@ trait BuildsSourceCompatibilityOverlays
                 $translated = $this->translatePhpStanPragmas($source);
                 $translated = $this->translateLarastanPseudoTypes($translated);
                 $translated = $this->translatePhpStanListTypes($translated);
+                $translated = $this->translateLaravelCarbonImports($translated);
                 $translated = $this->removeObjectAccessStringInterpolations($translated);
                 $translated = $this->translateLaravelDateHelperCalls($translated);
                 $translated = $this->rewriteCarbonInstanceStaticCalls($translated);
@@ -474,6 +475,11 @@ trait BuildsSourceCompatibilityOverlays
             ],
             $source,
         );
+    }
+
+    private function translateLaravelCarbonImports(string $source): string
+    {
+        return preg_replace('/^use\s+Carbon\\\\Carbon\s*;/m', 'use Illuminate\\Support\\Carbon;', $source) ?? $source;
     }
 
     private function rewriteLaravelHttpClientWrapperReturnTypes(string $source): string

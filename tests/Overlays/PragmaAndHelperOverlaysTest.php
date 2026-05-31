@@ -92,6 +92,8 @@ function testLaravelDateHelperOverlayGeneration(string $project, string $root): 
 
 namespace App;
 
+use Carbon\Carbon;
+
 final class UsesDateHelpers
 {
     public function handle(): mixed
@@ -153,6 +155,8 @@ PHP);
             && ! str_contains($overlay, '{$now->toDateString()}')
             && str_contains($overlay, '\\Illuminate\\Support\\Carbon::parse(\'2026-05-31\')')
             && ! str_contains($overlay, 'Carbon::now()->parse(')
+            && str_contains($overlay, 'use Illuminate\\Support\\Carbon;')
+            && ! str_contains($overlay, 'use Carbon\\Carbon;')
             && str_contains($overlay, '$this->now()')
             && str_contains($overlay, 'self::today()')) {
             $foundAppOverlay = true;
