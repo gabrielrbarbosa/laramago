@@ -313,11 +313,11 @@ trait BuildsLaravelFrameworkOverlays
         );
 
         $methodLines = [
-            ' * @method $this join(string $table, mixed $first, ?string $operator = null, mixed $second = null, string $type = "inner", bool $where = false)',
-            ' * @method $this leftJoin(string $table, mixed $first, ?string $operator = null, mixed $second = null)',
-            ' * @method $this rightJoin(string $table, mixed $first, ?string $operator = null, mixed $second = null)',
-            ' * @method $this crossJoin(string $table, mixed $first = null, ?string $operator = null, mixed $second = null)',
-            ' * @method $this groupBy(array|string ...$groups)',
+            ' * @method $this join(mixed $table, mixed $first, ?string $operator = null, mixed $second = null, string $type = "inner", bool $where = false)',
+            ' * @method $this leftJoin(mixed $table, mixed $first, ?string $operator = null, mixed $second = null)',
+            ' * @method $this rightJoin(mixed $table, mixed $first, ?string $operator = null, mixed $second = null)',
+            ' * @method $this crossJoin(mixed $table, mixed $first = null, ?string $operator = null, mixed $second = null)',
+            ' * @method $this groupBy(mixed ...$groups)',
             ' * @method $this having(string $column, ?string $operator = null, mixed $value = null, string $boolean = "and")',
             ' * @method $this orHaving(string $column, ?string $operator = null, mixed $value = null)',
             ' * @method $this where(mixed $column, mixed $operator = null, mixed $value = null, string $boolean = "and")',
@@ -508,7 +508,7 @@ PHP,
      *
      * @return \Illuminate\Database\Eloquent\Builder<TModel>
      */
-    public function groupBy(array|string ...$groups): \Illuminate\Database\Eloquent\Builder
+    public function groupBy(mixed ...$groups): \Illuminate\Database\Eloquent\Builder
     {
         return $this;
     }
@@ -876,9 +876,9 @@ PHP);
             ' * @method static ' . $staticReturnType . ' createfrominterface(\DateTimeInterface $date)',
             ' * @method static ' . $staticReturnType . ' createfromtimestamp(mixed $timestamp, mixed $timezone = null)',
             ' * @method static ' . $staticReturnType . ' createfromtimestampms(mixed $timestamp, mixed $timezone = null)',
-            ' * @method static ' . $staticReturnType . ' createfromdate(?int $year = null, ?int $month = null, ?int $day = null, mixed $timezone = null)',
-            ' * @method static ' . $staticReturnType . ' createfromtime(?int $hour = null, ?int $minute = null, ?int $second = null, ?int $microsecond = null, mixed $timezone = null)',
-            ' * @method static ' . $staticReturnType . ' create(int $year = 0, int $month = 1, int $day = 1, int $hour = 0, int $minute = 0, int $second = 0, mixed $timezone = null)',
+            ' * @method static ' . $staticReturnType . ' createfromdate(mixed $year = null, mixed $month = null, mixed $day = null, mixed $timezone = null)',
+            ' * @method static ' . $staticReturnType . ' createfromtime(mixed $hour = null, mixed $minute = null, mixed $second = null, mixed $microsecond = null, mixed $timezone = null)',
+            ' * @method static ' . $staticReturnType . ' create(mixed $year = 0, mixed $month = 1, mixed $day = 1, mixed $hour = 0, mixed $minute = 0, mixed $second = 0, mixed $timezone = null)',
             ' * @method float diffinseconds(mixed $date = null, bool $absolute = false)',
             ' * @method $this addseconds(int|float $value = 1)',
             ' * @method $this addminutes(int|float $value = 1)',
