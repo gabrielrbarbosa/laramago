@@ -24,7 +24,8 @@ Mago 1.29 does not expose a Composer-loaded analyzer extension API equivalent to
 - generated Laravel framework overlays for application-specific auth model types;
 - generated symbol stubs for excluded legacy application paths, so references stay resolvable without analyzing those files;
 - Composer `autoload` and `autoload-dev` PSR-4/classmap paths included for type discovery, so classes outside `app` such as seeders stay resolvable;
-- baseline usage for existing applications that already have analyzer debt or want to migrate gradually;
+- a default Laravel dynamic-data compatibility profile that filters noisy mixed-data diagnostics common in Eloquent, request, resource, and legacy payload workflows;
+- baseline usage for existing applications that still have analyzer debt or want to migrate gradually;
 - path translation so diagnostics point back to application files instead of generated cache files;
 - Composer commands that can replace existing `phpstan` scripts;
 - a small public surface that can absorb native Mago extension hooks when Mago exposes them.
@@ -244,11 +245,11 @@ Laramago owns Laravel integration, not your project's strictness level. During `
 
 - Laravel linter integration enabled;
 - Pint-compatible formatter defaults;
-- analyzer settings suitable for legacy Laravel applications;
+- analyzer settings suitable for legacy Laravel applications, including Laravel dynamic-data compatibility ignores for mixed request, model, collection, and payload flows;
 - excluded-path symbol stubs added to runtime includes when project excludes are present;
 - the project source settings copied from the committed `mago.toml`.
 
-Analyzer issue codes are not globally ignored by the package. Use `laramago-analyzer-baseline.toml`, project `mago.toml` settings, or Mago flags such as `--minimum-fail-level` and `--minimum-report-level` to choose the strictness that fits your team.
+Laramago's default analyzer profile intentionally suppresses Laravel dynamic-data diagnostics that Mago cannot model without framework-specific analyzer extensions yet, while keeping concrete type mismatches and control-flow issues visible. Use `laramago-analyzer-baseline.toml`, project `mago.toml` settings, or Mago flags such as `--minimum-fail-level` and `--minimum-report-level` for project-specific debt that is outside the shared Laravel compatibility profile.
 
 The `--phpstan-level` option is an explicit migration preset for projects that previously used a PHPStan/Larastan level gate. It is opt-in so Laramago stays level agnostic for new projects and stricter teams. `--phpstan-level=max` keeps Mago's native strictness, while lower migration levels progressively suppress Mago checks that PHPStan/Larastan would not normally fail at that level.
 
