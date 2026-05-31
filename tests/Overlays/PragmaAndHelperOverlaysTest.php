@@ -143,11 +143,36 @@ function testLaravelHttpClientWrapperReturnTypeOverlayGeneration(string $project
 {
     require_once $root . '/src/Application.php';
 
+    mkdir($project . '/app/Traits', 0777, true);
+
+    file_put_contents($project . '/app/Traits/UsesHttpClientTrait.php', <<<'PHP'
+<?php
+
+namespace App\Traits;
+
+use Illuminate\Http\Client\Response;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\Http;
+
+trait UsesHttpClientTrait
+{
+    public function traitRequest(): JsonResponse|Response
+    {
+        if (false) {
+            return response()->json(['error' => true]);
+        }
+
+        return Http::get('/trait')->throw();
+    }
+}
+PHP);
+
     file_put_contents($project . '/app/UsesHttpClientWrapper.php', <<<'PHP'
 <?php
 
 namespace App;
 
+use App\Traits\UsesHttpClientTrait;
 use GuzzleHttp\Promise\PromiseInterface;
 use Illuminate\Http\Client\Promises\LazyPromise;
 use Illuminate\Http\Client\Response;
@@ -156,6 +181,8 @@ use Illuminate\Support\Facades\Http;
 
 final class UsesHttpClientWrapper
 {
+    use UsesHttpClientTrait;
+
     private function sendRequest(string $ncm): LazyPromise|PromiseInterface|Response
     {
         return Http::retry(2, 100)->get('/ibpt/' . $ncm)->throw();
@@ -173,6 +200,28 @@ final class UsesHttpClientWrapper
     public function queued(): PromiseInterface|Response
     {
         return Http::async()->get('/later');
+    }
+
+    public function useWrapper(): array
+    {
+        $response = $this->maybeJson();
+
+        if (! $response->successful()) {
+            return [];
+        }
+
+        return $response->json();
+    }
+
+    public function useTraitWrapper(): array
+    {
+        $response = $this->traitRequest();
+
+        if (! $response->successful()) {
+            return [];
+        }
+
+        return $response->json();
     }
 }
 PHP);
@@ -193,7 +242,9 @@ PHP);
         if (is_string($overlay)
             && str_contains($overlay, 'private function sendRequest(string $ncm): Response')
             && str_contains($overlay, 'public function maybeJson(): JsonResponse|Response')
-            && str_contains($overlay, 'public function queued(): PromiseInterface|Response')) {
+            && str_contains($overlay, 'public function queued(): PromiseInterface|Response')
+            && str_contains($overlay, '/** @var \Illuminate\Http\Client\Response $response */' . PHP_EOL . '        $response = $this->maybeJson();')
+            && str_contains($overlay, '/** @var \Illuminate\Http\Client\Response $response */' . PHP_EOL . '        $response = $this->traitRequest();')) {
             return;
         }
     }

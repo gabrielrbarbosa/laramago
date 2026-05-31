@@ -682,7 +682,7 @@ trait InteractsWithInput
      *
      * @param  string|null  $key
      * @param  mixed  $default
-     * @return array|\Illuminate\Http\UploadedFile|\Illuminate\Http\UploadedFile[]|null
+     * @return ($key is null ? array<string, \Illuminate\Http\UploadedFile|\Illuminate\Http\UploadedFile[]> : \Illuminate\Http\UploadedFile|\Illuminate\Http\UploadedFile[]|null)
      */
     public function file($key = null, $default = null)
     {
@@ -863,8 +863,8 @@ PHP);
         fail('ControllerMiddlewareOptions overlay did not expose variadic middleware filters');
     }
 
-    if (! is_string($requestOverlay) || ! str_contains($requestOverlay, 'public function __set(string $key, mixed $value): void')) {
-        fail('Request overlay did not expose dynamic request writes');
+    if (! is_string($requestOverlay) || ! str_contains($requestOverlay, 'public function __set(string $key, mixed $value): void') || ! str_contains($requestOverlay, 'public function safe(?array $keys = null): \\Illuminate\\Support\\ValidatedInput|array')) {
+        fail('Request overlay did not expose safe input helper and dynamic request writes');
     }
 
     if (! is_string($interactsWithInputOverlay) || ! str_contains($interactsWithInputOverlay, '@return ($key is null ? array<string, mixed> : \\Illuminate\\Http\\UploadedFile|null)') || ! str_contains($interactsWithInputOverlay, 'public function file($key = null, $default = null): array|\\Illuminate\\Http\\UploadedFile|null')) {

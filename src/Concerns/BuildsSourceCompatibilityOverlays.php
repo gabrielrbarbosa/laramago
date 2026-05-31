@@ -48,6 +48,7 @@ trait BuildsSourceCompatibilityOverlays
                 $translated = $this->translatePhpStanPragmas($source);
                 $translated = $this->translateLaravelDateHelperCalls($translated);
                 $translated = $this->rewriteLaravelHttpClientWrapperReturnTypes($translated);
+                $translated = $this->annotateLaravelHttpClientWrapperAssignments($translated, $projectRoot);
                 $translated = $this->annotateLaravelCollectionMacroClosures($translated);
                 $translated = $this->annotateLaravelExcelEventClosures($translated);
                 $translated = $this->annotateLaravelValidationRuleClosures($translated);
@@ -376,6 +377,147 @@ trait BuildsSourceCompatibilityOverlays
         }
 
         return $source;
+    }
+
+    private function annotateLaravelHttpClientWrapperAssignments(string $source, string $projectRoot): string
+    {
+        if (! str_contains($source, 'Http::') || ! str_contains($source, '->')) {
+            $wrapperMethods = $this->usedTraitLaravelHttpClientWrapperMethods($projectRoot, $source);
+        } else {
+            $wrapperMethods = $this->synchronousLaravelHttpClientWrapperMethods($source)
+                + $this->usedTraitLaravelHttpClientWrapperMethods($projectRoot, $source);
+        }
+
+        if ($wrapperMethods === []) {
+            return $source;
+        }
+
+        $methodPattern = implode('|', array_map(static fn (string $method): string => preg_quote($method, '/'), array_keys($wrapperMethods)));
+
+        $translated = preg_replace_callback(
+            '/^([ \t]*)(\$([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(?:\$this|self|static)\s*(?:->|::)\s*(?:' . $methodPattern . ')\s*\([^;\r\n]*\)\s*;)/m',
+            static function (array $matches) use ($source): string {
+                $variable = $matches[3];
+
+                if (preg_match('/\$' . preg_quote($variable, '/') . '\s*->\s*(?:body|clientError|collect|cookies|created|failed|forbidden|header|headers|json|noContent|notFound|object|ok|redirect|serverError|status|successful|tooManyRequests|unprocessable|throw|throwIf|throwUnless|toException|transferStats|unauthorized)\s*\(/', $source) !== 1) {
+                    return $matches[0];
+                }
+
+                $prefix = substr($source, max(0, (int) strpos($source, $matches[0]) - 160), 160);
+
+                if (preg_match('/@var\s+\\\\?Illuminate\\\\Http\\\\Client\\\\Response\s+\$' . preg_quote($variable, '/') . '\b/', $prefix) === 1) {
+                    return $matches[0];
+                }
+
+                return $matches[1] . '/** @var \Illuminate\Http\Client\Response $' . $variable . ' */' . PHP_EOL . $matches[0];
+            },
+            $source,
+        );
+
+        return is_string($translated) ? $translated : $source;
+    }
+
+    private function usedTraitLaravelHttpClientWrapperMethods(string $projectRoot, string $source): array
+    {
+        if (preg_match_all('/^[ \t]+use\s+([^;]+);/m', $source, $matches) === 0) {
+            return [];
+        }
+
+        $methods = [];
+
+        foreach ($matches[1] as $declaration) {
+            foreach (explode(',', $declaration) as $trait) {
+                $trait = trim(preg_replace('/\s+as\s+.*$/i', '', $trait) ?? $trait);
+
+                if ($trait === '') {
+                    continue;
+                }
+
+                $class = str_contains($trait, '\\')
+                    ? ltrim($trait, '\\')
+                    : ($this->importedClassName($source, $trait) ?? $this->namespacedClassName($source, $trait));
+
+                if ($class === null) {
+                    continue;
+                }
+
+                $path = $this->projectClassPath($projectRoot, $class);
+
+                if ($path === null || ! is_file($path)) {
+                    continue;
+                }
+
+                $traitSource = file_get_contents($path);
+
+                if (! is_string($traitSource)) {
+                    continue;
+                }
+
+                $methods += $this->synchronousLaravelHttpClientWrapperMethods($traitSource);
+            }
+        }
+
+        return $methods;
+    }
+
+    private function synchronousLaravelHttpClientWrapperMethods(string $source): array
+    {
+        $tokens = token_get_all($source);
+        $offsets = [];
+        $cursor = 0;
+
+        foreach ($tokens as $index => $token) {
+            $offsets[$index] = $cursor;
+            $cursor += strlen(is_array($token) ? $token[1] : $token);
+        }
+
+        $methods = [];
+        $count = count($tokens);
+
+        for ($index = 0; $index < $count; $index++) {
+            $token = $tokens[$index];
+
+            if (! is_array($token) || $token[0] !== T_FUNCTION) {
+                continue;
+            }
+
+            $nameIndex = $this->nextMeaningfulTokenIndex($tokens, $index + 1);
+
+            if ($nameIndex === null || ! is_array($tokens[$nameIndex]) || $tokens[$nameIndex][0] !== T_STRING) {
+                continue;
+            }
+
+            $openBrace = null;
+
+            for ($cursorIndex = $nameIndex + 1; $cursorIndex < $count; $cursorIndex++) {
+                if ($tokens[$cursorIndex] === ';') {
+                    break;
+                }
+
+                if ($tokens[$cursorIndex] === '{') {
+                    $openBrace = $cursorIndex;
+                    break;
+                }
+            }
+
+            if ($openBrace === null) {
+                continue;
+            }
+
+            $closeBrace = $this->matchingBraceTokenIndex($tokens, $openBrace);
+
+            if ($closeBrace === null) {
+                continue;
+            }
+
+            $body = substr($source, $offsets[$openBrace], $offsets[$closeBrace] - $offsets[$openBrace]);
+
+            if ($this->isSynchronousLaravelHttpClientWrapper($body)) {
+                $methods[$tokens[$nameIndex][1]] = true;
+            }
+        }
+
+        return $methods;
     }
 
     private function matchingBraceTokenIndex(array $tokens, int $openBrace): ?int

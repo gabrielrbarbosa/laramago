@@ -900,11 +900,25 @@ PHP);
 
     private function renderRequestOverlay(string $source): string
     {
-        if (str_contains($source, 'function __set(')) {
-            return $source;
+        $declarations = [];
+
+        if (! str_contains($source, 'function safe(')) {
+            $declarations[] = <<<'PHP'
+
+    /**
+     * Laramago overlay for Laravel's controller validation safe input helper.
+     *
+     * @return \Illuminate\Support\ValidatedInput|array<array-key, mixed>
+     */
+    public function safe(?array $keys = null): \Illuminate\Support\ValidatedInput|array
+    {
+        throw new \LogicException('Laramago analysis overlay.');
+    }
+PHP;
         }
 
-        return $this->insertBeforeFinalClassBrace($source, <<<'PHP'
+        if (! str_contains($source, 'function __set(')) {
+            $declarations[] = <<<'PHP'
 
     /**
      * Laramago overlay for Laravel applications that assign request-backed dynamic state.
@@ -912,22 +926,29 @@ PHP);
     public function __set(string $key, mixed $value): void
     {
     }
-PHP);
+PHP;
+        }
+
+        if ($declarations === []) {
+            return $source;
+        }
+
+        return $this->insertBeforeFinalClassBrace($source, implode(PHP_EOL, $declarations));
     }
 
     private function renderInteractsWithInputOverlay(string $source): string
     {
-        return str_replace(
-            [
-                '     * @return array|\Illuminate\Http\UploadedFile|\Illuminate\Http\UploadedFile[]|null',
-                '    public function file($key = null, $default = null)',
-            ],
-            [
-                '     * @return ($key is null ? array<string, mixed> : \Illuminate\Http\UploadedFile|null)',
-                '    public function file($key = null, $default = null): array|\Illuminate\Http\UploadedFile|null',
-            ],
+        $source = preg_replace(
+            '/^([ \t]*\*\s*)@return[^\r\n]*(?:UploadedFile[^\r\n]*)$/m',
+            '$1@return ($key is null ? array<string, mixed> : \Illuminate\Http\UploadedFile|null)',
             $source,
-        );
+        ) ?? $source;
+
+        return preg_replace(
+            '/public function file\(\$key = null, \$default = null\)(?!\s*:)/',
+            'public function file($key = null, $default = null): array|\Illuminate\Http\UploadedFile|null',
+            $source,
+        ) ?? $source;
     }
 
     private function renderNotificationOverlay(string $source, string $projectRoot, array $arguments): string
