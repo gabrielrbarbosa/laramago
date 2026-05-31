@@ -856,6 +856,95 @@ TOML);
     }
 }
 
+function testCompareCommandRunsPlainMagoThenLaramago(string $project, string $binary): void
+{
+    $compareProject = $project . '/compare-project';
+    mkdir($compareProject . '/app', 0777, true);
+    file_put_contents($compareProject . '/composer.json', json_encode([
+        'require' => [
+            'php' => '^8.5',
+        ],
+    ], JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR));
+    file_put_contents($compareProject . '/mago.toml', <<<'TOML'
+version = "1"
+php-version = "8.5.0"
+
+[source]
+workspace = "."
+paths = ["app"]
+includes = ["vendor"]
+excludes = []
+
+[source.glob]
+literal-separator = true
+TOML);
+    file_put_contents($compareProject . '/app/Example.php', <<<'PHP'
+<?php
+
+namespace App;
+
+final class Example
+{
+}
+PHP);
+
+    $vendorBin = $compareProject . '/vendor/bin';
+
+    if (! is_dir($vendorBin)) {
+        mkdir($vendorBin, 0777, true);
+    }
+
+    $fakeMago = $vendorBin . '/mago';
+    file_put_contents($fakeMago, <<<'PHP'
+#!/usr/bin/env php
+<?php
+
+if (($argv[1] ?? null) === 'analyze' && in_array('--list-codes', $argv, true)) {
+    echo json_encode(['invalid-argument', 'unknown-class-instantiation'], JSON_THROW_ON_ERROR);
+    exit(0);
+}
+
+file_put_contents(__DIR__ . '/../../compare.log', implode('|', $argv) . PHP_EOL, FILE_APPEND);
+
+$configIndex = array_search('--config', $argv, true);
+$config = is_int($configIndex) ? ($argv[$configIndex + 1] ?? '') : '';
+
+if ($config === 'mago.toml') {
+    echo "error: 10\n";
+    exit(1);
+}
+
+echo " INFO No issues found.\n";
+exit(0);
+PHP);
+    chmod($fakeMago, 0755);
+
+    $result = captureRun([PHP_BINARY, $binary, 'compare', '--project=' . $compareProject, '--phpstan-level=6']);
+    $output = $result['output'];
+
+    if ($result['exitCode'] !== 0) {
+        fail('compare command should return the Laramago exit code, not the raw Mago exit code');
+    }
+
+    if (! str_contains($output, '[plain mago]') || ! str_contains($output, 'error: 10') || ! str_contains($output, '[plain mago exit: 1]')) {
+        fail('compare command did not print the raw Mago result');
+    }
+
+    if (! str_contains($output, '[laramago]') || ! str_contains($output, 'INFO No issues found.') || ! str_contains($output, '[laramago exit: 0]')) {
+        fail('compare command did not print the Laramago result');
+    }
+
+    $log = file_get_contents($compareProject . '/compare.log');
+    $plainPattern = '--config|mago.toml|analyze|--reporting-format=count|--ignore-baseline';
+    $laramagoPattern = '--config|.laramago/cache/mago.toml|analyze|--reporting-format=count|--ignore-baseline';
+
+    if (! is_string($log)
+        || ! str_contains($log, $plainPattern)
+        || ! str_contains($log, $laramagoPattern)) {
+        fail('compare command did not run plain Mago and Laramago with the expected configs');
+    }
+}
+
 function testCodesCommandDoesNotRequireConfiguredSources(string $project, string $binary): void
 {
     $emptyProject = $project . '/empty-codes-project';

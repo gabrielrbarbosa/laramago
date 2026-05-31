@@ -128,6 +128,46 @@ trait RunsMagoProcesses
         return $exitCode;
     }
 
+    private function writeCapturedOutput(string $projectRoot, array $result): void
+    {
+        $stdout = $result['stdout'] ?? '';
+        $stderr = $result['stderr'] ?? '';
+
+        if (is_string($stdout) && $stdout !== '') {
+            fwrite(STDOUT, $this->translateOutputPaths($projectRoot, $stdout));
+        }
+
+        if (is_string($stderr) && $stderr !== '') {
+            fwrite(STDERR, $this->translateOutputPaths($projectRoot, $stderr));
+        }
+    }
+
+    private function compareAnalyzeArguments(array $arguments): array
+    {
+        $arguments = $this->stripLaramagoOptions($arguments);
+
+        if (! $this->hasMagoAnalyzeOption($arguments, '--ignore-baseline') && ! $this->hasMagoAnalyzeOption($arguments, '--baseline')) {
+            array_unshift($arguments, '--ignore-baseline');
+        }
+
+        if (! $this->hasMagoAnalyzeOption($arguments, '--reporting-format')) {
+            array_unshift($arguments, '--reporting-format=count');
+        }
+
+        return $arguments;
+    }
+
+    private function hasMagoAnalyzeOption(array $arguments, string $option): bool
+    {
+        foreach ($arguments as $argument) {
+            if ($argument === $option || str_starts_with($argument, $option . '=')) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     private function translateOutputPaths(string $projectRoot, string $output): string
     {
         if ($output === '') {

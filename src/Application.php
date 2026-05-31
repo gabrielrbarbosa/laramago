@@ -62,6 +62,7 @@ final class Application
             'init' => $this->init($arguments),
             'prepare' => $this->prepare($arguments),
             'analyze' => $this->analyze($arguments),
+            'compare' => $this->compare($arguments),
             'baseline' => $this->baseline($arguments),
             'verify-baseline' => $this->verifyBaseline($arguments),
             'doctor' => $this->doctor($arguments),
@@ -243,6 +244,60 @@ final class Application
             );
 
             return $this->process($command, $projectRoot);
+        });
+    }
+
+    /**
+     * @param list<string> $arguments
+     */
+    private function compare(array $arguments): int
+    {
+        $projectRoot = $this->projectRoot($arguments);
+
+        return $this->withProjectLock($projectRoot, function () use ($projectRoot, $arguments): int {
+            $mago = $this->findMagoBinary($projectRoot);
+
+            if ($mago === null) {
+                $this->line('Unable to find Mago. Install carthage-software/mago or laramago/laramago in this project.');
+
+                return 1;
+            }
+
+            if (! $this->analysisHasSourceFiles($projectRoot, $arguments)) {
+                return 1;
+            }
+
+            $magoArguments = $this->compareAnalyzeArguments($arguments);
+            $plainCommand = array_merge([
+                $mago,
+                '--config',
+                self::CONFIG_FILE,
+                'analyze',
+            ], $magoArguments);
+
+            $this->line('[plain mago]');
+            $plain = $this->capture($plainCommand, $projectRoot);
+            $this->writeCapturedOutput($projectRoot, $plain);
+            $this->line('[plain mago exit: ' . $plain['exitCode'] . ']');
+
+            $runtimeConfig = $this->prepareRuntimeConfig($projectRoot, $arguments, $mago);
+            $modelSubstitutions = $this->laravelModelSubstitutions($projectRoot, $arguments);
+            $frameworkSubstitutions = $this->laravelFrameworkSubstitutions($projectRoot, $arguments);
+            $pragmaSubstitutions = $this->phpStanPragmaSubstitutions($projectRoot, $arguments, $this->substitutionOriginalPaths($modelSubstitutions));
+            $substitutions = array_merge($modelSubstitutions, $frameworkSubstitutions, $pragmaSubstitutions);
+            $laramagoCommand = array_merge([
+                $mago,
+                '--config',
+                $runtimeConfig,
+                'analyze',
+            ], $substitutions, $magoArguments);
+
+            $this->line('[laramago]');
+            $laramago = $this->capture($laramagoCommand, $projectRoot);
+            $this->writeCapturedOutput($projectRoot, $laramago);
+            $this->line('[laramago exit: ' . $laramago['exitCode'] . ']');
+
+            return $laramago['exitCode'] === 0 ? 0 : 1;
         });
     }
 
@@ -435,6 +490,7 @@ Usage:
   laramago migrate-phpstan [--force] [--phpstan-config=phpstan.neon] [--update-composer]
   laramago prepare
   laramago analyze [--phpstan-level=0..10|max] [--find-unused-definitions] [--no-laravel-model-overlays] [--no-laravel-framework-overlays] [--no-phpstan-pragma-overlays] [mago analyze options] [path ...]
+  laramago compare [--phpstan-level=0..10|max] [mago analyze options] [path ...]
   laramago baseline [--force] [--phpstan-level=0..10|max] [--find-unused-definitions]
   laramago verify-baseline [--phpstan-level=0..10|max] [--find-unused-definitions]
   laramago doctor

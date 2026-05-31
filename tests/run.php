@@ -111,6 +111,7 @@ testProjectLockSerializesCacheCommands($project, $binary);
 testProjectClassDiscoveryUsesConfiguredSourcePaths($project, $root);
 testAnalysisIgnoresStaleRuntimeBaseline($project, $root);
 testAnalyzeFailsWhenConfiguredSourcesAreEmpty($project, $binary);
+testCompareCommandRunsPlainMagoThenLaramago($project, $binary);
 testCodesCommandDoesNotRequireConfiguredSources($project, $binary);
 testStdinInputDoesNotRequireConfiguredSources($project, $root);
 testStagedInputDoesNotRequireConfiguredSources($project, $root);

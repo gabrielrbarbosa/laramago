@@ -69,6 +69,12 @@ Run analysis:
 vendor/bin/laramago analyze --reporting-format=count
 ```
 
+Compare raw Mago with Laramago's Laravel compatibility layer:
+
+```bash
+vendor/bin/laramago compare --phpstan-level=6
+```
+
 To mimic an existing PHPStan/Larastan gate during migration, opt in explicitly:
 
 ```bash
@@ -104,6 +110,7 @@ vendor/bin/laramago init [--force] [--source=app] [--exclude=path/**]
 vendor/bin/laramago migrate-phpstan [--force] [--phpstan-config=phpstan.neon] [--update-composer]
 vendor/bin/laramago prepare
 vendor/bin/laramago analyze [--phpstan-level=0..10|max] [--find-unused-definitions] [--no-phpstan-pragma-overlays] [mago analyze options] [path ...]
+vendor/bin/laramago compare [--phpstan-level=0..10|max] [mago analyze options] [path ...]
 vendor/bin/laramago baseline [--force] [--phpstan-level=0..10|max] [--find-unused-definitions]
 vendor/bin/laramago verify-baseline [--phpstan-level=0..10|max] [--find-unused-definitions]
 vendor/bin/laramago doctor
@@ -139,6 +146,10 @@ When multiple Laramago commands run in the same project, `analyze` waits for the
 `analyze`, `baseline`, and `verify-baseline` fail before invoking Mago when the configured source paths contain no PHP files and no explicit PHP target path was provided. This prevents a misconfigured CI job from passing after analyzing nothing.
 
 By default Laramago disables Mago's unused-definition pass because Larastan/PHPStan level gates do not normally fail Laravel applications for unused app methods and properties. Pass `--find-unused-definitions` when you intentionally want that stricter Mago dead-code signal.
+
+### `compare`
+
+Runs raw Mago first, then runs Laramago with the same target paths and analyzer options. The command uses count output by default, ignores baselines for the raw comparison, and returns the Laramago exit code so it can be used during migrations without failing just because raw Mago reports framework noise.
 
 ### `baseline`
 
