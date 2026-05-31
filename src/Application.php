@@ -6,7 +6,7 @@ namespace Laramago;
 
 final class Application
 {
-    private const VERSION = '0.1.4';
+    private const VERSION = '0.1.5';
 
     private const CONFIG_FILE = 'mago.toml';
 
@@ -745,37 +745,11 @@ TOML;
         $authFacadePath = $projectRoot . '/vendor/laravel/framework/src/Illuminate/Support/Facades/Auth.php';
 
         if (is_file($guardPath)) {
-            $guardSource = file_get_contents($guardPath);
-
-            if (is_string($guardSource)) {
-                $guardSource = str_replace(
-                    '@return \Illuminate\Contracts\Auth\Authenticatable|null',
-                    '@return ' . $authModel . '|null',
-                    $guardSource,
-                );
-
-                $overlays[] = $this->writeFrameworkOverlay($projectRoot, 'Guard.php', $guardPath, $guardSource);
-            }
+            $overlays[] = $this->writeFrameworkOverlay($projectRoot, 'Guard.php', $guardPath, $this->renderAuthGuardOverlay($authModel));
         }
 
         if (is_file($authFacadePath)) {
-            $authFacadeSource = file_get_contents($authFacadePath);
-
-            if (is_string($authFacadeSource)) {
-                $replacements = [
-                    '@method static \Illuminate\Contracts\Auth\Authenticatable|null user()' => '@method static ' . $authModel . '|null user()',
-                    '@method static \Illuminate\Contracts\Auth\Authenticatable|null getUser()' => '@method static ' . $authModel . '|null getUser()',
-                    '@method static \Illuminate\Contracts\Auth\Authenticatable authenticate()' => '@method static ' . $authModel . ' authenticate()',
-                    '@method static \Illuminate\Contracts\Auth\Authenticatable getLastAttempted()' => '@method static ' . $authModel . '|null getLastAttempted()',
-                    '@method static \Illuminate\Contracts\Auth\Authenticatable|false loginUsingId(mixed $id, bool $remember = false)' => '@method static ' . $authModel . '|false loginUsingId(mixed $id, bool $remember = false)',
-                    '@method static \Illuminate\Contracts\Auth\Authenticatable|false onceUsingId(mixed $id)' => '@method static ' . $authModel . '|false onceUsingId(mixed $id)',
-                    '@method static \Illuminate\Contracts\Auth\Authenticatable|null logoutOtherDevices(string $password)' => '@method static ' . $authModel . '|null logoutOtherDevices(string $password)',
-                ];
-
-                $authFacadeSource = str_replace(array_keys($replacements), array_values($replacements), $authFacadeSource);
-
-                $overlays[] = $this->writeFrameworkOverlay($projectRoot, 'Auth.php', $authFacadePath, $authFacadeSource);
-            }
+            $overlays[] = $this->writeFrameworkOverlay($projectRoot, 'Auth.php', $authFacadePath, $this->renderAuthFacadeOverlay($authModel));
         }
 
         $substitutions = [];
@@ -790,6 +764,75 @@ TOML;
         }
 
         return $substitutions;
+    }
+
+    private function renderAuthGuardOverlay(string $authModel): string
+    {
+        return <<<PHP
+<?php
+
+namespace Illuminate\Contracts\Auth;
+
+interface Guard
+{
+    public function check();
+
+    public function guest();
+
+    /**
+     * @return {$authModel}|null
+     */
+    public function user();
+
+    /**
+     * @return int|string|null
+     */
+    public function id();
+
+    public function validate(array \$credentials = []);
+
+    public function hasUser();
+
+    public function setUser(Authenticatable \$user);
+}
+PHP;
+    }
+
+    private function renderAuthFacadeOverlay(string $authModel): string
+    {
+        return <<<PHP
+<?php
+
+namespace Illuminate\Support\Facades;
+
+/**
+ * @method static \Illuminate\Contracts\Auth\Guard|\Illuminate\Contracts\Auth\StatefulGuard guard(\UnitEnum|string|null \$name = null)
+ * @method static bool check()
+ * @method static bool guest()
+ * @method static {$authModel}|null user()
+ * @method static int|string|null id()
+ * @method static bool validate(array \$credentials = [])
+ * @method static bool hasUser()
+ * @method static \Illuminate\Contracts\Auth\Guard setUser(\Illuminate\Contracts\Auth\Authenticatable \$user)
+ * @method static bool attempt(array \$credentials = [], bool \$remember = false)
+ * @method static bool once(array \$credentials = [])
+ * @method static void login(\Illuminate\Contracts\Auth\Authenticatable \$user, bool \$remember = false)
+ * @method static {$authModel}|false loginUsingId(mixed \$id, bool \$remember = false)
+ * @method static {$authModel}|false onceUsingId(mixed \$id)
+ * @method static bool viaRemember()
+ * @method static void logout()
+ * @method static {$authModel}|null getUser()
+ * @method static {$authModel} authenticate()
+ * @method static {$authModel}|null getLastAttempted()
+ * @method static {$authModel}|null logoutOtherDevices(string \$password)
+ *
+ * @see \Illuminate\Auth\AuthManager
+ * @see \Illuminate\Auth\SessionGuard
+ */
+class Auth extends Facade
+{
+}
+PHP;
     }
 
     /**

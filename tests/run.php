@@ -224,33 +224,9 @@ return [
 ];
 PHP);
 
-    file_put_contents($project . '/vendor/laravel/framework/src/Illuminate/Contracts/Auth/Guard.php', <<<'PHP'
-<?php
+    file_put_contents($project . '/vendor/laravel/framework/src/Illuminate/Contracts/Auth/Guard.php', '<?php');
 
-namespace Illuminate\Contracts\Auth;
-
-interface Guard
-{
-    /**
-     * @return \Illuminate\Contracts\Auth\Authenticatable|null
-     */
-    public function user();
-}
-PHP);
-
-    file_put_contents($project . '/vendor/laravel/framework/src/Illuminate/Support/Facades/Auth.php', <<<'PHP'
-<?php
-
-namespace Illuminate\Support\Facades;
-
-/**
- * @method static \Illuminate\Contracts\Auth\Authenticatable|null user()
- * @method static \Illuminate\Contracts\Auth\Authenticatable authenticate()
- */
-class Auth
-{
-}
-PHP);
+    file_put_contents($project . '/vendor/laravel/framework/src/Illuminate/Support/Facades/Auth.php', '<?php');
 
     $application = new Laramago\Application();
     $method = new ReflectionMethod($application, 'laravelFrameworkSubstitutions');
@@ -269,6 +245,10 @@ PHP);
 
     if (! is_string($authOverlay) || ! str_contains($authOverlay, '@method static \\App\\Models\\Usuario\\Usuario|null user()')) {
         fail('auth facade overlay did not use the configured auth model');
+    }
+
+    if (str_contains($authOverlay, 'Laravel\\Ui\\UiServiceProvider')) {
+        fail('auth facade overlay leaked optional vendor implementation details');
     }
 
     $disabled = $method->invoke($application, $project, ['--no-laravel-framework-overlays']);
