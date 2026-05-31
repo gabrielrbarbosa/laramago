@@ -6,7 +6,7 @@ namespace Laramago;
 
 final class Application
 {
-    private const VERSION = '0.1.23';
+    private const VERSION = '0.1.24';
 
     private const CONFIG_FILE = 'mago.toml';
 
@@ -1061,8 +1061,11 @@ TOML;
             'undefined-string-array-index',
             'invalid-argument',
             'invalid-array-access',
+            'invalid-array-element',
             'invalid-array-index',
+            'invalid-destructuring-source',
             'null-array-index',
+            'null-argument',
             'null-operand',
             'possibly-invalid-argument',
             'possibly-invalid-array-access',
@@ -1079,11 +1082,14 @@ TOML;
             'invalid-property-assignment-value',
             'invalid-pass-by-reference',
             'invalid-property-access',
+            'invalid-property-read',
             'dynamic-static-method-call',
             'docblock-type-mismatch',
             'impossible-assignment',
             'impossible-condition',
+            'impossible-null-type-comparison',
             'impossible-type-comparison',
+            'incompatible-return-type',
             'less-specific-return-statement',
             'less-specific-argument',
             'less-specific-nested-argument-type',
@@ -1094,6 +1100,7 @@ TOML;
             'mixed-return-statement',
             'mixed-array-index',
             'mixed-clone',
+            'mismatched-array-index',
             'reference-to-undefined-variable',
             'non-documented-method',
             'non-documented-property',
@@ -1107,6 +1114,7 @@ TOML;
             'mixed-property-access',
             'mixed-method-access',
             'non-existent-method',
+            'non-existent-class-constant',
             'invalid-type-cast',
             'redundant-cast',
             'redundant-comparison',
@@ -1120,6 +1128,8 @@ TOML;
             'string-member-selector',
             'unsafe-instantiation',
             'unknown-class-instantiation',
+            'unknown-member-selector-type',
+            'ambiguous-instantiation-target',
             'nullable-return-statement',
             'possibly-null-property-access',
             'possibly-null-array-access',
@@ -1135,6 +1145,12 @@ TOML;
             'possible-method-access-on-null',
             'no-value',
             'falsable-return-statement',
+            'false-operand',
+            'missing-return-statement',
+            'never-return',
+            'match-not-exhaustive',
+            'reference-reused-from-confusing-scope',
+            'unreachable-else-clause',
             'template-constraint-violation',
             'too-many-arguments',
         ];
