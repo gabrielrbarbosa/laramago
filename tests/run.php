@@ -240,8 +240,16 @@ function testRuntimeConfigGeneration(string $project, string $root): void
         fail('runtime config should ignore unused generated PHPStan pragma compatibility overlays');
     }
 
-    if (! str_contains($config, '{ code = "too-few-arguments", in = ".laramago/cache/framework-overlays/" }')) {
-        fail('runtime config should ignore generated framework overlay implementation noise');
+    foreach ([
+        'too-few-arguments',
+        'missing-template-parameter',
+        'invalid-template-parameter',
+        'ambiguous-class-like-constant-access',
+        'possibly-static-access-on-interface',
+    ] as $code) {
+        if (! str_contains($config, '{ code = "' . $code . '", in = ".laramago/cache/framework-overlays/" }')) {
+            fail('runtime config should ignore generated framework overlay implementation noise: ' . $code);
+        }
     }
 
     if (str_contains($config, '"mixed-argument"')) {
@@ -795,7 +803,9 @@ PHP;
         '@method static \\Illuminate\\Database\\Eloquent\\Builder<static> whereIn(string $column, mixed $values, string $boolean = "and", bool $not = false)',
         '@method static \\Illuminate\\Database\\Eloquent\\Builder<static> leftJoin(string $table, mixed $first, ?string $operator = null, mixed $second = null)',
         '@method static \\Illuminate\\Database\\Eloquent\\Builder<static> groupBy(array|string ...$groups)',
+        '@method static \\Illuminate\\Database\\Eloquent\\Builder<static> with(array|string ...$relations)',
         '@method static \\Illuminate\\Database\\Eloquent\\Builder<static> withCount(array|string $relations)',
+        '@method static \\Illuminate\\Database\\Eloquent\\Builder<static> select(array|string ...$columns)',
         '@method static \\Illuminate\\Database\\Eloquent\\Builder<static> orderBy(string $column, string $direction = "asc")',
         '@method static self create(array $attributes = null)',
         '@method static static|null first(array|string $columns = ["*"])',
@@ -837,8 +847,11 @@ function testLaravelFrameworkOverlayGeneration(string $project, string $root): v
     mkdir($project . '/config', 0777, true);
     mkdir($project . '/vendor/maatwebsite/excel/src/Concerns', 0777, true);
     mkdir($project . '/vendor/laravel/framework/src/Illuminate/Database/Eloquent', 0777, true);
+    mkdir($project . '/vendor/laravel/framework/src/Illuminate/Database/Eloquent/Concerns', 0777, true);
     mkdir($project . '/vendor/laravel/framework/src/Illuminate/Database/Eloquent/Factories', 0777, true);
+    mkdir($project . '/vendor/laravel/framework/src/Illuminate/Database/Query', 0777, true);
     mkdir($project . '/vendor/laravel/framework/src/Illuminate/Contracts/Auth', 0777, true);
+    mkdir($project . '/vendor/laravel/framework/src/Illuminate/Routing', 0777, true);
     mkdir($project . '/vendor/laravel/framework/src/Illuminate/Support/Facades', 0777, true);
 
     file_put_contents($project . '/config/auth.php', <<<'PHP'
@@ -874,6 +887,82 @@ class Builder
 }
 PHP);
 
+    file_put_contents($project . '/vendor/laravel/framework/src/Illuminate/Database/Eloquent/Model.php', <<<'PHP'
+<?php
+
+namespace Illuminate\Database\Eloquent;
+
+class Model
+{
+    public function load($relations)
+    {
+    }
+
+    public function loadMissing($relations)
+    {
+    }
+
+    public function loadCount($relations)
+    {
+    }
+}
+PHP);
+
+    file_put_contents($project . '/vendor/laravel/framework/src/Illuminate/Database/Eloquent/Concerns/HasAttributes.php', <<<'PHP'
+<?php
+
+namespace Illuminate\Database\Eloquent\Concerns;
+
+trait HasAttributes
+{
+    public function only($attributes)
+    {
+    }
+
+    public function except($attributes)
+    {
+    }
+}
+PHP);
+
+    file_put_contents($project . '/vendor/laravel/framework/src/Illuminate/Database/Query/Builder.php', <<<'PHP'
+<?php
+
+namespace Illuminate\Database\Query;
+
+class Builder
+{
+    public function select($columns = ['*'])
+    {
+    }
+
+    public function addSelect($column)
+    {
+    }
+
+    public function distinct()
+    {
+    }
+}
+PHP);
+
+    file_put_contents($project . '/vendor/laravel/framework/src/Illuminate/Routing/ControllerMiddlewareOptions.php', <<<'PHP'
+<?php
+
+namespace Illuminate\Routing;
+
+class ControllerMiddlewareOptions
+{
+    public function only($methods)
+    {
+    }
+
+    public function except($methods)
+    {
+    }
+}
+PHP);
+
     file_put_contents($project . '/vendor/laravel/framework/src/Illuminate/Database/Eloquent/Factories/HasFactory.php', '<?php');
 
     file_put_contents($project . '/vendor/laravel/framework/src/Illuminate/Database/Eloquent/Scope.php', '<?php');
@@ -884,13 +973,17 @@ PHP);
     $method = new ReflectionMethod($application, 'laravelFrameworkSubstitutions');
     $substitutions = $method->invoke($application, $project, []);
 
-    if (! is_array($substitutions) || count($substitutions) !== 12) {
+    if (! is_array($substitutions) || count($substitutions) !== 20) {
         fail('framework overlay generation returned unexpected substitutions');
     }
 
     $guardOverlay = file_get_contents($project . '/.laramago/cache/framework-overlays/Guard.php');
     $authOverlay = file_get_contents($project . '/.laramago/cache/framework-overlays/Auth.php');
     $eloquentBuilderOverlay = file_get_contents($project . '/.laramago/cache/framework-overlays/Builder.php');
+    $eloquentModelOverlay = file_get_contents($project . '/.laramago/cache/framework-overlays/EloquentModel.php');
+    $hasAttributesOverlay = file_get_contents($project . '/.laramago/cache/framework-overlays/HasAttributes.php');
+    $queryBuilderOverlay = file_get_contents($project . '/.laramago/cache/framework-overlays/QueryBuilder.php');
+    $controllerMiddlewareOptionsOverlay = file_get_contents($project . '/.laramago/cache/framework-overlays/ControllerMiddlewareOptions.php');
     $hasFactoryOverlay = file_get_contents($project . '/.laramago/cache/framework-overlays/HasFactory.php');
     $scopeOverlay = file_get_contents($project . '/.laramago/cache/framework-overlays/Scope.php');
     $fromCollectionOverlay = file_get_contents($project . '/.laramago/cache/framework-overlays/FromCollection.php');
@@ -907,8 +1000,24 @@ PHP);
         fail('auth facade overlay leaked optional vendor implementation details');
     }
 
-    if (! is_string($eloquentBuilderOverlay) || ! str_contains($eloquentBuilderOverlay, '@method $this leftJoin(') || ! str_contains($eloquentBuilderOverlay, '@mixin \\Illuminate\\Database\\Query\\Builder')) {
+    if (! is_string($eloquentBuilderOverlay) || ! str_contains($eloquentBuilderOverlay, '@method $this leftJoin(') || ! str_contains($eloquentBuilderOverlay, '@method $this select(array|string ...$columns)') || ! str_contains($eloquentBuilderOverlay, '@mixin \\Illuminate\\Database\\Query\\Builder')) {
         fail('Eloquent builder overlay did not preserve source and add delegated chain methods');
+    }
+
+    if (! is_string($eloquentModelOverlay) || ! str_contains($eloquentModelOverlay, 'public function loadMissing($relations, ...$additionalRelations)')) {
+        fail('Eloquent model overlay did not expose variadic relation loaders');
+    }
+
+    if (! is_string($hasAttributesOverlay) || ! str_contains($hasAttributesOverlay, 'public function only($attributes, ...$additionalAttributes)') || ! str_contains($hasAttributesOverlay, 'public function except($attributes, ...$additionalAttributes)')) {
+        fail('HasAttributes overlay did not expose variadic attribute selectors');
+    }
+
+    if (! is_string($queryBuilderOverlay) || ! str_contains($queryBuilderOverlay, 'public function select($columns = [\'*\'], ...$additionalColumns)') || ! str_contains($queryBuilderOverlay, 'public function addSelect($column, ...$additionalColumns)') || ! str_contains($queryBuilderOverlay, 'public function distinct(...$columns)')) {
+        fail('query builder overlay did not expose variadic column selectors');
+    }
+
+    if (! is_string($controllerMiddlewareOptionsOverlay) || ! str_contains($controllerMiddlewareOptionsOverlay, 'public function only($methods, ...$additionalMethods)') || ! str_contains($controllerMiddlewareOptionsOverlay, 'public function except($methods, ...$additionalMethods)')) {
+        fail('ControllerMiddlewareOptions overlay did not expose variadic middleware filters');
     }
 
     if (! is_string($hasFactoryOverlay) || ! str_contains($hasFactoryOverlay, '@return \\Illuminate\\Database\\Eloquent\\Factories\\Factory<static>')) {

@@ -6,7 +6,7 @@ namespace Laramago;
 
 final class Application
 {
-    private const VERSION = '0.1.35';
+    private const VERSION = '0.1.36';
 
     private const CONFIG_FILE = 'mago.toml';
 
@@ -1090,6 +1090,22 @@ TOML;
                 'code' => 'too-few-arguments',
                 'in' => self::FRAMEWORK_OVERLAY_DIR . '/',
             ],
+            [
+                'code' => 'missing-template-parameter',
+                'in' => self::FRAMEWORK_OVERLAY_DIR . '/',
+            ],
+            [
+                'code' => 'invalid-template-parameter',
+                'in' => self::FRAMEWORK_OVERLAY_DIR . '/',
+            ],
+            [
+                'code' => 'ambiguous-class-like-constant-access',
+                'in' => self::FRAMEWORK_OVERLAY_DIR . '/',
+            ],
+            [
+                'code' => 'possibly-static-access-on-interface',
+                'in' => self::FRAMEWORK_OVERLAY_DIR . '/',
+            ],
         ]);
     }
 
@@ -1419,6 +1435,10 @@ TOML;
         $guardPath = $projectRoot . '/vendor/laravel/framework/src/Illuminate/Contracts/Auth/Guard.php';
         $authFacadePath = $projectRoot . '/vendor/laravel/framework/src/Illuminate/Support/Facades/Auth.php';
         $eloquentBuilderPath = $projectRoot . '/vendor/laravel/framework/src/Illuminate/Database/Eloquent/Builder.php';
+        $eloquentModelPath = $projectRoot . '/vendor/laravel/framework/src/Illuminate/Database/Eloquent/Model.php';
+        $hasAttributesPath = $projectRoot . '/vendor/laravel/framework/src/Illuminate/Database/Eloquent/Concerns/HasAttributes.php';
+        $queryBuilderPath = $projectRoot . '/vendor/laravel/framework/src/Illuminate/Database/Query/Builder.php';
+        $controllerMiddlewareOptionsPath = $projectRoot . '/vendor/laravel/framework/src/Illuminate/Routing/ControllerMiddlewareOptions.php';
         $hasFactoryPath = $projectRoot . '/vendor/laravel/framework/src/Illuminate/Database/Eloquent/Factories/HasFactory.php';
         $scopePath = $projectRoot . '/vendor/laravel/framework/src/Illuminate/Database/Eloquent/Scope.php';
         $fromCollectionPath = $projectRoot . '/vendor/maatwebsite/excel/src/Concerns/FromCollection.php';
@@ -1442,6 +1462,38 @@ TOML;
 
             if (is_string($eloquentBuilderSource)) {
                 $overlays[] = $this->writeFrameworkOverlay($projectRoot, 'Builder.php', $eloquentBuilderPath, $this->renderEloquentBuilderOverlay($eloquentBuilderSource));
+            }
+        }
+
+        if (is_file($eloquentModelPath)) {
+            $eloquentModelSource = file_get_contents($eloquentModelPath);
+
+            if (is_string($eloquentModelSource)) {
+                $overlays[] = $this->writeFrameworkOverlay($projectRoot, 'EloquentModel.php', $eloquentModelPath, $this->renderEloquentModelFrameworkOverlay($eloquentModelSource));
+            }
+        }
+
+        if (is_file($hasAttributesPath)) {
+            $hasAttributesSource = file_get_contents($hasAttributesPath);
+
+            if (is_string($hasAttributesSource)) {
+                $overlays[] = $this->writeFrameworkOverlay($projectRoot, 'HasAttributes.php', $hasAttributesPath, $this->renderHasAttributesOverlay($hasAttributesSource));
+            }
+        }
+
+        if (is_file($queryBuilderPath)) {
+            $queryBuilderSource = file_get_contents($queryBuilderPath);
+
+            if (is_string($queryBuilderSource)) {
+                $overlays[] = $this->writeFrameworkOverlay($projectRoot, 'QueryBuilder.php', $queryBuilderPath, $this->renderQueryBuilderOverlay($queryBuilderSource));
+            }
+        }
+
+        if (is_file($controllerMiddlewareOptionsPath)) {
+            $controllerMiddlewareOptionsSource = file_get_contents($controllerMiddlewareOptionsPath);
+
+            if (is_string($controllerMiddlewareOptionsSource)) {
+                $overlays[] = $this->writeFrameworkOverlay($projectRoot, 'ControllerMiddlewareOptions.php', $controllerMiddlewareOptionsPath, $this->renderControllerMiddlewareOptionsOverlay($controllerMiddlewareOptionsSource));
             }
         }
 
@@ -1481,7 +1533,74 @@ TOML;
             ' * @method $this groupBy(array|string ...$groups)',
             ' * @method $this having(string $column, ?string $operator = null, mixed $value = null, string $boolean = "and")',
             ' * @method $this orHaving(string $column, ?string $operator = null, mixed $value = null)',
+            ' * @method $this select(array|string ...$columns)',
+            ' * @method $this addSelect(array|string ...$columns)',
+            ' * @method $this with(array|string ...$relations)',
         ]);
+    }
+
+    private function renderEloquentModelFrameworkOverlay(string $source): string
+    {
+        return str_replace(
+            [
+                'public function load($relations)',
+                'public function loadMissing($relations)',
+                'public function loadCount($relations)',
+            ],
+            [
+                'public function load($relations, ...$additionalRelations)',
+                'public function loadMissing($relations, ...$additionalRelations)',
+                'public function loadCount($relations, ...$additionalRelations)',
+            ],
+            $source,
+        );
+    }
+
+    private function renderHasAttributesOverlay(string $source): string
+    {
+        return str_replace(
+            [
+                'public function only($attributes)',
+                'public function except($attributes)',
+            ],
+            [
+                'public function only($attributes, ...$additionalAttributes)',
+                'public function except($attributes, ...$additionalAttributes)',
+            ],
+            $source,
+        );
+    }
+
+    private function renderQueryBuilderOverlay(string $source): string
+    {
+        return str_replace(
+            [
+                'public function select($columns = [\'*\'])',
+                'public function addSelect($column)',
+                'public function distinct()',
+            ],
+            [
+                'public function select($columns = [\'*\'], ...$additionalColumns)',
+                'public function addSelect($column, ...$additionalColumns)',
+                'public function distinct(...$columns)',
+            ],
+            $source,
+        );
+    }
+
+    private function renderControllerMiddlewareOptionsOverlay(string $source): string
+    {
+        return str_replace(
+            [
+                'public function only($methods)',
+                'public function except($methods)',
+            ],
+            [
+                'public function only($methods, ...$additionalMethods)',
+                'public function except($methods, ...$additionalMethods)',
+            ],
+            $source,
+        );
     }
 
     private function renderScopeOverlay(): string
@@ -2113,9 +2232,9 @@ PHP;
             ' * @method static \\Illuminate\\Database\\Eloquent\\Builder<static> groupBy(array|string ...$groups)',
             ' * @method static \\Illuminate\\Database\\Eloquent\\Builder<static> having(string $column, ?string $operator = null, mixed $value = null, string $boolean = "and")',
             ' * @method static \\Illuminate\\Database\\Eloquent\\Builder<static> orHaving(string $column, ?string $operator = null, mixed $value = null)',
-            ' * @method static \\Illuminate\\Database\\Eloquent\\Builder<static> with(array|string $relations)',
+            ' * @method static \\Illuminate\\Database\\Eloquent\\Builder<static> with(array|string ...$relations)',
             ' * @method static \\Illuminate\\Database\\Eloquent\\Builder<static> withCount(array|string $relations)',
-            ' * @method static \\Illuminate\\Database\\Eloquent\\Builder<static> select(array|string $columns = ["*"])',
+            ' * @method static \\Illuminate\\Database\\Eloquent\\Builder<static> select(array|string ...$columns)',
             ' * @method static \\Illuminate\\Database\\Eloquent\\Builder<static> orderBy(string $column, string $direction = "asc")',
             ' * @method static \\Illuminate\\Database\\Eloquent\\Builder<static> latest(string|null $column = null)',
             ' * @method static \\Illuminate\\Database\\Eloquent\\Builder<static> oldest(string|null $column = null)',

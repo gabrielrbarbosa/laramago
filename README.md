@@ -105,12 +105,13 @@ Generated overlays currently add:
 - `@property` entries for database columns with cast-aware types, including encrypted casts, collection/array object casts, date casts, and enum casts;
 - `@property-read` entries for legacy `getFooAttribute()` accessors and `Attribute` accessors;
 - `@property-read` entries for Eloquent relations, including through, polymorphic, and many-to-many collection relations;
-- `@method static` entries for common Eloquent builder chains and terminals such as `where`, `whereIn`, `join`, `leftJoin`, `groupBy`, `having`, `with`, `withCount`, `select`, `orderBy`, `first`, `firstOrCreate`, `updateOrCreate`, `get`, `pluck`, `exists`, `count`, `insert`, `destroy`, `find`, and `findOrFail`;
+- `@method static` entries for common Eloquent builder chains and terminals such as `where`, `whereIn`, `join`, `leftJoin`, `groupBy`, `having`, variadic `with`, `withCount`, variadic `select`, `orderBy`, `first`, `firstOrCreate`, `updateOrCreate`, `get`, `pluck`, `exists`, `count`, `insert`, `destroy`, `find`, and `findOrFail`;
 - merged generated metadata with existing model class PHPDoc, so project annotations such as `@mixin`, `@method`, `@property`, and generic hints stay visible;
 - `createToken` return types for models using Laravel Sanctum's `HasApiTokens` trait;
 - `@method static` entries for classic `scopeFoo()` local scopes, trait-defined local scopes, inherited local scopes, and Laravel `#[Scope]` methods;
 - Laravel `HasFactory` return types without app-level generic boilerplate;
 - Laravel `Scope` and Laravel Excel `FromCollection` compatibility without app-level generic boilerplate;
+- Laravel framework signatures that use `func_get_args()` at runtime, such as multi-column `select()` / `addSelect()` / `distinct()`, multi-relation `load()` / `loadMissing()` / `loadCount()`, model attribute `only()` / `except()`, and controller middleware `only()` / `except()`;
 - auth guard and facade return types for the configured Laravel user model;
 - Composer autoload and autoload-dev type discovery for application namespaces that live outside the analyzed source paths;
 - excluded-path symbol discovery so `exclude` can omit legacy code from analysis without turning referenced classes into false missing-class errors;
