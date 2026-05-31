@@ -86,7 +86,7 @@ Larastan understands many Eloquent conventions through PHPStan extensions. Mago 
 During `analyze`, `baseline`, and `verify-baseline`, Laramago:
 
 1. boots the Laravel application;
-2. discovers Eloquent models in `app/Models`;
+2. discovers Eloquent models in the configured project source paths, including `app/Models` and domain/module model folders;
 3. reads database columns, casts, accessors, local scopes, and public relation methods;
 4. reads `config/auth.php` to detect the application auth user model;
 5. reads Composer `autoload` and `autoload-dev` PSR-4/classmap paths for type discovery outside analyzed source paths;

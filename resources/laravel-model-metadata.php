@@ -43,11 +43,15 @@ foreach ($classes as $entry) {
     $class = $entry['class'];
     $file = $entry['file'];
 
-    if (! is_string($class) || ! is_string($file) || ! class_exists($class) || ! is_subclass_of($class, Model::class)) {
+    if (! is_string($class) || ! is_string($file)) {
         continue;
     }
 
     try {
+        if (! class_exists($class) || ! is_subclass_of($class, Model::class)) {
+            continue;
+        }
+
         $model = new $class();
         $models[] = [
             'class' => $class,

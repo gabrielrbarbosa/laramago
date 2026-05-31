@@ -64,6 +64,7 @@ testRuntimeConfigGeneration($project, $root);
 testPhpStanMigration($project, $root, $binary);
 testExcludedSymbolStubGeneration($project, $root);
 testRaceSafeCacheDirectoryOperations($project, $root);
+testProjectClassDiscoveryUsesConfiguredSourcePaths($project, $root);
 testModelDocblockIncludesLaravelMagic($root);
 testLaravelFrameworkOverlayGeneration($project, $root);
 
@@ -465,6 +466,62 @@ function testRaceSafeCacheDirectoryOperations(string $project, string $root): vo
 
     if (is_dir($raceDirectory)) {
         fail('cache directory operations left the test directory behind');
+    }
+}
+
+function testProjectClassDiscoveryUsesConfiguredSourcePaths(string $project, string $root): void
+{
+    require_once $root . '/src/Application.php';
+
+    mkdir($project . '/app/Domain/Billing', 0777, true);
+    mkdir($project . '/app/Models', 0777, true);
+    file_put_contents($project . '/mago.toml', <<<'TOML'
+version = "1"
+php-version = "8.5.0"
+
+[source]
+workspace = "."
+paths = ["app"]
+includes = ["vendor"]
+excludes = []
+TOML);
+
+    file_put_contents($project . '/app/Domain/Billing/Invoice.php', <<<'PHP'
+<?php
+
+namespace App\Domain\Billing;
+
+final class Invoice
+{
+}
+PHP);
+
+    file_put_contents($project . '/app/Models/ReadonlyModel.php', <<<'PHP'
+<?php
+
+namespace App\Models;
+
+readonly class ReadonlyModel
+{
+}
+PHP);
+
+    $application = new Laramago\Application();
+    $method = new ReflectionMethod($application, 'discoverProjectClasses');
+    $classes = $method->invoke($application, $project);
+
+    if (! is_array($classes)) {
+        fail('project class discovery returned an unexpected value');
+    }
+
+    $files = array_column($classes, 'file');
+
+    if (! in_array('app/Domain/Billing/Invoice.php', $files, true)) {
+        fail('project class discovery missed a class outside app/Models');
+    }
+
+    if (! in_array('app/Models/ReadonlyModel.php', $files, true)) {
+        fail('project class discovery missed a readonly class');
     }
 }
 

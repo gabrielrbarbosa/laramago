@@ -6,7 +6,7 @@ namespace Laramago;
 
 final class Application
 {
-    private const VERSION = '0.1.25';
+    private const VERSION = '0.1.26';
 
     private const CONFIG_FILE = 'mago.toml';
 
@@ -334,12 +334,6 @@ final class Application
         }
 
         $this->line('OK   Laravel bootstrap file exists.');
-
-        if (! is_dir($projectRoot . '/app/Models')) {
-            $this->line('WARN app/Models was not found; model overlays will be skipped.');
-
-            return $failed ? 1 : 0;
-        }
 
         $runtimeConfig = $this->prepareRuntimeConfig($projectRoot, $arguments);
         $modelSubstitutions = $this->laravelModelSubstitutions($projectRoot, $arguments);
@@ -1253,11 +1247,11 @@ TOML;
             return [];
         }
 
-        if (! is_file($projectRoot . '/bootstrap/app.php') || ! is_dir($projectRoot . '/app/Models')) {
+        if (! is_file($projectRoot . '/bootstrap/app.php')) {
             return [];
         }
 
-        $classes = $this->discoverClasses($projectRoot . '/app/Models', 'app/Models');
+        $classes = $this->discoverProjectClasses($projectRoot);
 
         if ($classes === []) {
             return [];
@@ -1616,10 +1610,56 @@ PHP;
     /**
      * @return list<array{file: string, class: string}>
      */
-    private function discoverClasses(string $directory, string $relativeDirectory): array
+    private function discoverProjectClasses(string $projectRoot): array
+    {
+        $paths = $this->projectConfigValues($projectRoot)['paths'];
+
+        if (is_dir($projectRoot . '/app/Models')) {
+            array_unshift($paths, 'app/Models');
+        }
+
+        $classes = [];
+        $seenFiles = [];
+
+        foreach (array_values(array_unique($paths)) as $path) {
+            foreach ($this->discoverClasses($projectRoot, $path) as $class) {
+                if (isset($seenFiles[$class['file']])) {
+                    continue;
+                }
+
+                $seenFiles[$class['file']] = true;
+                $classes[] = $class;
+            }
+        }
+
+        return $classes;
+    }
+
+    /**
+     * @return list<array{file: string, class: string}>
+     */
+    private function discoverClasses(string $projectRoot, string $path): array
     {
         $classes = [];
-        $files = $this->phpFiles($directory);
+        $path = $this->normalizeProjectPath($this->baseDirectoryFromGlob($path));
+
+        if ($path === '' || str_starts_with($path, '/') || str_starts_with($path, '../')) {
+            return [];
+        }
+
+        $absolutePath = $projectRoot . '/' . $path;
+
+        if (is_file($absolutePath)) {
+            $files = [$absolutePath];
+            $baseDirectory = dirname($absolutePath);
+            $relativeBase = dirname($path);
+        } elseif (is_dir($absolutePath)) {
+            $files = $this->phpFiles($absolutePath);
+            $baseDirectory = $absolutePath;
+            $relativeBase = $path;
+        } else {
+            return [];
+        }
 
         foreach ($files as $file) {
             $source = file_get_contents($file);
@@ -1632,11 +1672,13 @@ PHP;
                 continue;
             }
 
-            if (preg_match('/^(?:abstract\s+|final\s+)?class\s+([A-Za-z_][A-Za-z0-9_]*)\b/m', $source, $classMatches) !== 1) {
+            if (preg_match('/^(?:(?:abstract|final|readonly)\s+)*class\s+([A-Za-z_][A-Za-z0-9_]*)\b/m', $source, $classMatches) !== 1) {
                 continue;
             }
 
-            $relativePath = $relativeDirectory . substr($file, strlen($directory));
+            $relativePath = is_file($absolutePath)
+                ? $path
+                : $relativeBase . substr($file, strlen($baseDirectory));
             $classes[] = [
                 'file' => str_replace(DIRECTORY_SEPARATOR, '/', $relativePath),
                 'class' => trim($namespaceMatches[1]) . '\\' . $classMatches[1],
