@@ -43,9 +43,10 @@ if ($clearExitCode !== 0) {
 }
 
 $doctorExitCode = run([PHP_BINARY, $binary, 'doctor', '--project=' . $project]);
+$expectedDoctorExitCode = is_file($root . '/vendor/bin/mago') ? 0 : 1;
 
-if ($doctorExitCode !== 1) {
-    fail('doctor command should fail when Mago is unavailable in the test project');
+if ($doctorExitCode !== $expectedDoctorExitCode) {
+    fail('doctor command returned an unexpected exit code');
 }
 
 testBaselinePathTranslation($project, $root);
