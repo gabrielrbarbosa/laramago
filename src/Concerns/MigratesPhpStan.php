@@ -236,9 +236,7 @@ trait MigratesPhpStan
                 'missing-template-parameter',
                 'invalid-template-parameter',
             ],
-            'missingType.iterableValue' => [
-                'missing-iterable-value-type',
-            ],
+            'missingType.iterableValue' => [],
             'offsetAccess.notFound' => [
                 'invalid-array-access',
                 'possibly-invalid-array-access',

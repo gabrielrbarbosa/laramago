@@ -678,8 +678,22 @@ TOML;
 
         $body = '';
         $collecting = false;
+        $inAnalyzerSection = false;
 
         foreach ($lines as $line) {
+            if (preg_match('/^\s*\[([A-Za-z0-9_.-]+)]\s*$/', $line, $sectionMatches) === 1) {
+                if ($collecting) {
+                    break;
+                }
+
+                $inAnalyzerSection = $sectionMatches[1] === 'analyzer';
+                continue;
+            }
+
+            if (! $inAnalyzerSection) {
+                continue;
+            }
+
             if (! $collecting && preg_match('/^\s*ignore\s*=\s*\[(.*)$/', $line, $matches) === 1) {
                 $collecting = true;
                 $line = $matches[1];

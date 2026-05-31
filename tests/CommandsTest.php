@@ -95,6 +95,9 @@ paths = ["app"]
 includes = ["vendor"]
 excludes = []
 
+[linter]
+ignore = ["not-an-analyzer-ignore"]
+
 [analyzer]
 ignore = [
   "invalid-return-statement",
@@ -130,6 +133,10 @@ TOML);
 
     if (! str_contains($config, '"invalid-return-statement"') || ! str_contains($config, '{ code = "nullable-return-statement", in = "app/" }')) {
         fail('runtime config did not preserve project analyzer ignores');
+    }
+
+    if (str_contains($config, 'not-an-analyzer-ignore')) {
+        fail('runtime config should not read ignore arrays outside the analyzer section');
     }
 
     foreach (['"mixed-operand"', '"mixed-argument"', '"mixed-assignment"', '"mixed-method-access"', '"mixed-property-access"', '"mixed-array-access"', '"mixed-array-assignment"', '"mixed-return-statement"', '"mixed-property-type-coercion"', '"mixed-array-index"', '"invalid-iterator"', '"invalid-member-selector"', '"less-specific-return-statement"', '"less-specific-argument"', '"less-specific-nested-argument-type"', '"less-specific-nested-return-statement"', '"ambiguous-object-property-access"', '"ambiguous-object-method-access"', '"non-documented-property"', '"non-documented-method"', '"possibly-invalid-argument"', '"possibly-null-property-access"', '"possible-method-access-on-null"', '"possibly-null-argument"'] as $expectedDefaultIgnore) {
@@ -269,6 +276,7 @@ parameters:
         - identifier: argument.type
         - identifier: method.notFound
         - identifier: missingType.generics
+        - identifier: missingType.iterableValue
         - identifier: offsetAccess.notFound
         - identifier: property.notFound
         - identifier: return.type
@@ -328,6 +336,10 @@ NEON);
         if (! str_contains($config, $expectedIgnore)) {
             fail('migrate-phpstan did not preserve PHPStan ignoreErrors identifier as analyzer ignore: ' . $expectedIgnore);
         }
+    }
+
+    if (str_contains($config, 'missing-iterable-value-type')) {
+        fail('migrate-phpstan should not emit analyzer ignore codes that Mago does not support');
     }
 
     $composer = json_decode((string) file_get_contents($project . '/composer.json'), true);
