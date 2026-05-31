@@ -13,7 +13,7 @@ require_once __DIR__ . '/Concerns/RunsMagoProcesses.php';
 
 final class Application
 {
-    private const VERSION = '0.1.72';
+    private const VERSION = '0.1.73';
 
     private const CONFIG_FILE = 'mago.toml';
 
