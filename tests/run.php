@@ -423,16 +423,54 @@ NEON);
         fail('migrate-phpstan did not add the baseline composer script');
     }
 
+    file_put_contents($project . '/phpstan.neon', <<<'NEON'
+parameters:
+    paths:
+        - app/
+    level: 8
+NEON);
+
+    file_put_contents($project . '/composer.json', json_encode([
+        'require' => [
+            'php' => '^8.5',
+        ],
+        'scripts' => [
+            'phpstan' => 'vendor/bin/phpstan analyse',
+        ],
+    ], JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR));
+
+    $levelEightExitCode = run([PHP_BINARY, $binary, 'migrate-phpstan', '--project=' . $project, '--force', '--update-composer']);
+
+    if ($levelEightExitCode !== 0) {
+        fail('migrate-phpstan level 8 command failed');
+    }
+
+    $levelEightComposer = json_decode((string) file_get_contents($project . '/composer.json'), true);
+
+    if (! is_array($levelEightComposer) || ($levelEightComposer['scripts']['phpstan'][0] ?? null) !== 'vendor/bin/laramago analyze --phpstan-level=8 --reporting-format=count') {
+        fail('migrate-phpstan did not preserve a non-level-6 PHPStan strictness level');
+    }
+
     $application = new Laramago\Application();
     $method = new ReflectionMethod($application, 'phpStanCompatibilityIgnores');
     $levelIgnores = $method->invoke($application, ['--phpstan-level=6']);
-    $strictIgnores = $method->invoke($application, ['--phpstan-level=8']);
+    $levelEightIgnores = $method->invoke($application, ['--phpstan-level=8']);
+    $maxIgnores = $method->invoke($application, ['--phpstan-level=max']);
+    $unsupportedIgnores = $method->invoke($application, ['--phpstan-level=custom']);
 
     if (! is_array($levelIgnores) || ! in_array('mixed-argument', $levelIgnores, true)) {
         fail('PHPStan level 6 compatibility ignores were not enabled explicitly');
     }
 
-    if ($strictIgnores !== []) {
+    if (! is_array($levelEightIgnores) || ! in_array('mixed-argument', $levelEightIgnores, true) || in_array('possibly-null-argument', $levelEightIgnores, true)) {
+        fail('PHPStan level 8 compatibility should keep mixed compatibility while reporting nullable issues');
+    }
+
+    if ($maxIgnores !== []) {
+        fail('PHPStan max compatibility should use native Mago strictness');
+    }
+
+    if ($unsupportedIgnores !== []) {
         fail('unsupported PHPStan levels should not enable compatibility ignores');
     }
 }

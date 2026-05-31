@@ -57,13 +57,13 @@ Run analysis:
 vendor/bin/laramago analyze --reporting-format=count
 ```
 
-To mimic a PHPStan/Larastan level 6 gate during migration, opt in explicitly:
+To mimic an existing PHPStan/Larastan gate during migration, opt in explicitly:
 
 ```bash
 vendor/bin/laramago analyze --phpstan-level=6 --reporting-format=count
 ```
 
-The `--phpstan-level=6` profile keeps Laramago's default analysis strict, while filtering Mago diagnostics that are outside a typical Larastan/PHPStan level 6 migration gate.
+The `--phpstan-level=0..10|max` profile keeps Laramago's default analysis strict for new projects, while filtering Mago diagnostics that are outside the requested Larastan/PHPStan migration gate. Level 6 is common for existing Laravel applications, but the option is not tied to one project.
 
 For existing applications, create a baseline only when Mago reports issues that are not part of the migration scope yet:
 
@@ -143,8 +143,8 @@ vendor/bin/laramago analyze --no-phpstan-pragma-overlays
 vendor/bin/laramago init [--force] [--source=app] [--exclude=path/**]
 vendor/bin/laramago migrate-phpstan [--force] [--phpstan-config=phpstan.neon] [--update-composer]
 vendor/bin/laramago prepare
-vendor/bin/laramago analyze [--phpstan-level=6] [--no-phpstan-pragma-overlays] [mago analyze options] [path ...]
-vendor/bin/laramago baseline [--force] [--phpstan-level=6]
+vendor/bin/laramago analyze [--phpstan-level=0..10|max] [--no-phpstan-pragma-overlays] [mago analyze options] [path ...]
+vendor/bin/laramago baseline [--force] [--phpstan-level=0..10|max]
 vendor/bin/laramago verify-baseline
 vendor/bin/laramago doctor
 vendor/bin/laramago count [path ...]
@@ -160,7 +160,7 @@ Laramago does not exclude application paths by default. Add `--exclude=path/**` 
 
 ### `migrate-phpstan`
 
-Reads a PHPStan/Larastan NEON file and writes the equivalent Laramago `mago.toml` source settings. It imports common `parameters.paths`, flat `parameters.excludePaths`, nested `parameters.excludePaths.analyse` / `parameters.excludePaths.analyseAndScan`, and detects level 6 so it can print the matching explicit `--phpstan-level=6` migration command.
+Reads a PHPStan/Larastan NEON file and writes the equivalent Laramago `mago.toml` source settings. It imports common `parameters.paths`, flat `parameters.excludePaths`, nested `parameters.excludePaths.analyse` / `parameters.excludePaths.analyseAndScan`, and detects numeric or `max` levels so it can print the matching explicit `--phpstan-level` migration command.
 
 By default it searches `phpstan.neon`, `phpstan.neon.dist`, `phpstan-ci.neon`, and `phpstan-parallel.neon`. Use `--phpstan-config=path/to/phpstan.neon` for a custom file.
 
@@ -237,7 +237,7 @@ Ignore generated cache files:
 1. Remove Larastan/PHPStan-only dev dependencies when no other tool needs them.
 2. Install `laramago/laramago`.
 3. Run `vendor/bin/laramago migrate-phpstan` or `vendor/bin/laramago init`.
-4. Run `vendor/bin/laramago baseline --phpstan-level=6` if you are migrating a level 6 Larastan gate.
+4. Run `vendor/bin/laramago baseline --phpstan-level=6` if you are migrating a level 6 Larastan gate, or use the level from your existing PHPStan config.
 5. Replace the old `phpstan` Composer script with `vendor/bin/laramago analyze --phpstan-level=6 --reporting-format=count` when migrating a level 6 gate.
 6. Run `composer test`.
 
@@ -259,7 +259,7 @@ Laramago owns Laravel integration, not your project's strictness level. During `
 
 Analyzer issue codes are not globally ignored by the package. Use `laramago-analyzer-baseline.toml`, project `mago.toml` settings, or Mago flags such as `--minimum-fail-level` and `--minimum-report-level` to choose the strictness that fits your team.
 
-The `--phpstan-level=6` option is an explicit migration preset for projects that previously used a PHPStan/Larastan level 6 gate. It is opt-in so Laramago stays level agnostic for new projects and stricter teams.
+The `--phpstan-level` option is an explicit migration preset for projects that previously used a PHPStan/Larastan level gate. It is opt-in so Laramago stays level agnostic for new projects and stricter teams. `--phpstan-level=max` keeps Mago's native strictness, while lower migration levels progressively suppress Mago checks that PHPStan/Larastan would not normally fail at that level.
 
 You can pass additional Mago flags directly through `laramago analyze`.
 

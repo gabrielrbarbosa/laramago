@@ -6,7 +6,7 @@ namespace Laramago;
 
 final class Application
 {
-    private const VERSION = '0.1.41';
+    private const VERSION = '0.1.42';
 
     private const CONFIG_FILE = 'mago.toml';
 
@@ -166,7 +166,7 @@ final class Application
         }
 
         $level = $this->neonScalarValue($source, 'level');
-        $levelFlag = $level === '6' ? ' --phpstan-level=6' : '';
+        $levelFlag = $this->phpStanLevelFlag($level);
 
         $this->line("Read {$phpStanConfig}");
         $this->line("Wrote {$configPath}");
@@ -395,8 +395,8 @@ Usage:
   laramago init [--force] [--source=app] [--exclude=path/**]
   laramago migrate-phpstan [--force] [--phpstan-config=phpstan.neon] [--update-composer]
   laramago prepare
-  laramago analyze [--phpstan-level=6] [--no-laravel-model-overlays] [--no-laravel-framework-overlays] [--no-phpstan-pragma-overlays] [mago analyze options] [path ...]
-  laramago baseline [--force] [--phpstan-level=6]
+  laramago analyze [--phpstan-level=0..10|max] [--no-laravel-model-overlays] [--no-laravel-framework-overlays] [--no-phpstan-pragma-overlays] [mago analyze options] [path ...]
+  laramago baseline [--force] [--phpstan-level=0..10|max]
   laramago verify-baseline
   laramago doctor
   laramago count [path ...]
@@ -539,6 +539,25 @@ HELP);
         }
 
         return trim($matches[1]);
+    }
+
+    private function phpStanLevelFlag(?string $level): string
+    {
+        if ($level === null) {
+            return '';
+        }
+
+        $level = strtolower(trim($level));
+
+        if ($level === 'max') {
+            return ' --phpstan-level=max';
+        }
+
+        if (preg_match('/^(?:[0-9]|10)$/', $level) === 1) {
+            return " --phpstan-level={$level}";
+        }
+
+        return '';
     }
 
     /**
@@ -1022,7 +1041,7 @@ TOML;
         $includesValue = $this->tomlArray($includes);
         $excludesValue = $this->tomlArray($excludes);
         $ignoreBlock = $this->renderAnalyzerIgnoreBlock($this->runtimeAnalyzerIgnores($arguments));
-        $findUnusedDefinitions = $this->usesPhpStanLevelSixProfile($arguments) ? 'false' : 'true';
+        $findUnusedDefinitions = $this->usesPhpStanCompatibilityProfile($arguments) ? 'false' : 'true';
 
         return <<<TOML
 version = "1"
@@ -1150,11 +1169,13 @@ TOML;
      */
     private function phpStanCompatibilityIgnores(array $arguments): array
     {
-        if (! $this->usesPhpStanLevelSixProfile($arguments)) {
+        $level = $this->phpStanCompatibilityLevel($arguments);
+
+        if ($level === null || $level >= 9) {
             return [];
         }
 
-        return [
+        $ignores = [
             'mixed-argument',
             'mixed-assignment',
             'mixed-array-access',
@@ -1257,20 +1278,66 @@ TOML;
             'template-constraint-violation',
             'too-many-arguments',
         ];
+
+        if ($level <= 7) {
+            return $ignores;
+        }
+
+        $levelEightReportedCodes = [
+            'falsable-return-statement',
+            'false-operand',
+            'invalid-return-statement',
+            'null-argument',
+            'null-array-index',
+            'null-operand',
+            'nullable-return-statement',
+            'possible-method-access-on-null',
+            'possibly-false-argument',
+            'possibly-false-array-access',
+            'possibly-false-iterator',
+            'possibly-false-operand',
+            'possibly-invalid-operand',
+            'possibly-null-argument',
+            'possibly-null-array-access',
+            'possibly-null-array-index',
+            'possibly-null-iterator',
+            'possibly-null-operand',
+            'possibly-null-property-access',
+        ];
+
+        return array_values(array_diff($ignores, $levelEightReportedCodes));
     }
 
     /**
      * @param list<string> $arguments
      */
-    private function usesPhpStanLevelSixProfile(array $arguments): bool
+    private function usesPhpStanCompatibilityProfile(array $arguments): bool
+    {
+        return $this->phpStanCompatibilityLevel($arguments) !== null;
+    }
+
+    /**
+     * @param list<string> $arguments
+     */
+    private function phpStanCompatibilityLevel(array $arguments): ?int
     {
         foreach ($arguments as $argument) {
-            if ($argument === '--phpstan-level=6') {
-                return true;
+            if (! str_starts_with($argument, '--phpstan-level=')) {
+                continue;
+            }
+
+            $level = strtolower(substr($argument, strlen('--phpstan-level=')));
+
+            if ($level === 'max') {
+                return 10;
+            }
+
+            if (preg_match('/^(?:[0-9]|10)$/', $level) === 1) {
+                return (int) $level;
             }
         }
 
-        return false;
+        return null;
     }
 
     /**
