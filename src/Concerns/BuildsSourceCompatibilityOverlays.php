@@ -72,6 +72,7 @@ trait BuildsSourceCompatibilityOverlays
                 $translated = $this->annotateDynamicMemberSelectorStrings($translated);
                 $translated = $this->annotateLaravelFormRequestDynamicProperties($translated, $relativePath, $projectRoot);
                 $translated = $this->annotateAllowDynamicPropertiesClasses($translated);
+                $translated = $this->ignoreNullCoalescePropertyAccess($translated);
                 $minimumAliases = $translated === $source ? 2 : 1;
                 $overlay = $this->insertTraitSelfCallMethods($this->insertCaseInsensitiveMethodAliases($translated, $caseInsensitiveAliasCandidates, $minimumAliases));
 
@@ -1519,6 +1520,35 @@ trait BuildsSourceCompatibilityOverlays
         );
 
         return is_string($translated) ? $translated : $source;
+    }
+
+    private function ignoreNullCoalescePropertyAccess(string $source): string
+    {
+        if (! str_contains($source, '??') || ! str_contains($source, '->')) {
+            return $source;
+        }
+
+        $lines = preg_split('/(\R)/', $source, -1, PREG_SPLIT_DELIM_CAPTURE);
+
+        if (! is_array($lines)) {
+            return $source;
+        }
+
+        $translated = '';
+
+        for ($index = 0; $index < count($lines); $index += 2) {
+            $line = (string) $lines[$index];
+            $lineEnding = (string) ($lines[$index + 1] ?? '');
+
+            if (str_contains($line, '??') && str_contains($line, '->') && ! str_contains($line, '@mago-ignore')) {
+                preg_match('/^\s*/', $line, $matches);
+                $translated .= ($matches[0] ?? '') . '// @mago-ignore invalid-property-access' . $lineEnding;
+            }
+
+            $translated .= $line . $lineEnding;
+        }
+
+        return $translated;
     }
 
     private function annotateLaravelFormRequestDynamicProperties(string $source, string $relativePath, string $projectRoot): string

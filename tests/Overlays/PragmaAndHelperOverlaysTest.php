@@ -618,6 +618,7 @@ final class UsesNumericFallbacks
     {
         $subtotal = $row->subtotal ?? 0;
         $discount = $row->discount ?: 0.0;
+        $name = $row->profile->name ?? '-';
 
         return $subtotal - $discount;
     }
@@ -639,7 +640,8 @@ PHP);
 
         if (is_string($overlay)
             && str_contains($overlay, '/** @var int|float $subtotal */')
-            && str_contains($overlay, '/** @var int|float $discount */')) {
+            && str_contains($overlay, '/** @var int|float $discount */')
+            && str_contains($overlay, '// @mago-ignore invalid-property-access' . PHP_EOL . '        $name = $row->profile->name ?? \'-\';')) {
             return;
         }
     }
