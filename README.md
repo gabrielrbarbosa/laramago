@@ -22,6 +22,7 @@ Mago 1.29 does not expose a Composer-loaded analyzer extension API equivalent to
 - a Laravel-oriented runtime Mago preset managed by Laramago;
 - generated Eloquent PHPDoc overlays from real application model metadata;
 - generated Laravel framework overlays for application-specific auth model types;
+- generated symbol stubs for excluded legacy application paths, so references stay resolvable without analyzing those files;
 - automatic baseline usage for existing projects;
 - path translation so diagnostics point back to application files instead of generated cache files;
 - Composer commands that can replace existing `phpstan` scripts;
@@ -68,8 +69,9 @@ During `analyze`, `baseline`, and `verify-baseline`, Laramago:
 3. reads database columns, casts, accessors, local scopes, and public relation methods;
 4. reads `config/auth.php` to detect the application auth user model;
 5. writes generated files to `.laramago/cache/model-overlays` and `.laramago/cache/framework-overlays`;
-6. passes those files to Mago through `--substitute`;
-7. translates baseline and diagnostic paths back to the original app files.
+6. writes lightweight symbol stubs for excluded application paths to `.laramago/cache/excluded-symbols`;
+7. passes overlays to Mago through `--substitute` and includes excluded symbol stubs for type discovery;
+8. translates baseline and diagnostic paths back to the original app files.
 
 The application source tree is not modified.
 
@@ -82,6 +84,7 @@ Generated overlays currently add:
 - Laravel `HasFactory` return types without app-level generic boilerplate;
 - Laravel `Scope` and Laravel Excel `FromCollection` compatibility without app-level generic boilerplate;
 - auth guard and facade return types for the configured Laravel user model;
+- excluded-path symbol discovery so `exclude` can omit legacy code from analysis without turning referenced classes into false missing-class errors;
 - baseline and output path translation so generated overlay paths do not leak into application diagnostics.
 
 Disable overlays when you want raw Mago behavior:
@@ -201,7 +204,8 @@ Laramago owns the compatibility policy. During `analyze`, `baseline`, and `verif
 - Laravel linter integration enabled;
 - Pint-compatible formatter defaults;
 - analyzer settings suitable for legacy Laravel applications;
-- Larastan-compatibility mixed-type analyzer codes, including mixed array/property access noise, ignored with Mago's global ignore syntax;
+- Larastan/PHPStan-compatibility analyzer codes for legacy Laravel projects, including the broad PHPStan categories commonly ignored in level 6 Larastan configs;
+- excluded-path symbol stubs added to runtime includes when project excludes are present;
 - the project source settings copied from the committed `mago.toml`.
 
 You can pass additional Mago flags directly through `laramago analyze`.

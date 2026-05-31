@@ -60,6 +60,7 @@ if ($doctorExitCode !== $expectedDoctorExitCode) {
 testBaselinePathTranslation($project, $root);
 testOutputPathTranslation($project, $root);
 testRuntimeConfigGeneration($project, $root);
+testExcludedSymbolStubGeneration($project, $root);
 testModelDocblockIncludesLaravelMagic($root);
 testLaravelFrameworkOverlayGeneration($project, $root);
 
@@ -157,7 +158,7 @@ function testRuntimeConfigGeneration(string $project, string $root): void
         fail('runtime config did not preserve project source settings');
     }
 
-    foreach (['"mixed-argument"', '"mixed-array-access"', '"mixed-array-assignment"', '"mixed-property-access"'] as $expected) {
+    foreach (['"mixed-argument"', '"invalid-argument"', '"invalid-iterator"', '"mixed-array-access"', '"mixed-array-assignment"', '"mixed-property-access"', '"non-existent-property"', '"too-many-arguments"'] as $expected) {
         if (! str_contains($config, $expected)) {
             fail('runtime config missed an app-wide mixed compatibility ignore: ' . $expected);
         }
@@ -165,6 +166,54 @@ function testRuntimeConfigGeneration(string $project, string $root): void
 
     if (str_contains($config, '{ code = "mixed-argument"')) {
         fail('runtime config did not use Mago global ignore syntax for app-wide compatibility codes');
+    }
+}
+
+function testExcludedSymbolStubGeneration(string $project, string $root): void
+{
+    require_once $root . '/src/Application.php';
+
+    mkdir($project . '/app/Excluded', 0777, true);
+    file_put_contents($project . '/app/Excluded/LegacyService.php', <<<'PHP'
+<?php
+
+namespace App\Excluded;
+
+final class LegacyService
+{
+}
+PHP);
+
+    file_put_contents($project . '/mago.toml', <<<'TOML'
+version = "1"
+php-version = "8.5.0"
+
+[source]
+workspace = "."
+paths = ["app"]
+includes = ["vendor"]
+excludes = ["app/Excluded/**"]
+TOML);
+
+    $application = new Laramago\Application();
+    $method = new ReflectionMethod($application, 'prepareRuntimeConfig');
+    $runtimeConfig = $method->invoke($application, $project);
+    $config = file_get_contents($project . '/' . $runtimeConfig);
+
+    if (! is_string($config) || ! str_contains($config, 'includes = ["vendor", ".laramago/cache/excluded-symbols"]')) {
+        fail('runtime config did not include excluded symbol stubs');
+    }
+
+    $stubs = glob($project . '/.laramago/cache/excluded-symbols/*.php');
+
+    if ($stubs === false || count($stubs) !== 1) {
+        fail('excluded symbol stub generation wrote an unexpected number of stubs');
+    }
+
+    $stub = file_get_contents($stubs[0]);
+
+    if (! is_string($stub) || ! str_contains($stub, 'namespace App\Excluded;') || ! str_contains($stub, 'class LegacyService')) {
+        fail('excluded symbol stub generation wrote an unexpected stub');
     }
 }
 

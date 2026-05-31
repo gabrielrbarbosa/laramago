@@ -6,7 +6,7 @@ namespace Laramago;
 
 final class Application
 {
-    private const VERSION = '0.1.10';
+    private const VERSION = '0.1.11';
 
     private const CONFIG_FILE = 'mago.toml';
 
@@ -19,6 +19,8 @@ final class Application
     private const MODEL_OVERLAY_MAP = '.laramago/cache/model-overlays.json';
 
     private const FRAMEWORK_OVERLAY_DIR = '.laramago/cache/framework-overlays';
+
+    private const EXCLUDED_SYMBOL_DIR = '.laramago/cache/excluded-symbols';
 
     private const RUNTIME_CONFIG_FILE = '.laramago/cache/mago.toml';
 
@@ -408,12 +410,19 @@ TOML;
     {
         $values = $this->projectConfigValues($projectRoot);
         $runtimeConfigPath = $projectRoot . '/' . self::RUNTIME_CONFIG_FILE;
+        $includes = $values['includes'];
+        $excludedSymbolInclude = $this->prepareExcludedSymbolStubs($projectRoot, $values['excludes']);
+
+        if ($excludedSymbolInclude !== null) {
+            $includes[] = $excludedSymbolInclude;
+            $includes = array_values(array_unique($includes));
+        }
 
         $this->ensureDirectory(dirname($runtimeConfigPath));
         file_put_contents($runtimeConfigPath, $this->renderRuntimeConfig(
             $values['phpVersion'],
             $values['paths'],
-            $values['includes'],
+            $includes,
             $values['excludes'],
         ));
 
@@ -519,19 +528,32 @@ ignore = [
   "mixed-assignment",
   "mixed-array-access",
   "mixed-array-assignment",
+  "invalid-argument",
+  "invalid-array-access",
   "possibly-invalid-argument",
+  "possibly-false-argument",
   "invalid-array-element-key",
+  "invalid-callable",
+  "invalid-iterator",
+  "invalid-method-access",
+  "invalid-pass-by-reference",
+  "invalid-property-access",
   "less-specific-return-statement",
+  "less-specific-argument",
+  "less-specific-nested-argument-type",
+  "less-specific-nested-return-statement",
   "mixed-return-statement",
   "non-documented-method",
   "non-documented-property",
   "mixed-property-type-coercion",
   "invalid-property-write",
-  { code = "non-existent-property", in = "app/*/Concerns/*" },
+  "non-existent-property",
   "mixed-operand",
   "mixed-property-access",
   "mixed-method-access",
   "non-existent-method",
+  "nullable-return-statement",
+  "possibly-null-property-access",
   "possibly-null-operand",
   "invalid-return-statement",
   "possibly-null-argument",
@@ -539,6 +561,8 @@ ignore = [
   "possible-method-access-on-null",
   "no-value",
   "falsable-return-statement",
+  "template-constraint-violation",
+  "too-many-arguments",
 ]
 find-unused-definitions = true
 find-unused-expressions = false
@@ -1032,6 +1056,81 @@ PHP;
         sort($files);
 
         return $files;
+    }
+
+    /**
+     * @param list<string> $excludes
+     */
+    private function prepareExcludedSymbolStubs(string $projectRoot, array $excludes): ?string
+    {
+        $symbolDirectory = $projectRoot . '/' . self::EXCLUDED_SYMBOL_DIR;
+
+        if (is_dir($symbolDirectory)) {
+            $this->removeDirectory($symbolDirectory);
+        }
+
+        $written = 0;
+
+        foreach ($excludes as $exclude) {
+            $directory = $projectRoot . '/' . $this->baseDirectoryFromGlob($exclude);
+
+            if (! is_dir($directory)) {
+                continue;
+            }
+
+            foreach ($this->phpFiles($directory) as $file) {
+                $stub = $this->classlikeSymbolStub($file);
+
+                if ($stub === null) {
+                    continue;
+                }
+
+                $this->ensureDirectory($symbolDirectory);
+                file_put_contents($symbolDirectory . '/' . sha1($file) . '.php', $stub);
+                $written++;
+            }
+        }
+
+        return $written > 0 ? self::EXCLUDED_SYMBOL_DIR : null;
+    }
+
+    private function baseDirectoryFromGlob(string $path): string
+    {
+        $globPosition = strcspn($path, '*?[');
+        $base = substr($path, 0, $globPosition);
+
+        return rtrim($base === '' ? $path : $base, '/');
+    }
+
+    private function classlikeSymbolStub(string $file): ?string
+    {
+        $source = file_get_contents($file);
+
+        if (! is_string($source)) {
+            return null;
+        }
+
+        if (preg_match('/^namespace\s+([^;]+);/m', $source, $namespaceMatches) !== 1) {
+            return null;
+        }
+
+        if (preg_match('/^(?:abstract\s+|final\s+|readonly\s+)*(class|interface|trait|enum)\s+([A-Za-z_][A-Za-z0-9_]*)\b/m', $source, $classMatches) !== 1) {
+            return null;
+        }
+
+        $kind = $classMatches[1];
+        $name = $classMatches[2];
+        $namespace = trim($namespaceMatches[1]);
+
+        return <<<PHP
+<?php
+
+namespace {$namespace};
+
+{$kind} {$name}
+{
+}
+PHP;
     }
 
     /**
