@@ -6,7 +6,7 @@ namespace Laramago;
 
 final class Application
 {
-    private const VERSION = '0.1.38';
+    private const VERSION = '0.1.39';
 
     private const CONFIG_FILE = 'mago.toml';
 
@@ -1470,17 +1470,22 @@ TOML;
         $guardPath = $projectRoot . '/vendor/laravel/framework/src/Illuminate/Contracts/Auth/Guard.php';
         $authManagerPath = $projectRoot . '/vendor/laravel/framework/src/Illuminate/Auth/AuthManager.php';
         $authFacadePath = $projectRoot . '/vendor/laravel/framework/src/Illuminate/Support/Facades/Auth.php';
+        $applicationContractPath = $projectRoot . '/vendor/laravel/framework/src/Illuminate/Contracts/Foundation/Application.php';
         $httpFacadePath = $projectRoot . '/vendor/laravel/framework/src/Illuminate/Support/Facades/Http.php';
         $supportCarbonPath = $projectRoot . '/vendor/laravel/framework/src/Illuminate/Support/Carbon.php';
+        $baseCarbonPath = $projectRoot . '/vendor/nesbot/carbon/src/Carbon/Carbon.php';
+        $baseCarbonImmutablePath = $projectRoot . '/vendor/nesbot/carbon/src/Carbon/CarbonImmutable.php';
         $foundationHelpersPath = $projectRoot . '/vendor/laravel/framework/src/Illuminate/Foundation/helpers.php';
         $eloquentBuilderPath = $projectRoot . '/vendor/laravel/framework/src/Illuminate/Database/Eloquent/Builder.php';
         $eloquentModelPath = $projectRoot . '/vendor/laravel/framework/src/Illuminate/Database/Eloquent/Model.php';
         $hasAttributesPath = $projectRoot . '/vendor/laravel/framework/src/Illuminate/Database/Eloquent/Concerns/HasAttributes.php';
         $queryBuilderPath = $projectRoot . '/vendor/laravel/framework/src/Illuminate/Database/Query/Builder.php';
         $controllerMiddlewareOptionsPath = $projectRoot . '/vendor/laravel/framework/src/Illuminate/Routing/ControllerMiddlewareOptions.php';
+        $notificationPath = $projectRoot . '/vendor/laravel/framework/src/Illuminate/Notifications/Notification.php';
         $hasFactoryPath = $projectRoot . '/vendor/laravel/framework/src/Illuminate/Database/Eloquent/Factories/HasFactory.php';
         $scopePath = $projectRoot . '/vendor/laravel/framework/src/Illuminate/Database/Eloquent/Scope.php';
         $fromCollectionPath = $projectRoot . '/vendor/maatwebsite/excel/src/Concerns/FromCollection.php';
+        $socialiteProviderPath = $projectRoot . '/vendor/laravel/socialite/src/Contracts/Provider.php';
 
         $authModel = $this->detectAuthUserModel($projectRoot);
 
@@ -1520,11 +1525,35 @@ TOML;
             }
         }
 
+        if (is_file($applicationContractPath)) {
+            $applicationContractSource = file_get_contents($applicationContractPath);
+
+            if (is_string($applicationContractSource)) {
+                $overlays[] = $this->writeFrameworkOverlay($projectRoot, 'ApplicationContract.php', $applicationContractPath, $this->renderApplicationContractOverlay($applicationContractSource));
+            }
+        }
+
         if (is_file($supportCarbonPath)) {
             $supportCarbonSource = file_get_contents($supportCarbonPath);
 
             if (is_string($supportCarbonSource)) {
                 $overlays[] = $this->writeFrameworkOverlay($projectRoot, 'SupportCarbon.php', $supportCarbonPath, $this->renderSupportCarbonOverlay($supportCarbonSource));
+            }
+        }
+
+        if (is_file($baseCarbonPath)) {
+            $baseCarbonSource = file_get_contents($baseCarbonPath);
+
+            if (is_string($baseCarbonSource)) {
+                $overlays[] = $this->writeFrameworkOverlay($projectRoot, 'BaseCarbon.php', $baseCarbonPath, $this->renderCarbonDateOverlay($baseCarbonSource, 'Carbon', '\\Carbon\\Carbon'));
+            }
+        }
+
+        if (is_file($baseCarbonImmutablePath)) {
+            $baseCarbonImmutableSource = file_get_contents($baseCarbonImmutablePath);
+
+            if (is_string($baseCarbonImmutableSource)) {
+                $overlays[] = $this->writeFrameworkOverlay($projectRoot, 'BaseCarbonImmutable.php', $baseCarbonImmutablePath, $this->renderCarbonDateOverlay($baseCarbonImmutableSource, 'CarbonImmutable', '\\Carbon\\CarbonImmutable'));
             }
         }
 
@@ -1568,6 +1597,14 @@ TOML;
             }
         }
 
+        if (is_file($notificationPath)) {
+            $notificationSource = file_get_contents($notificationPath);
+
+            if (is_string($notificationSource)) {
+                $overlays[] = $this->writeFrameworkOverlay($projectRoot, 'Notification.php', $notificationPath, $this->renderNotificationOverlay($notificationSource, $projectRoot));
+            }
+        }
+
         if (is_file($hasFactoryPath)) {
             $overlays[] = $this->writeFrameworkOverlay($projectRoot, 'HasFactory.php', $hasFactoryPath, $this->renderHasFactoryOverlay());
         }
@@ -1578,6 +1615,14 @@ TOML;
 
         if (is_file($fromCollectionPath)) {
             $overlays[] = $this->writeFrameworkOverlay($projectRoot, 'FromCollection.php', $fromCollectionPath, $this->renderFromCollectionOverlay());
+        }
+
+        if (is_file($socialiteProviderPath)) {
+            $socialiteProviderSource = file_get_contents($socialiteProviderPath);
+
+            if (is_string($socialiteProviderSource)) {
+                $overlays[] = $this->writeFrameworkOverlay($projectRoot, 'SocialiteProvider.php', $socialiteProviderPath, $this->renderSocialiteProviderOverlay($socialiteProviderSource));
+            }
         }
 
         $substitutions = [];
@@ -1604,7 +1649,7 @@ TOML;
             ' * @method $this groupBy(array|string ...$groups)',
             ' * @method $this having(string $column, ?string $operator = null, mixed $value = null, string $boolean = "and")',
             ' * @method $this orHaving(string $column, ?string $operator = null, mixed $value = null)',
-            ' * @method $this select(array|string ...$columns)',
+            ' * @method $this select(mixed ...$columns)',
             ' * @method $this addSelect(array|string ...$columns)',
             ' * @method $this with(array|string ...$relations)',
             ' * @method $this selectRaw(string $expression, array $bindings = [])',
@@ -1681,23 +1726,51 @@ TOML;
         );
     }
 
+    private function renderApplicationContractOverlay(string $source): string
+    {
+        if (str_contains($source, 'function isProduction(')) {
+            return $source;
+        }
+
+        return $this->insertBeforeFinalClassBrace($source, <<<'PHP'
+
+    /**
+     * Determine if the application environment is production.
+     */
+    public function isProduction(): bool;
+PHP);
+    }
+
     private function renderSupportCarbonOverlay(string $source): string
     {
-        return $this->insertClassDocblockLines($source, 'Carbon', [
-            ' * @method static \Illuminate\Support\Carbon parse(mixed $time = null, mixed $timezone = null)',
-            ' * @method static \Illuminate\Support\Carbon createfromformat(string $format, mixed $time, mixed $timezone = null)',
-            ' * @method static \Illuminate\Support\Carbon now(mixed $timezone = null)',
-            ' * @method static \Illuminate\Support\Carbon today(mixed $timezone = null)',
-            ' * @method static \Illuminate\Support\Carbon tomorrow(mixed $timezone = null)',
-            ' * @method static \Illuminate\Support\Carbon yesterday(mixed $timezone = null)',
-            ' * @method static \Illuminate\Support\Carbon make(mixed $var, mixed $timezone = null)',
-            ' * @method static \Illuminate\Support\Carbon instance(\DateTimeInterface $date)',
-            ' * @method static \Illuminate\Support\Carbon createfrominterface(\DateTimeInterface $date)',
-            ' * @method static \Illuminate\Support\Carbon createfromtimestamp(mixed $timestamp, mixed $timezone = null)',
-            ' * @method static \Illuminate\Support\Carbon createfromtimestampms(mixed $timestamp, mixed $timezone = null)',
-            ' * @method static \Illuminate\Support\Carbon createfromdate(?int $year = null, ?int $month = null, ?int $day = null, mixed $timezone = null)',
-            ' * @method static \Illuminate\Support\Carbon createfromtime(?int $hour = null, ?int $minute = null, ?int $second = null, ?int $microsecond = null, mixed $timezone = null)',
-            ' * @method static \Illuminate\Support\Carbon create(int $year = 0, int $month = 1, int $day = 1, int $hour = 0, int $minute = 0, int $second = 0, mixed $timezone = null)',
+        return $this->renderCarbonDateOverlay($source, 'Carbon', '\\Illuminate\\Support\\Carbon');
+    }
+
+    private function renderCarbonDateOverlay(string $source, string $className, string $staticReturnType): string
+    {
+        return $this->insertClassDocblockLines($source, $className, $this->carbonAliasDocblockLines($staticReturnType));
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function carbonAliasDocblockLines(string $staticReturnType): array
+    {
+        return [
+            ' * @method static ' . $staticReturnType . ' parse(mixed $time = null, mixed $timezone = null)',
+            ' * @method static ' . $staticReturnType . ' createfromformat(string $format, mixed $time, mixed $timezone = null)',
+            ' * @method static ' . $staticReturnType . ' now(mixed $timezone = null)',
+            ' * @method static ' . $staticReturnType . ' today(mixed $timezone = null)',
+            ' * @method static ' . $staticReturnType . ' tomorrow(mixed $timezone = null)',
+            ' * @method static ' . $staticReturnType . ' yesterday(mixed $timezone = null)',
+            ' * @method static ' . $staticReturnType . ' make(mixed $var, mixed $timezone = null)',
+            ' * @method static ' . $staticReturnType . ' instance(\DateTimeInterface $date)',
+            ' * @method static ' . $staticReturnType . ' createfrominterface(\DateTimeInterface $date)',
+            ' * @method static ' . $staticReturnType . ' createfromtimestamp(mixed $timestamp, mixed $timezone = null)',
+            ' * @method static ' . $staticReturnType . ' createfromtimestampms(mixed $timestamp, mixed $timezone = null)',
+            ' * @method static ' . $staticReturnType . ' createfromdate(?int $year = null, ?int $month = null, ?int $day = null, mixed $timezone = null)',
+            ' * @method static ' . $staticReturnType . ' createfromtime(?int $hour = null, ?int $minute = null, ?int $second = null, ?int $microsecond = null, mixed $timezone = null)',
+            ' * @method static ' . $staticReturnType . ' create(int $year = 0, int $month = 1, int $day = 1, int $hour = 0, int $minute = 0, int $second = 0, mixed $timezone = null)',
             ' * @method float diffinseconds(mixed $date = null, bool $absolute = false)',
             ' * @method $this addseconds(int|float $value = 1)',
             ' * @method $this addminutes(int|float $value = 1)',
@@ -1730,7 +1803,7 @@ TOML;
             ' * @method string toiso8601string()',
             ' * @method string torfc2822string()',
             ' * @method string gettranslatedmonthname(?string $context = null, ?string $key = null, mixed $locale = null)',
-        ]);
+        ];
     }
 
     private function renderEloquentModelFrameworkOverlay(string $source): string
@@ -1773,6 +1846,78 @@ TOML;
     public static function withoutGlobalScopes(?array $scopes = null): \Illuminate\Database\Eloquent\Builder
     {
         return static::query();
+    }
+
+    /**
+     * Laramago overlay for Laravel's dynamic static builder delegation.
+     */
+    public static function where(mixed $column, mixed $operator = null, mixed $value = null, string $boolean = 'and'): \Illuminate\Database\Eloquent\Builder
+    {
+        return static::query();
+    }
+
+    /**
+     * Laramago overlay for Laravel's dynamic static builder delegation.
+     */
+    public static function orWhere(mixed $column, mixed $operator = null, mixed $value = null): \Illuminate\Database\Eloquent\Builder
+    {
+        return static::query();
+    }
+
+    /**
+     * Laramago overlay for Laravel's dynamic static builder delegation.
+     */
+    public static function select(mixed ...$columns): \Illuminate\Database\Eloquent\Builder
+    {
+        return static::query();
+    }
+
+    /**
+     * Laramago overlay for Laravel's dynamic static builder delegation.
+     */
+    public static function selectRaw(string $expression, array $bindings = []): \Illuminate\Database\Eloquent\Builder
+    {
+        return static::query();
+    }
+
+    /**
+     * Laramago overlay for Laravel's dynamic static builder delegation.
+     */
+    public static function orderBy(mixed $column, mixed $direction = 'asc'): \Illuminate\Database\Eloquent\Builder
+    {
+        return static::query();
+    }
+
+    /**
+     * Laramago overlay for Laravel's dynamic static builder delegation.
+     */
+    public static function find(mixed $id, array|string $columns = ['*']): mixed
+    {
+        return null;
+    }
+
+    /**
+     * Laramago overlay for Laravel's dynamic static builder delegation.
+     */
+    public static function findOrFail(mixed $id, array|string $columns = ['*']): mixed
+    {
+        return new static;
+    }
+
+    /**
+     * Laramago overlay for Laravel's dynamic static builder delegation.
+     */
+    public static function firstOrCreate(array $attributes = [], array $values = []): static
+    {
+        return new static;
+    }
+
+    /**
+     * Laramago overlay for Laravel's dynamic static builder delegation.
+     */
+    public static function updateOrCreate(array $attributes, array $values = []): static
+    {
+        return new static;
     }
 
 PHP);
@@ -1850,6 +1995,113 @@ PHP);
             ],
             $source,
         );
+    }
+
+    private function renderNotificationOverlay(string $source, string $projectRoot): string
+    {
+        $members = $this->notificationDynamicMembers($projectRoot);
+        $declarations = [];
+
+        foreach ($members['methods'] as $method) {
+            if (! preg_match('/^\s*public\s+function\s+' . preg_quote($method, '/') . '\s*\(/im', $source)) {
+                $declarations[] = '    public function ' . $method . '(mixed ...$arguments): mixed {}';
+            }
+        }
+
+        if ($declarations === []) {
+            return $source;
+        }
+
+        return $this->insertBeforeFinalClassBrace($source, PHP_EOL . implode(PHP_EOL . PHP_EOL, $declarations) . PHP_EOL);
+    }
+
+    /**
+     * @return array{methods: list<string>, properties: list<string>}
+     */
+    private function notificationDynamicMembers(string $projectRoot): array
+    {
+        $methods = [];
+        $properties = [];
+        $seenFiles = [];
+        $config = $this->projectConfigValues($projectRoot);
+
+        foreach ($config['paths'] as $path) {
+            foreach ($this->sourcePhpFiles($projectRoot, $path) as $file) {
+                if (isset($seenFiles[$file])) {
+                    continue;
+                }
+
+                $seenFiles[$file] = true;
+                $relativePath = ltrim(substr($file, strlen($projectRoot)), '/');
+
+                if ($this->isExcludedProjectPath($relativePath, $config['excludes'])) {
+                    continue;
+                }
+
+                $source = file_get_contents($file);
+
+                if (! is_string($source)) {
+                    continue;
+                }
+
+                if (preg_match_all('/\$notification\s*->\s*([A-Za-z_][A-Za-z0-9_]*)\s*\(/', $source, $matches) !== false) {
+                    foreach ($matches[1] ?? [] as $method) {
+                        $methods[strtolower($method)] = true;
+                    }
+                }
+
+                if (preg_match_all('/\$notification\s*->\s*([A-Za-z_][A-Za-z0-9_]*)\b(?!\s*\()/', $source, $matches) !== false) {
+                    foreach ($matches[1] ?? [] as $property) {
+                        $properties[$property] = true;
+                    }
+                }
+            }
+        }
+
+        $methodNames = array_keys($methods);
+        $propertyNames = array_keys($properties);
+        sort($methodNames);
+        sort($propertyNames);
+
+        return [
+            'methods' => $methodNames,
+            'properties' => $propertyNames,
+        ];
+    }
+
+    private function renderSocialiteProviderOverlay(string $source): string
+    {
+        if (! str_contains($source, 'function with(')) {
+            $source = $this->insertBeforeFinalClassBrace($source, <<<'PHP'
+
+    /**
+     * Set request parameters for the provider.
+     */
+    public function with(array $parameters): static;
+PHP);
+        }
+
+        if (! str_contains($source, 'function scopes(')) {
+            $source = $this->insertBeforeFinalClassBrace($source, <<<'PHP'
+
+    /**
+     * Set scopes for the provider.
+     */
+    public function scopes(array $scopes): static;
+PHP);
+        }
+
+        if (! str_contains($source, 'function stateless(')) {
+            $source = $this->insertBeforeFinalClassBrace($source, <<<'PHP'
+
+    /**
+     * Indicate that the provider should operate statelessly.
+     */
+    public function stateless(): static;
+PHP);
+        }
+
+        return $source;
     }
 
     private function renderScopeOverlay(): string
@@ -2050,7 +2302,7 @@ PHP;
                     continue;
                 }
 
-                $translated = $this->translatePhpStanPragmas($source);
+                $translated = $this->annotateLaravelCollectionMacroClosures($this->translateLaravelDateHelperCalls($this->translatePhpStanPragmas($source)));
                 $minimumAliases = $translated === $source ? 2 : 1;
                 $overlay = $this->insertTraitSelfCallMethods($this->insertCaseInsensitiveMethodAliases($translated, $caseInsensitiveAliasCandidates, $minimumAliases));
 
@@ -2164,6 +2416,110 @@ PHP;
         }
 
         return $translated;
+    }
+
+    private function translateLaravelDateHelperCalls(string $source): string
+    {
+        $tokens = token_get_all($source);
+        $translated = '';
+        $count = count($tokens);
+
+        for ($index = 0; $index < $count; $index++) {
+            $token = $tokens[$index];
+
+            if (! is_array($token) || $token[0] !== T_STRING || ! in_array(strtolower($token[1]), ['now', 'today', 'response'], true)) {
+                $translated .= is_array($token) ? $token[1] : $token;
+
+                continue;
+            }
+
+            $helper = strtolower($token[1]);
+            $next = $this->nextMeaningfulTokenIndex($tokens, $index + 1);
+
+            if ($next === null || $tokens[$next] !== '(') {
+                $translated .= $token[1];
+
+                continue;
+            }
+
+            $previous = $this->previousMeaningfulTokenIndex($tokens, $index - 1);
+            $previousToken = $previous === null ? null : $tokens[$previous];
+
+            if (is_array($previousToken) && in_array($previousToken[0], [T_FUNCTION, T_OBJECT_OPERATOR, T_NULLSAFE_OBJECT_OPERATOR, T_DOUBLE_COLON], true)) {
+                $translated .= $token[1];
+
+                continue;
+            }
+
+            if ($previousToken === '\\') {
+                $translated .= $token[1];
+
+                continue;
+            }
+
+            if ($helper === 'response') {
+                if (! $this->hasCallArguments($tokens, $next)) {
+                    $translated .= $token[1];
+
+                    continue;
+                }
+
+                $translated .= '\\Illuminate\\Support\\Facades\\Response::make';
+
+                continue;
+            }
+
+            $translated .= '\\Illuminate\\Support\\Carbon::' . $helper;
+        }
+
+        return $translated;
+    }
+
+    /**
+     * @param list<array|string> $tokens
+     */
+    private function hasCallArguments(array $tokens, int $openParenthesis): bool
+    {
+        $depth = 0;
+        $count = count($tokens);
+
+        for ($index = $openParenthesis; $index < $count; $index++) {
+            $token = $tokens[$index];
+            $text = is_array($token) ? $token[1] : $token;
+
+            if ($text === '(') {
+                $depth++;
+
+                continue;
+            }
+
+            if ($text === ')') {
+                $depth--;
+
+                if ($depth === 0) {
+                    return false;
+                }
+
+                continue;
+            }
+
+            if ($depth === 1 && ! (is_array($token) && in_array($token[0], [T_WHITESPACE, T_COMMENT, T_DOC_COMMENT], true))) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function annotateLaravelCollectionMacroClosures(string $source): string
+    {
+        $translated = preg_replace_callback(
+            '/((?:\\\\?Illuminate\\\\Support\\\\)?Collection::macro\s*\(\s*[\'"][^\'"]+[\'"]\s*,\s*function\s*\([^)]*\)\s*(?::\s*[^{]+)?\{)(?!\s*\/\*\*\s*@var\s+[^*]*\$this)/m',
+            static fn (array $matches): string => $matches[1] . PHP_EOL . '                    /** @var \Illuminate\Support\Collection $this */',
+            $source,
+        );
+
+        return is_string($translated) ? $translated : $source;
     }
 
     /**
@@ -2576,6 +2932,24 @@ PHP;
     }
 
     /**
+     * @param list<array|string> $tokens
+     */
+    private function previousMeaningfulTokenIndex(array $tokens, int $start): ?int
+    {
+        for ($index = $start; $index >= 0; $index--) {
+            $token = $tokens[$index];
+
+            if (is_array($token) && in_array($token[0], [T_WHITESPACE, T_COMMENT, T_DOC_COMMENT], true)) {
+                continue;
+            }
+
+            return $index;
+        }
+
+        return null;
+    }
+
+    /**
      * @param list<array{name: string, type: string}> $properties
      * @param list<array{name: string, type: string}> $accessors
      * @param list<array{name: string, type: string}> $relations
@@ -2632,7 +3006,91 @@ PHP;
         }
 
         $docblock = '/**' . PHP_EOL . implode(PHP_EOL, $lines) . PHP_EOL . ' */' . PHP_EOL;
-        return $this->insertClassDocblockLines($source, $shortClass, $lines, $docblock);
+        return $this->insertModelStaticDelegationMethods($this->insertClassDocblockLines($source, $shortClass, $lines, $docblock));
+    }
+
+    private function insertModelStaticDelegationMethods(string $source): string
+    {
+        $defined = [];
+
+        if (preg_match_all('/^\s*public\s+static\s+function\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(/m', $source, $matches) !== false) {
+            foreach ($matches[1] ?? [] as $method) {
+                $defined[strtolower($method)] = true;
+            }
+        }
+
+        $methods = [
+            'create' => <<<'PHP'
+
+    public static function create(array $attributes = []): static
+    {
+        return new static;
+    }
+PHP,
+            'where' => <<<'PHP'
+
+    public static function where(mixed $column, mixed $operator = null, mixed $value = null, string $boolean = 'and'): \Illuminate\Database\Eloquent\Builder
+    {
+        return static::query();
+    }
+PHP,
+            'orwhere' => <<<'PHP'
+
+    public static function orWhere(mixed $column, mixed $operator = null, mixed $value = null): \Illuminate\Database\Eloquent\Builder
+    {
+        return static::query();
+    }
+PHP,
+            'select' => <<<'PHP'
+
+    public static function select(mixed ...$columns): \Illuminate\Database\Eloquent\Builder
+    {
+        return static::query();
+    }
+PHP,
+            'selectraw' => <<<'PHP'
+
+    public static function selectraw(string $expression, array $bindings = []): \Illuminate\Database\Eloquent\Builder
+    {
+        return static::query();
+    }
+PHP,
+            'withoutglobalscopes' => <<<'PHP'
+
+    public static function withoutglobalscopes(?array $scopes = null): \Illuminate\Database\Eloquent\Builder
+    {
+        return static::query();
+    }
+PHP,
+            'find' => <<<'PHP'
+
+    public static function find(mixed $id, array|string $columns = ['*']): mixed
+    {
+        return null;
+    }
+PHP,
+            'findorfail' => <<<'PHP'
+
+    public static function findOrFail(mixed $id, array|string $columns = ['*']): mixed
+    {
+        return new static;
+    }
+PHP,
+        ];
+
+        $insertions = [];
+
+        foreach ($methods as $method => $declaration) {
+            if (! isset($defined[$method])) {
+                $insertions[] = $declaration;
+            }
+        }
+
+        if ($insertions === []) {
+            return $source;
+        }
+
+        return $this->insertBeforeFinalClassBrace($source, implode(PHP_EOL, $insertions) . PHP_EOL);
     }
 
     /**
@@ -2844,10 +3302,10 @@ PHP;
             ' * @method static \\Illuminate\\Database\\Eloquent\\Builder<static> orHaving(string $column, ?string $operator = null, mixed $value = null)',
             ' * @method static \\Illuminate\\Database\\Eloquent\\Builder<static> with(array|string ...$relations)',
             ' * @method static \\Illuminate\\Database\\Eloquent\\Builder<static> withCount(array|string $relations)',
-            ' * @method static \\Illuminate\\Database\\Eloquent\\Builder<static> select(array|string ...$columns)',
+            ' * @method static \\Illuminate\\Database\\Eloquent\\Builder<static> select(mixed ...$columns)',
             ' * @method static \\Illuminate\\Database\\Eloquent\\Builder<static> selectRaw(string $expression, array $bindings = [])',
             ' * @method static \\Illuminate\\Database\\Eloquent\\Builder<static> selectraw(string $expression, array $bindings = [])',
-            ' * @method static \\Illuminate\\Database\\Eloquent\\Builder<static> orderBy(string $column, string $direction = "asc")',
+            ' * @method static \\Illuminate\\Database\\Eloquent\\Builder<static> orderBy(mixed $column, mixed $direction = "asc")',
             ' * @method static \\Illuminate\\Database\\Eloquent\\Builder<static> orderByRaw(string $sql, array $bindings = [])',
             ' * @method static \\Illuminate\\Database\\Eloquent\\Builder<static> latest(string|null $column = null)',
             ' * @method static \\Illuminate\\Database\\Eloquent\\Builder<static> oldest(string|null $column = null)',

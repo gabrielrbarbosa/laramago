@@ -68,6 +68,8 @@ testProjectLockSerializesCacheCommands($project, $binary);
 testProjectClassDiscoveryUsesConfiguredSourcePaths($project, $root);
 testAnalysisIgnoresStaleRuntimeBaseline($project, $root);
 testPhpStanPragmaOverlayGeneration($project, $root);
+testLaravelDateHelperOverlayGeneration($project, $root);
+testLaravelCollectionMacroOverlayGeneration($project, $root);
 testCaseInsensitiveOverlaySkipsSingleAliasFiles($project, $root);
 testCaseInsensitiveOverlayRespectsExcludes($project, $root);
 testTraitSelfCallOverlayGeneration($project, $root);
@@ -697,6 +699,113 @@ PHP);
     }
 }
 
+function testLaravelDateHelperOverlayGeneration(string $project, string $root): void
+{
+    require_once $root . '/src/Application.php';
+
+    file_put_contents($project . '/app/UsesDateHelpers.php', <<<'PHP'
+<?php
+
+namespace App;
+
+final class UsesDateHelpers
+{
+    public function handle(): mixed
+    {
+        $now = now()->subDays(1);
+        $today = today();
+        $response = response(['ok' => true], 202)->withHeaders(['X-Test' => '1']);
+        $factory = response()->json(['ok' => true]);
+        $method = $this->now();
+        $static = self::today();
+
+        return [$now, $today, $response, $factory, $method, $static];
+    }
+
+    private function now(): mixed
+    {
+        return null;
+    }
+
+    private static function today(): mixed
+    {
+        return null;
+    }
+}
+PHP);
+
+    $application = new Laramago\Application();
+    $method = new ReflectionMethod($application, 'phpStanPragmaSubstitutions');
+    $method->invoke($application, $project, [], []);
+
+    $map = json_decode((string) file_get_contents($project . '/.laramago/cache/phpstan-pragma-overlays.json'), true);
+
+    foreach (is_array($map) ? $map : [] as $entry) {
+        if (($entry['original'] ?? null) !== 'app/UsesDateHelpers.php' || ! is_string($entry['overlay'] ?? null)) {
+            continue;
+        }
+
+        $overlay = file_get_contents($project . '/' . $entry['overlay']);
+
+        if (is_string($overlay)
+            && str_contains($overlay, '\\Illuminate\\Support\\Carbon::now()->subDays(1)')
+            && str_contains($overlay, '\\Illuminate\\Support\\Carbon::today()')
+            && str_contains($overlay, '\\Illuminate\\Support\\Facades\\Response::make([\'ok\' => true], 202)->withHeaders')
+            && str_contains($overlay, 'response()->json([\'ok\' => true])')
+            && str_contains($overlay, '$this->now()')
+            && str_contains($overlay, 'self::today()')) {
+            return;
+        }
+    }
+
+    fail('Laravel date helper overlay did not rewrite global helper calls safely');
+}
+
+function testLaravelCollectionMacroOverlayGeneration(string $project, string $root): void
+{
+    require_once $root . '/src/Application.php';
+
+    file_put_contents($project . '/app/DefinesCollectionMacro.php', <<<'PHP'
+<?php
+
+namespace App;
+
+use Illuminate\Support\Collection;
+
+final class DefinesCollectionMacro
+{
+    public function boot(): void
+    {
+        Collection::macro('paginate', function ($perPage): mixed {
+            return $this->forPage(1, $perPage)->values();
+        });
+    }
+}
+PHP);
+
+    $application = new Laramago\Application();
+    $method = new ReflectionMethod($application, 'phpStanPragmaSubstitutions');
+    $method->invoke($application, $project, [], []);
+
+    $map = json_decode((string) file_get_contents($project . '/.laramago/cache/phpstan-pragma-overlays.json'), true);
+
+    foreach (is_array($map) ? $map : [] as $entry) {
+        if (($entry['original'] ?? null) !== 'app/DefinesCollectionMacro.php' || ! is_string($entry['overlay'] ?? null)) {
+            continue;
+        }
+
+        $overlay = file_get_contents($project . '/' . $entry['overlay']);
+
+        if (is_string($overlay)
+            && str_contains($overlay, '/** @var \Illuminate\Support\Collection $this */')
+            && str_contains($overlay, '$this->forPage(1, $perPage)->values()')) {
+            return;
+        }
+    }
+
+    fail('Laravel collection macro overlay did not annotate closure $this safely');
+}
+
 function testCaseInsensitiveOverlaySkipsSingleAliasFiles(string $project, string $root): void
 {
     require_once $root . '/src/Application.php';
@@ -996,8 +1105,8 @@ PHP;
         '@method static \\Illuminate\\Database\\Eloquent\\Builder<static> groupBy(array|string ...$groups)',
         '@method static \\Illuminate\\Database\\Eloquent\\Builder<static> with(array|string ...$relations)',
         '@method static \\Illuminate\\Database\\Eloquent\\Builder<static> withCount(array|string $relations)',
-        '@method static \\Illuminate\\Database\\Eloquent\\Builder<static> select(array|string ...$columns)',
-        '@method static \\Illuminate\\Database\\Eloquent\\Builder<static> orderBy(string $column, string $direction = "asc")',
+        '@method static \\Illuminate\\Database\\Eloquent\\Builder<static> select(mixed ...$columns)',
+        '@method static \\Illuminate\\Database\\Eloquent\\Builder<static> orderBy(mixed $column, mixed $direction = "asc")',
         '@method static self create(array $attributes = null)',
         '@method static static|null first(array|string $columns = ["*"])',
         '@method static self firstOrFail(array|string $columns = ["*"])',
@@ -1012,6 +1121,9 @@ PHP;
         '@method static \\Illuminate\\Database\\Eloquent\\Builder<static> active(bool $onlyVisible = null)',
         '@mixin \\Illuminate\\Database\\Eloquent\\Builder<Product>',
         '@method static \\Illuminate\\Database\\Eloquent\\Builder<Product> visible()',
+        'public static function where(mixed $column, mixed $operator = null, mixed $value = null, string $boolean = \'and\')',
+        'public static function select(mixed ...$columns)',
+        'public static function withoutglobalscopes(?array $scopes = null)',
     ] as $expected) {
         if (! str_contains($overlay, $expected)) {
             fail('model docblock overlay missed expected Laravel magic: ' . $expected);
@@ -1043,9 +1155,13 @@ function testLaravelFrameworkOverlayGeneration(string $project, string $root): v
     mkdir($project . '/vendor/laravel/framework/src/Illuminate/Database/Query', 0777, true);
     mkdir($project . '/vendor/laravel/framework/src/Illuminate/Auth', 0777, true);
     mkdir($project . '/vendor/laravel/framework/src/Illuminate/Contracts/Auth', 0777, true);
+    mkdir($project . '/vendor/laravel/framework/src/Illuminate/Contracts/Foundation', 0777, true);
     mkdir($project . '/vendor/laravel/framework/src/Illuminate/Foundation', 0777, true);
+    mkdir($project . '/vendor/laravel/framework/src/Illuminate/Notifications', 0777, true);
     mkdir($project . '/vendor/laravel/framework/src/Illuminate/Routing', 0777, true);
     mkdir($project . '/vendor/laravel/framework/src/Illuminate/Support/Facades', 0777, true);
+    mkdir($project . '/vendor/laravel/socialite/src/Contracts', 0777, true);
+    mkdir($project . '/vendor/nesbot/carbon/src/Carbon', 0777, true);
 
     file_put_contents($project . '/config/auth.php', <<<'PHP'
 <?php
@@ -1077,6 +1193,16 @@ class AuthManager
 PHP);
 
     file_put_contents($project . '/vendor/laravel/framework/src/Illuminate/Support/Facades/Auth.php', '<?php');
+
+    file_put_contents($project . '/vendor/laravel/framework/src/Illuminate/Contracts/Foundation/Application.php', <<<'PHP'
+<?php
+
+namespace Illuminate\Contracts\Foundation;
+
+interface Application
+{
+}
+PHP);
 
     file_put_contents($project . '/vendor/laravel/framework/src/Illuminate/Foundation/helpers.php', <<<'PHP'
 <?php
@@ -1131,6 +1257,63 @@ PHP);
 namespace Illuminate\Support;
 
 class Carbon extends \Carbon\Carbon
+{
+}
+PHP);
+
+    file_put_contents($project . '/vendor/laravel/framework/src/Illuminate/Notifications/Notification.php', <<<'PHP'
+<?php
+
+namespace Illuminate\Notifications;
+
+class Notification
+{
+}
+PHP);
+
+    file_put_contents($project . '/app/UsesNotificationChannel.php', <<<'PHP'
+<?php
+
+namespace App;
+
+use Illuminate\Notifications\Notification;
+
+final class UsesNotificationChannel
+{
+    public function send(Notification $notification): mixed
+    {
+        return [$notification->toWhatsapp($this), $notification->sendType];
+    }
+}
+PHP);
+
+    file_put_contents($project . '/vendor/laravel/socialite/src/Contracts/Provider.php', <<<'PHP'
+<?php
+
+namespace Laravel\Socialite\Contracts;
+
+interface Provider
+{
+    public function redirect();
+}
+PHP);
+
+    file_put_contents($project . '/vendor/nesbot/carbon/src/Carbon/Carbon.php', <<<'PHP'
+<?php
+
+namespace Carbon;
+
+class Carbon extends \DateTime
+{
+}
+PHP);
+
+    file_put_contents($project . '/vendor/nesbot/carbon/src/Carbon/CarbonImmutable.php', <<<'PHP'
+<?php
+
+namespace Carbon;
+
+class CarbonImmutable extends \DateTimeImmutable
 {
 }
 PHP);
@@ -1236,16 +1419,20 @@ PHP);
     $method = new ReflectionMethod($application, 'laravelFrameworkSubstitutions');
     $substitutions = $method->invoke($application, $project, []);
 
-    if (! is_array($substitutions) || count($substitutions) !== 28) {
+    if (! is_array($substitutions) || count($substitutions) !== 38) {
         fail('framework overlay generation returned unexpected substitutions');
     }
 
     $guardOverlay = file_get_contents($project . '/.laramago/cache/framework-overlays/Guard.php');
     $authManagerOverlay = file_get_contents($project . '/.laramago/cache/framework-overlays/AuthManager.php');
     $authOverlay = file_get_contents($project . '/.laramago/cache/framework-overlays/Auth.php');
+    $applicationContractOverlay = file_get_contents($project . '/.laramago/cache/framework-overlays/ApplicationContract.php');
     $httpOverlay = file_get_contents($project . '/.laramago/cache/framework-overlays/Http.php');
     $supportCarbonOverlay = file_get_contents($project . '/.laramago/cache/framework-overlays/SupportCarbon.php');
+    $baseCarbonOverlay = file_get_contents($project . '/.laramago/cache/framework-overlays/BaseCarbon.php');
+    $baseCarbonImmutableOverlay = file_get_contents($project . '/.laramago/cache/framework-overlays/BaseCarbonImmutable.php');
     $foundationHelpersOverlay = file_get_contents($project . '/.laramago/cache/framework-overlays/FoundationHelpers.php');
+    $notificationOverlay = file_get_contents($project . '/.laramago/cache/framework-overlays/Notification.php');
     $eloquentBuilderOverlay = file_get_contents($project . '/.laramago/cache/framework-overlays/Builder.php');
     $eloquentModelOverlay = file_get_contents($project . '/.laramago/cache/framework-overlays/EloquentModel.php');
     $hasAttributesOverlay = file_get_contents($project . '/.laramago/cache/framework-overlays/HasAttributes.php');
@@ -1254,6 +1441,7 @@ PHP);
     $hasFactoryOverlay = file_get_contents($project . '/.laramago/cache/framework-overlays/HasFactory.php');
     $scopeOverlay = file_get_contents($project . '/.laramago/cache/framework-overlays/Scope.php');
     $fromCollectionOverlay = file_get_contents($project . '/.laramago/cache/framework-overlays/FromCollection.php');
+    $socialiteProviderOverlay = file_get_contents($project . '/.laramago/cache/framework-overlays/SocialiteProvider.php');
 
     if (! is_string($guardOverlay) || ! str_contains($guardOverlay, '@return \\App\\Models\\Usuario\\Usuario|null')) {
         fail('guard overlay did not use the configured auth model');
@@ -1275,20 +1463,40 @@ PHP);
         fail('HTTP facade overlay did not expose synchronous response return types');
     }
 
+    if (! is_string($applicationContractOverlay) || ! str_contains($applicationContractOverlay, 'public function isProduction(): bool;')) {
+        fail('application contract overlay did not expose production environment helper');
+    }
+
     if (! is_string($supportCarbonOverlay) || ! str_contains($supportCarbonOverlay, '@method float diffinseconds(') || ! str_contains($supportCarbonOverlay, '@method $this startofmonth(')) {
         fail('support Carbon overlay did not expose lowercase Carbon method aliases');
+    }
+
+    if (! is_string($baseCarbonOverlay) || ! str_contains($baseCarbonOverlay, '@method static \\Carbon\\Carbon parse(') || ! str_contains($baseCarbonOverlay, '@method $this subdays(')) {
+        fail('base Carbon overlay did not expose lowercase Carbon method aliases');
+    }
+
+    if (! is_string($baseCarbonImmutableOverlay) || ! str_contains($baseCarbonImmutableOverlay, '@method static \\Carbon\\CarbonImmutable parse(') || ! str_contains($baseCarbonImmutableOverlay, '@method $this subdays(')) {
+        fail('base Carbon immutable overlay did not expose lowercase Carbon method aliases');
+    }
+
+    if (! is_string($notificationOverlay) || ! str_contains($notificationOverlay, 'public function towhatsapp(mixed ...$arguments): mixed {}') || str_contains($notificationOverlay, 'public mixed $sendType;')) {
+        fail('notification overlay did not expose project custom channel members');
+    }
+
+    if (! is_string($socialiteProviderOverlay) || ! str_contains($socialiteProviderOverlay, 'public function with(array $parameters): static;') || ! str_contains($socialiteProviderOverlay, 'public function scopes(array $scopes): static;')) {
+        fail('Socialite provider overlay did not expose fluent provider methods');
     }
 
     if (str_contains($authOverlay, 'Laravel\\Ui\\UiServiceProvider')) {
         fail('auth facade overlay leaked optional vendor implementation details');
     }
 
-    if (! is_string($eloquentBuilderOverlay) || ! str_contains($eloquentBuilderOverlay, '@method $this leftJoin(') || ! str_contains($eloquentBuilderOverlay, '@method $this select(array|string ...$columns)') || ! str_contains($eloquentBuilderOverlay, '@method $this withoutglobalscopes(') || ! str_contains($eloquentBuilderOverlay, '@mixin \\Illuminate\\Database\\Query\\Builder')) {
+    if (! is_string($eloquentBuilderOverlay) || ! str_contains($eloquentBuilderOverlay, '@method $this leftJoin(') || ! str_contains($eloquentBuilderOverlay, '@method $this select(mixed ...$columns)') || ! str_contains($eloquentBuilderOverlay, '@method $this withoutglobalscopes(') || ! str_contains($eloquentBuilderOverlay, '@mixin \\Illuminate\\Database\\Query\\Builder')) {
         fail('Eloquent builder overlay did not preserve source and add delegated chain methods');
     }
 
-    if (! is_string($eloquentModelOverlay) || ! str_contains($eloquentModelOverlay, 'public function loadMissing($relations, ...$additionalRelations)') || ! str_contains($eloquentModelOverlay, 'public static function withoutGlobalScopes(?array $scopes = null)')) {
-        fail('Eloquent model overlay did not expose variadic relation loaders');
+    if (! is_string($eloquentModelOverlay) || ! str_contains($eloquentModelOverlay, 'public function loadMissing($relations, ...$additionalRelations)') || ! str_contains($eloquentModelOverlay, 'public static function withoutGlobalScopes(?array $scopes = null)') || ! str_contains($eloquentModelOverlay, 'public static function where(mixed $column, mixed $operator = null, mixed $value = null, string $boolean = \'and\')') || ! str_contains($eloquentModelOverlay, 'public static function select(mixed ...$columns)')) {
+        fail('Eloquent model overlay did not expose dynamic static builder delegation');
     }
 
     if (! is_string($hasAttributesOverlay) || ! str_contains($hasAttributesOverlay, 'public function only($attributes, ...$additionalAttributes)') || ! str_contains($hasAttributesOverlay, 'public function except($attributes, ...$additionalAttributes)')) {
