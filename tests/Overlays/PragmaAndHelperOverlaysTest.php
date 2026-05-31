@@ -212,6 +212,7 @@ final class UsesInternalFunctions
         $color = imagecolorallocate($model->image, 255, 255, 255);
         $terms = preg_split('/\s+/', $model->search);
         $leaderboard = $model->redis->zrevrange('leaders', 0, -1, ['withscores' => true]);
+        $clean = str_replace(['a'], '', $model->name);
         \Illuminate\Support\Facades\Storage::disk('local')->put($model->path, json_encode($model->payload));
         $storedImage = \Illuminate\Support\Facades\Storage::disk('r2')->get(strstr($model->path, '/img'));
         $encoding = mb_convert_encoding($model->body, 'UTF-8', mb_detect_encoding($model->body));
@@ -229,12 +230,33 @@ final class UsesInternalFunctions
             )
         );
 
-        return [$year, $decoded, $body, $id, $exif, $name, $parts, $count, $filled, $decodedAgain, $decodedWrapped, $payloadDigest, $message, $image, $encodedFile, $digest, $suffixFromPath, $suffix, $blob, $inflated, $decrypted, $color, $terms, $leaderboard, $storedImage, $encoding, $next];
+        return [$year, $decoded, $body, $id, $exif, $name, $parts, $count, $filled, $decodedAgain, $decodedWrapped, $payloadDigest, $message, $image, $encodedFile, $digest, $suffixFromPath, $suffix, $blob, $inflated, $decrypted, $color, $terms, $leaderboard, $clean, $storedImage, $encoding, $next];
     }
 
     public function normalize(string $value): string
     {
         return preg_replace('/[^a-z]/', '', iconv('UTF-8', 'ASCII//TRANSLIT', $value));
+    }
+
+    public function clamp(object $model): int
+    {
+        return min($model->limit, 50);
+    }
+
+    public function remove(object $model): bool
+    {
+        return $model->delete();
+    }
+
+    public function xml(string $value): \SimpleXMLElement
+    {
+        $xml = simplexml_load_string($value);
+
+        if ($errors = libxml_get_errors()) {
+            throw new \RuntimeException((string) $errors[0]->message);
+        }
+
+        return $xml;
     }
 }
 PHP);
@@ -278,8 +300,12 @@ PHP);
             && str_contains($overlay, '$color = (int) imagecolorallocate($model->image, 255, 255, 255)')
             && str_contains($overlay, "\$terms = (preg_split('/\\s+/', \$model->search) ?: [])")
             && str_contains($overlay, "\$leaderboard = \$model->redis->zrevrange('leaders', 0, -1, ['withscores' => true]) ?: []")
+            && str_contains($overlay, '$clean = (string) str_replace([\'a\'], \'\', $model->name)')
+            && str_contains($overlay, 'return (int) min($model->limit, 50)')
+            && str_contains($overlay, 'return (bool) $model->delete();')
             && str_contains($overlay, '// @mago-ignore analysis:null-operand analysis:false-operand' . PHP_EOL . '        if ($model->deleted_at === null) {')
             && str_contains($overlay, '// @mago-ignore analysis:null-operand analysis:false-operand' . PHP_EOL . '        if ($model->offset !== false) {')
+            && str_contains($overlay, '// @mago-ignore analysis:falsable-return-statement analysis:invalid-return-statement' . PHP_EOL . '        return $xml;')
             && str_contains($overlay, "\\Illuminate\\Support\\Facades\\Storage::disk('local')->put(\$model->path, (string) json_encode(\$model->payload))")
             && str_contains($overlay, "\\Illuminate\\Support\\Facades\\Storage::disk('r2')->get((string) strstr(\$model->path, '/img'))")
             && str_contains($overlay, "\$encoding = (string) mb_convert_encoding(\$model->body, 'UTF-8', (string) mb_detect_encoding(\$model->body))")
@@ -759,6 +785,18 @@ final class UsesNumericFallbacks
 
         return $subtotal - $discount;
     }
+
+    public function reduced(object $rows): int|float
+    {
+        $totals = $rows->reduce(function ($carry, $row) {
+            $carry->amount += $row->amount;
+            $carry->discount += $row->discount;
+
+            return $carry;
+        }, (object)['amount' => 0, 'discount' => 0.0]);
+
+        return $totals->amount - $totals->discount;
+    }
 }
 PHP);
 
@@ -778,6 +816,7 @@ PHP);
         if (is_string($overlay)
             && str_contains($overlay, '/** @var int|float $subtotal */')
             && str_contains($overlay, '/** @var int|float $discount */')
+            && str_contains($overlay, '/** @var object{amount: int|float, discount: int|float} $totals */')
             && str_contains($overlay, '// @mago-ignore analysis:invalid-property-access' . PHP_EOL . '        $name = $row->profile->name ?? \'-\';')
             && str_contains($overlay, '// @mago-ignore analysis:dynamic-static-method-call' . PHP_EOL . '        $config = $row->model->first();')) {
             return;

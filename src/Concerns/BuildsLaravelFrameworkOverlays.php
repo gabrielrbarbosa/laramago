@@ -1217,6 +1217,12 @@ PHP);
             $source,
         );
 
+        $source = preg_replace(
+            '/(\*\s+Retrieve the sum of the values of a given column\.[\s\S]*?@return\s+)mixed(\s+\*\/\s+public function sum\()/',
+            '$1int|float$2',
+            $source,
+        ) ?? $source;
+
         if (! str_contains($source, 'function first(')) {
             $source = $this->insertBeforeFinalClassBrace($source, <<<'PHP'
 

@@ -831,6 +831,16 @@ class Builder
     public function simplePaginate($perPage = 15, $columns = ['*'], $pageName = 'page', $page = null)
     {
     }
+
+    /**
+     * Retrieve the sum of the values of a given column.
+     *
+     * @param  \Illuminate\Contracts\Database\Query\Expression|string  $column
+     * @return mixed
+     */
+    public function sum($column)
+    {
+    }
 }
 PHP);
 
@@ -1127,7 +1137,7 @@ PHP);
         fail('HasAttributes overlay did not expose variadic attribute selectors');
     }
 
-    if (! is_string($queryBuilderOverlay) || ! str_contains($queryBuilderOverlay, 'public function select($columns = [\'*\'], ...$additionalColumns)') || ! str_contains($queryBuilderOverlay, 'public function addSelect($column, ...$additionalColumns)') || ! str_contains($queryBuilderOverlay, 'public function distinct(...$columns)') || ! str_contains($queryBuilderOverlay, '@param  SortDirection|string  $direction') || ! str_contains($queryBuilderOverlay, '@param  int|string|null  $value') || ! str_contains($queryBuilderOverlay, '@param  \\Illuminate\\Contracts\\Database\\Query\\Expression|string  $sql') || ! str_contains($queryBuilderOverlay, '@return \\Illuminate\\Pagination\\LengthAwarePaginator<array-key, mixed>') || ! str_contains($queryBuilderOverlay, '@return \\Illuminate\\Contracts\\Pagination\\Paginator<array-key, mixed>') || ! str_contains($queryBuilderOverlay, 'public function first($columns = [\'*\']): ?\\stdClass') || ! str_contains($queryBuilderOverlay, 'public function firstOrFail($columns = [\'*\'], $message = null): \\stdClass') || ! str_contains($queryBuilderOverlay, '@method $this selectRaw(mixed $expression, array $bindings = [])') || ! str_contains($queryBuilderOverlay, '@method $this whereintegernotinraw(')) {
+    if (! is_string($queryBuilderOverlay) || ! str_contains($queryBuilderOverlay, 'public function select($columns = [\'*\'], ...$additionalColumns)') || ! str_contains($queryBuilderOverlay, 'public function addSelect($column, ...$additionalColumns)') || ! str_contains($queryBuilderOverlay, 'public function distinct(...$columns)') || ! str_contains($queryBuilderOverlay, '@param  SortDirection|string  $direction') || ! str_contains($queryBuilderOverlay, '@param  int|string|null  $value') || ! str_contains($queryBuilderOverlay, '@param  \\Illuminate\\Contracts\\Database\\Query\\Expression|string  $sql') || ! str_contains($queryBuilderOverlay, '@return \\Illuminate\\Pagination\\LengthAwarePaginator<array-key, mixed>') || ! str_contains($queryBuilderOverlay, '@return \\Illuminate\\Contracts\\Pagination\\Paginator<array-key, mixed>') || ! str_contains($queryBuilderOverlay, 'public function first($columns = [\'*\']): ?\\stdClass') || ! str_contains($queryBuilderOverlay, 'public function firstOrFail($columns = [\'*\'], $message = null): \\stdClass') || ! str_contains($queryBuilderOverlay, '@return int|float') || ! str_contains($queryBuilderOverlay, '@method $this selectRaw(mixed $expression, array $bindings = [])') || ! str_contains($queryBuilderOverlay, '@method $this whereintegernotinraw(')) {
         fail('query builder overlay did not expose variadic column selectors');
     }
 

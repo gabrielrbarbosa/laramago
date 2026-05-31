@@ -83,7 +83,9 @@ trait BuildsSourceCompatibilityOverlays
         $translated = $this->rewriteCarbonInstanceStaticCalls($translated);
         $translated = $this->normalizeStringableInternalFunctionArguments($translated);
         $translated = $this->normalizeFalseReturningInternalFunctionResults($translated);
+        $translated = $this->normalizePhpStanScalarReturnCompatibility($translated);
         $translated = $this->ignoreFalseReturningInternalFunctionPipelines($translated);
+        $translated = $this->ignoreGuardedSimpleXmlFalseReturns($translated);
         $translated = $this->ignorePhpStanAcceptedNullAndFalseComparisons($translated);
         $translated = $this->rewriteLaravelHttpClientWrapperReturnTypes($translated);
         $translated = $this->annotateLaravelHttpClientWrapperAssignments($translated, $projectRoot);
@@ -97,6 +99,7 @@ trait BuildsSourceCompatibilityOverlays
         $translated = $this->annotateLaravelJoinClauseClosures($translated);
         $translated = $this->annotateLaravelForeachObjectRows($translated);
         $translated = $this->annotateLaravelNumericFallbackAssignments($translated);
+        $translated = $this->annotateLaravelReduceObjectAccumulators($translated);
         $translated = $this->annotateLaravelRequestParameters($translated);
         $translated = $this->rewriteLaravelRequestPropertyReads($translated, $projectRoot);
         $translated = $this->castLaravelRequestForeachSources($translated);
@@ -764,6 +767,86 @@ trait BuildsSourceCompatibilityOverlays
         }
 
         return str_contains($line, 'preg_replace(') && (str_contains($line, 'iconv(') || str_contains($line, 'mb_convert_encoding('));
+    }
+
+    private function normalizePhpStanScalarReturnCompatibility(string $source): string
+    {
+        if (
+            ! str_contains($source, 'min(')
+            && ! str_contains($source, '->delete(')
+            && ! str_contains($source, 'str_replace(')
+        ) {
+            return $source;
+        }
+
+        $translated = preg_replace(
+            '/(\breturn\s+)(?!\(int\)\s*)min\(/',
+            '$1(int) min(',
+            $source,
+        ) ?? $source;
+
+        $translated = preg_replace(
+            '/(\breturn\s+)(?!\(bool\)\s*)([^;\r\n]+->delete\(\)\s*;)/',
+            '$1(bool) $2',
+            $translated,
+        ) ?? $translated;
+
+        $translated = preg_replace(
+            '/(\breturn\s+)(?!\(string\)\s*)str_replace\(/',
+            '$1(string) str_replace(',
+            $translated,
+        ) ?? $translated;
+
+        $translated = preg_replace(
+            '/(=\s*)(?!\(string\)\s*)str_replace\(/',
+            '$1(string) str_replace(',
+            $translated,
+        ) ?? $translated;
+
+        return $translated;
+    }
+
+    private function ignoreGuardedSimpleXmlFalseReturns(string $source): string
+    {
+        if (! str_contains($source, 'simplexml_load_string(') || ! str_contains($source, 'return $')) {
+            return $source;
+        }
+
+        $simpleXmlVariables = [];
+
+        if (preg_match_all('/\$([A-Za-z_][A-Za-z0-9_]*)\s*=\s*simplexml_load_string\(/', $source, $matches) >= 1) {
+            $simpleXmlVariables = array_fill_keys($matches[1], true);
+        }
+
+        if ($simpleXmlVariables === []) {
+            return $source;
+        }
+
+        $lines = preg_split('/(\R)/', $source, -1, PREG_SPLIT_DELIM_CAPTURE);
+
+        if (! is_array($lines)) {
+            return $source;
+        }
+
+        $translated = '';
+
+        for ($index = 0; $index < count($lines); $index += 2) {
+            $line = (string) $lines[$index];
+            $lineEnding = (string) ($lines[$index + 1] ?? '');
+
+            if (
+                preg_match('/^\s*return\s+\$([A-Za-z_][A-Za-z0-9_]*)\s*;/', $line, $matches) === 1
+                && isset($simpleXmlVariables[$matches[1]])
+                && ! str_contains($line, '@mago-ignore')
+            ) {
+                preg_match('/^\s*/', $line, $indentMatches);
+                $translated .= ($indentMatches[0] ?? '') . '// @mago-ignore analysis:falsable-return-statement analysis:invalid-return-statement' . $lineEnding;
+            }
+
+            $translated .= $line . $lineEnding;
+        }
+
+        return $translated;
     }
 
     private function ignorePhpStanAcceptedNullAndFalseComparisons(string $source): string
@@ -1480,6 +1563,41 @@ trait BuildsSourceCompatibilityOverlays
                 }
 
                 return $matches[1] . '/** @var int|float $' . $variable . ' */' . PHP_EOL . $matches[0];
+            },
+            $source,
+        );
+
+        return is_string($translated) ? $translated : $source;
+    }
+
+    private function annotateLaravelReduceObjectAccumulators(string $source): string
+    {
+        if (! str_contains($source, '->reduce(') || ! str_contains($source, '(object)[')) {
+            return $source;
+        }
+
+        $translated = preg_replace_callback(
+            '/^([ \t]*)(\$([A-Za-z_][A-Za-z0-9_]*)\s*=\s*[^\r\n;]*->reduce\([\s\S]*?\(object\)\s*\[([^\]]+)\]\s*\);)/m',
+            static function (array $matches) use ($source): string {
+                $variable = $matches[3];
+                $initializer = $matches[4];
+                preg_match_all('/[\'"]([A-Za-z_][A-Za-z0-9_]*)[\'"]\s*=>\s*0(?:\.0)?/', $initializer, $propertyMatches);
+
+                $properties = array_values(array_unique($propertyMatches[1] ?? []));
+
+                if ($properties === []) {
+                    return $matches[0];
+                }
+
+                $prefix = substr($source, max(0, (int) strpos($source, $matches[0]) - 120), 120);
+
+                if (preg_match('/@var\s+object\{[^}]*}\s+\$' . preg_quote($variable, '/') . '\b/', $prefix) === 1) {
+                    return $matches[0];
+                }
+
+                $shape = implode(', ', array_map(static fn (string $property): string => $property . ': int|float', $properties));
+
+                return $matches[1] . '/** @var object{' . $shape . '} $' . $variable . ' */' . PHP_EOL . $matches[0];
             },
             $source,
         );
