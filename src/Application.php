@@ -6,7 +6,7 @@ namespace Laramago;
 
 final class Application
 {
-    private const VERSION = '0.1.43';
+    private const VERSION = '0.1.44';
 
     private const CONFIG_FILE = 'mago.toml';
 
@@ -2460,7 +2460,7 @@ PHP;
                 $translated = $this->translatePhpStanPragmas($source);
                 $translated = $this->translateLaravelDateHelperCalls($translated);
                 $translated = $this->annotateLaravelCollectionMacroClosures($translated);
-                $translated = $this->rewriteLaravelRequestPropertyReads($translated);
+                $translated = $this->rewriteLaravelRequestPropertyReads($translated, $projectRoot);
                 $translated = $this->annotateLaravelJsonResourceDynamicMembers($translated, $relativePath);
                 $translated = $this->annotateLaravelFormRequestDynamicProperties($translated, $relativePath, $projectRoot);
                 $minimumAliases = $translated === $source ? 2 : 1;
@@ -2714,7 +2714,7 @@ PHP;
         return is_string($translated) ? $translated : $source;
     }
 
-    private function rewriteLaravelRequestPropertyReads(string $source): string
+    private function rewriteLaravelRequestPropertyReads(string $source, string $projectRoot): string
     {
         $lines = preg_split('/(\R)/', $source, -1, PREG_SPLIT_DELIM_CAPTURE);
 
@@ -2723,6 +2723,7 @@ PHP;
         }
 
         $translated = '';
+        $requestProperties = $this->requestTypedProperties($projectRoot, $source);
 
         for ($index = 0; $index < count($lines); $index += 2) {
             $line = (string) $lines[$index];
@@ -2739,12 +2740,103 @@ PHP;
                     static fn (array $matches): string => '$this->request->input(\'' . $matches[1] . '\')',
                     $line,
                 ) ?? $line;
+
+                foreach (array_keys($requestProperties) as $property) {
+                    $line = preg_replace_callback(
+                        '/\$this\s*->\s*' . preg_quote($property, '/') . '\s*->\s*([A-Za-z_][A-Za-z0-9_]*)\b(?!\s*(?:\(|=|\+=|-=|\*=|\/=|%=|\.=|\?\?=|\+\+|--))/',
+                        static fn (array $matches): string => '$this->' . $property . '->input(\'' . $matches[1] . '\')',
+                        $line,
+                    ) ?? $line;
+                }
             }
 
             $translated .= $line . $lineEnding;
         }
 
         return $translated;
+    }
+
+    /**
+     * @return array<string, true>
+     */
+    private function requestTypedProperties(string $projectRoot, string $source): array
+    {
+        return $this->sourceRequestTypedProperties($source) + $this->usedTraitRequestTypedProperties($projectRoot, $source);
+    }
+
+    /**
+     * @return array<string, true>
+     */
+    private function sourceRequestTypedProperties(string $source): array
+    {
+        $properties = [];
+
+        $patterns = [
+            '/(?:public|protected|private)\s+(?:readonly\s+)?\??([\\\\A-Za-z_][\\\\A-Za-z0-9_]*)\s+\$([A-Za-z_][A-Za-z0-9_]*)/m',
+            '/(?:public|protected|private)\s+(?:readonly\s+)?\??([\\\\A-Za-z_][\\\\A-Za-z0-9_]*)\s+\&?\s*\$([A-Za-z_][A-Za-z0-9_]*)/m',
+        ];
+
+        foreach ($patterns as $pattern) {
+            if (preg_match_all($pattern, $source, $matches, PREG_SET_ORDER) === false) {
+                continue;
+            }
+
+            foreach ($matches as $match) {
+                $type = strtolower(ltrim($match[1], '\\'));
+
+                if ($type === 'request' || str_ends_with($type, '\\request')) {
+                    $properties[$match[2]] = true;
+                }
+            }
+        }
+
+        return $properties;
+    }
+
+    /**
+     * @return array<string, true>
+     */
+    private function usedTraitRequestTypedProperties(string $projectRoot, string $source): array
+    {
+        if (preg_match_all('/^[ \t]+use\s+([^;]+);/m', $source, $matches) === 0) {
+            return [];
+        }
+
+        $properties = [];
+
+        foreach ($matches[1] as $declaration) {
+            foreach (explode(',', $declaration) as $trait) {
+                $trait = trim(preg_replace('/\s+as\s+.*$/i', '', $trait) ?? $trait);
+
+                if ($trait === '') {
+                    continue;
+                }
+
+                $class = str_contains($trait, '\\')
+                    ? ltrim($trait, '\\')
+                    : ($this->importedClassName($source, $trait) ?? $this->namespacedClassName($source, $trait));
+
+                if ($class === null) {
+                    continue;
+                }
+
+                $path = $this->projectClassPath($projectRoot, $class);
+
+                if ($path === null || ! is_file($path)) {
+                    continue;
+                }
+
+                $traitSource = file_get_contents($path);
+
+                if (! is_string($traitSource)) {
+                    continue;
+                }
+
+                $properties += $this->sourceRequestTypedProperties($traitSource);
+            }
+        }
+
+        return $properties;
     }
 
     private function annotateLaravelJsonResourceDynamicMembers(string $source, string $relativePath): string

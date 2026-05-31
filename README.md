@@ -115,6 +115,8 @@ Generated overlays currently add:
 - auth helper, guard, manager, and facade return types for the configured Laravel user model;
 - Composer autoload and autoload-dev type discovery for application namespaces that live outside the analyzed source paths;
 - excluded-path symbol discovery so `exclude` can omit legacy code from analysis without turning referenced classes into false missing-class errors;
+- Laravel request input compatibility for dynamic `$request->field`, `$this->request->field`, and trait-provided Request properties used by pagination/filtering helpers;
+- Laravel JSON resource delegated property and method metadata for normal `$this->field` / `$this->relation()` resource transformations;
 - PHPStan suppression pragma compatibility for `@phpstan-ignore`, `@phpstan-ignore-next-line`, and `@phpstan-ignore-line` comments through generated temporary overlays;
 - path-scoped suppression of unused generated Mago pragmas inside overlays, so PHPStan compatibility comments do not create new analyzer noise after Laramago resolves the original issue;
 - baseline and output path translation so generated overlay paths do not leak into application diagnostics.

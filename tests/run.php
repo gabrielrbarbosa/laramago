@@ -897,6 +897,19 @@ function testLaravelRequestPropertyReadOverlayGeneration(string $project, string
 
     mkdir($project . '/app/Http/Controllers', 0777, true);
 
+    file_put_contents($project . '/app/Http/Controllers/WithSearchPagination.php', <<<'PHP'
+<?php
+
+namespace App\Http\Controllers;
+
+use Illuminate\Http\Request;
+
+trait WithSearchPagination
+{
+    private Request $requestPagination;
+}
+PHP);
+
     file_put_contents($project . '/app/Http/Controllers/SearchController.php', <<<'PHP'
 <?php
 
@@ -906,21 +919,25 @@ use Illuminate\Http\Request;
 
 class SearchController
 {
+    use WithSearchPagination;
+
     protected Request $request;
 
     public function __construct(Request $request)
     {
         $this->request = $request;
+        $this->requestPagination = $request;
     }
 
     public function index(Request $request): mixed
     {
         $value = $request->search;
         $stored = $this->request->per_page;
+        $sortBy = $this->requestPagination->sortBy;
         $hasSearch = isset($request->search);
         $request->search = 'changed';
 
-        return [$value, $stored, $hasSearch];
+        return [$value, $stored, $sortBy, $hasSearch];
     }
 }
 PHP);
@@ -941,6 +958,7 @@ PHP);
         if (is_string($overlay)
             && str_contains($overlay, '$value = $request->input(\'search\');')
             && str_contains($overlay, '$stored = $this->request->input(\'per_page\');')
+            && str_contains($overlay, '$sortBy = $this->requestPagination->input(\'sortBy\');')
             && str_contains($overlay, '$hasSearch = isset($request->search);')
             && str_contains($overlay, '$request->search = \'changed\';')) {
             return;
