@@ -181,6 +181,10 @@ function testRuntimeConfigGeneration(string $project, string $root): void
         fail('runtime config did not include Composer autoload paths outside the analyzed source paths');
     }
 
+    if (! str_contains($config, 'find-unused-definitions = true')) {
+        fail('runtime config should keep strict unused definition checks by default');
+    }
+
     if (str_contains($config, 'ignore = [')) {
         fail('runtime config should not include package-level analyzer ignores');
     }
@@ -192,20 +196,28 @@ function testRuntimeConfigGeneration(string $project, string $root): void
         '"mixed-argument"',
         '"invalid-argument"',
         '"dynamic-static-method-call"',
+        '"docblock-type-mismatch"',
         '"invalid-array-index"',
+        '"invalid-operand"',
         '"invalid-property-assignment-value"',
         '"invalid-type-cast"',
         '"incompatible-parameter-name"',
+        '"null-operand"',
         '"non-existent-method"',
         '"non-existent-property"',
         '"possibly-null-array-access"',
         '"possibly-false-operand"',
         '"redundant-cast"',
         '"too-many-arguments"',
+        '"undefined-variable"',
     ] as $expected) {
         if (! is_string($levelConfig) || ! str_contains($levelConfig, $expected)) {
             fail('runtime config missed an explicit PHPStan level 6 compatibility ignore: ' . $expected);
         }
+    }
+
+    if (! str_contains($levelConfig, 'find-unused-definitions = false')) {
+        fail('PHPStan level 6 compatibility should disable Mago unused definition checks');
     }
 }
 

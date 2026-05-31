@@ -6,7 +6,7 @@ namespace Laramago;
 
 final class Application
 {
-    private const VERSION = '0.1.21';
+    private const VERSION = '0.1.22';
 
     private const CONFIG_FILE = 'mago.toml';
 
@@ -981,6 +981,7 @@ TOML;
         $includesValue = $this->tomlArray($includes);
         $excludesValue = $this->tomlArray($excludes);
         $ignoreBlock = $this->renderAnalyzerIgnoreBlock($this->phpStanCompatibilityIgnores($arguments));
+        $findUnusedDefinitions = $this->usesPhpStanLevelSixProfile($arguments) ? 'false' : 'true';
 
         return <<<TOML
 version = "1"
@@ -1025,7 +1026,7 @@ no-isset = { allow-array-checks = true }
 [analyzer]
 plugins = []
 {$ignoreBlock}
-find-unused-definitions = true
+find-unused-definitions = {$findUnusedDefinitions}
 find-unused-expressions = false
 analyze-dead-code = false
 memoize-properties = true
@@ -1046,16 +1047,7 @@ TOML;
      */
     private function phpStanCompatibilityIgnores(array $arguments): array
     {
-        $level = null;
-
-        foreach ($arguments as $argument) {
-            if (str_starts_with($argument, '--phpstan-level=')) {
-                $level = substr($argument, strlen('--phpstan-level='));
-                break;
-            }
-        }
-
-        if ($level !== '6') {
+        if (! $this->usesPhpStanLevelSixProfile($arguments)) {
             return [];
         }
 
@@ -1064,9 +1056,14 @@ TOML;
             'mixed-assignment',
             'mixed-array-access',
             'mixed-array-assignment',
+            'undefined-variable',
+            'undefined-int-array-index',
+            'undefined-string-array-index',
             'invalid-argument',
             'invalid-array-access',
             'invalid-array-index',
+            'null-array-index',
+            'null-operand',
             'possibly-invalid-argument',
             'possibly-invalid-array-access',
             'possibly-false-argument',
@@ -1074,6 +1071,7 @@ TOML;
             'possibly-false-iterator',
             'possibly-false-operand',
             'invalid-array-element-key',
+            'invalid-operand',
             'invalid-callable',
             'invalid-iterator',
             'invalid-member-selector',
@@ -1082,6 +1080,10 @@ TOML;
             'invalid-pass-by-reference',
             'invalid-property-access',
             'dynamic-static-method-call',
+            'docblock-type-mismatch',
+            'impossible-assignment',
+            'impossible-condition',
+            'impossible-type-comparison',
             'less-specific-return-statement',
             'less-specific-argument',
             'less-specific-nested-argument-type',
@@ -1117,6 +1119,7 @@ TOML;
             'string-constant-selector',
             'string-member-selector',
             'unsafe-instantiation',
+            'unknown-class-instantiation',
             'nullable-return-statement',
             'possibly-null-property-access',
             'possibly-null-array-access',
@@ -1135,6 +1138,20 @@ TOML;
             'template-constraint-violation',
             'too-many-arguments',
         ];
+    }
+
+    /**
+     * @param list<string> $arguments
+     */
+    private function usesPhpStanLevelSixProfile(array $arguments): bool
+    {
+        foreach ($arguments as $argument) {
+            if ($argument === '--phpstan-level=6') {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
