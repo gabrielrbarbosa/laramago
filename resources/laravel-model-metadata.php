@@ -15,6 +15,7 @@ use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\Relations\MorphOne;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Support\Carbon;
+use Laravel\Sanctum\HasApiTokens;
 
 $projectRoot = $argv[1] ?? null;
 $classesPath = $argv[2] ?? null;
@@ -56,6 +57,7 @@ foreach ($classes as $entry) {
             'accessors' => modelAccessors($class),
             'relations' => modelRelations($class, $model),
             'scopes' => modelScopes($class),
+            'usesSanctumApiTokens' => classUsesTrait($class, HasApiTokens::class),
         ];
     } catch (Throwable) {
         continue;
@@ -343,6 +345,36 @@ function parameterSignature(ReflectionParameter $parameter): string
     }
 
     return $signature;
+}
+
+function classUsesTrait(string $class, string $trait): bool
+{
+    $traits = [];
+    $classes = array_merge([$class], class_parents($class) ?: []);
+
+    foreach ($classes as $className) {
+        foreach (class_uses($className) ?: [] as $usedTrait) {
+            collectTraits($usedTrait, $traits);
+        }
+    }
+
+    return isset($traits[$trait]);
+}
+
+/**
+ * @param array<string, true> $traits
+ */
+function collectTraits(string $trait, array &$traits): void
+{
+    if (isset($traits[$trait])) {
+        return;
+    }
+
+    $traits[$trait] = true;
+
+    foreach (class_uses($trait) ?: [] as $usedTrait) {
+        collectTraits($usedTrait, $traits);
+    }
 }
 
 function snakeCase(string $value): string

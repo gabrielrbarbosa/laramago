@@ -198,6 +198,8 @@ function testRuntimeConfigGeneration(string $project, string $root): void
         '"incompatible-parameter-name"',
         '"non-existent-method"',
         '"non-existent-property"',
+        '"possibly-null-array-access"',
+        '"possibly-false-operand"',
         '"redundant-cast"',
         '"too-many-arguments"',
     ] as $expected) {
@@ -434,7 +436,7 @@ PHP;
     ]], [[
         'name' => 'active',
         'parameters' => 'bool $onlyVisible = null',
-    ]]);
+    ]], true);
 
     if (! is_string($overlay)) {
         fail('model docblock overlay did not return source');
@@ -447,6 +449,7 @@ PHP;
         '@method static static|null create(array $attributes = null)',
         '@method static static|null firstOrFail(array|string $columns = ["*"])',
         '@method static static|null findOrFail(mixed $id, array|string $columns = ["*"])',
+        '@method \\Laravel\\Sanctum\\NewAccessToken createToken(string $name, array $abilities = ["*"], ?\\DateTimeInterface $expiresAt = null)',
         '@method static \\Illuminate\\Database\\Eloquent\\Builder<static> active(bool $onlyVisible = null)',
     ] as $expected) {
         if (! str_contains($overlay, $expected)) {

@@ -6,7 +6,7 @@ namespace Laramago;
 
 final class Application
 {
-    private const VERSION = '0.1.20';
+    private const VERSION = '0.1.21';
 
     private const CONFIG_FILE = 'mago.toml';
 
@@ -1070,6 +1070,9 @@ TOML;
             'possibly-invalid-argument',
             'possibly-invalid-array-access',
             'possibly-false-argument',
+            'possibly-false-array-access',
+            'possibly-false-iterator',
+            'possibly-false-operand',
             'invalid-array-element-key',
             'invalid-callable',
             'invalid-iterator',
@@ -1116,8 +1119,13 @@ TOML;
             'unsafe-instantiation',
             'nullable-return-statement',
             'possibly-null-property-access',
+            'possibly-null-array-access',
+            'possibly-null-array-index',
+            'possibly-null-iterator',
             'possibly-null-operand',
             'possibly-invalid-operand',
+            'possibly-undefined-variable',
+            'possibly-undefined-string-array-index',
             'invalid-return-statement',
             'possibly-null-argument',
             'ambiguous-object-method-access',
@@ -1269,8 +1277,9 @@ TOML;
             $accessors = $model['accessors'] ?? [];
             $relations = $model['relations'] ?? null;
             $scopes = $model['scopes'] ?? [];
+            $usesSanctumApiTokens = $model['usesSanctumApiTokens'] ?? false;
 
-            if (! is_string($file) || ! is_string($class) || ! is_array($properties) || ! is_array($accessors) || ! is_array($relations) || ! is_array($scopes)) {
+            if (! is_string($file) || ! is_string($class) || ! is_array($properties) || ! is_array($accessors) || ! is_array($relations) || ! is_array($scopes) || ! is_bool($usesSanctumApiTokens)) {
                 continue;
             }
 
@@ -1287,7 +1296,7 @@ TOML;
             }
 
             $overlayRelativePath = self::MODEL_OVERLAY_DIR . '/' . sha1($file) . '.php';
-            $overlay = $this->insertModelDocblock($source, $class, $properties, $accessors, $relations, $scopes);
+            $overlay = $this->insertModelDocblock($source, $class, $properties, $accessors, $relations, $scopes, $usesSanctumApiTokens);
             file_put_contents($projectRoot . '/' . $overlayRelativePath, $overlay);
 
             $pathMap[] = [
@@ -1704,7 +1713,7 @@ PHP;
      * @param list<array{name: string, type: string}> $relations
      * @param list<array{name: string, parameters: string}> $scopes
      */
-    private function insertModelDocblock(string $source, string $shortClass, array $properties, array $accessors, array $relations, array $scopes): string
+    private function insertModelDocblock(string $source, string $shortClass, array $properties, array $accessors, array $relations, array $scopes, bool $usesSanctumApiTokens = false): string
     {
         $lines = [
             '/**',
@@ -1740,6 +1749,10 @@ PHP;
         $lines[] = ' * @method static static|null firstOrFail(array|string $columns = ["*"])';
         $lines[] = ' * @method static static|null find(mixed $id, array|string $columns = ["*"])';
         $lines[] = ' * @method static static|null findOrFail(mixed $id, array|string $columns = ["*"])';
+
+        if ($usesSanctumApiTokens) {
+            $lines[] = ' * @method \\Laravel\\Sanctum\\NewAccessToken createToken(string $name, array $abilities = ["*"], ?\\DateTimeInterface $expiresAt = null)';
+        }
 
         foreach ($scopes as $scope) {
             if (! is_array($scope) || ! isset($scope['name'], $scope['parameters'])) {
