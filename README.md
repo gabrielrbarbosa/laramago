@@ -112,7 +112,7 @@ Generated overlays currently add:
 - Laravel `HasFactory` return types without app-level generic boilerplate;
 - Laravel `Scope` and Laravel Excel `FromCollection` compatibility without app-level generic boilerplate;
 - Laravel framework signatures that use `func_get_args()` at runtime, such as multi-column `select()` / `addSelect()` / `distinct()`, multi-relation `load()` / `loadMissing()` / `loadCount()`, model attribute `only()` / `except()`, and controller middleware `only()` / `except()`;
-- auth guard and facade return types for the configured Laravel user model;
+- auth helper, guard, manager, and facade return types for the configured Laravel user model;
 - Composer autoload and autoload-dev type discovery for application namespaces that live outside the analyzed source paths;
 - excluded-path symbol discovery so `exclude` can omit legacy code from analysis without turning referenced classes into false missing-class errors;
 - PHPStan suppression pragma compatibility for `@phpstan-ignore`, `@phpstan-ignore-next-line`, and `@phpstan-ignore-line` comments through generated temporary overlays;

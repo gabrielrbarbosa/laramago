@@ -246,6 +246,7 @@ function testRuntimeConfigGeneration(string $project, string $root): void
         'invalid-template-parameter',
         'ambiguous-class-like-constant-access',
         'possibly-static-access-on-interface',
+        'invalid-param-tag',
     ] as $code) {
         if (! str_contains($config, '{ code = "' . $code . '", in = ".laramago/cache/framework-overlays/" }')) {
             fail('runtime config should ignore generated framework overlay implementation noise: ' . $code);
@@ -850,7 +851,9 @@ function testLaravelFrameworkOverlayGeneration(string $project, string $root): v
     mkdir($project . '/vendor/laravel/framework/src/Illuminate/Database/Eloquent/Concerns', 0777, true);
     mkdir($project . '/vendor/laravel/framework/src/Illuminate/Database/Eloquent/Factories', 0777, true);
     mkdir($project . '/vendor/laravel/framework/src/Illuminate/Database/Query', 0777, true);
+    mkdir($project . '/vendor/laravel/framework/src/Illuminate/Auth', 0777, true);
     mkdir($project . '/vendor/laravel/framework/src/Illuminate/Contracts/Auth', 0777, true);
+    mkdir($project . '/vendor/laravel/framework/src/Illuminate/Foundation', 0777, true);
     mkdir($project . '/vendor/laravel/framework/src/Illuminate/Routing', 0777, true);
     mkdir($project . '/vendor/laravel/framework/src/Illuminate/Support/Facades', 0777, true);
 
@@ -870,7 +873,39 @@ PHP);
 
     file_put_contents($project . '/vendor/laravel/framework/src/Illuminate/Contracts/Auth/Guard.php', '<?php');
 
+    file_put_contents($project . '/vendor/laravel/framework/src/Illuminate/Auth/AuthManager.php', <<<'PHP'
+<?php
+
+namespace Illuminate\Auth;
+
+/**
+ * @mixin \Illuminate\Contracts\Auth\StatefulGuard
+ */
+class AuthManager
+{
+}
+PHP);
+
     file_put_contents($project . '/vendor/laravel/framework/src/Illuminate/Support/Facades/Auth.php', '<?php');
+
+    file_put_contents($project . '/vendor/laravel/framework/src/Illuminate/Foundation/helpers.php', <<<'PHP'
+<?php
+
+use Illuminate\Contracts\Auth\Factory as AuthFactory;
+use Illuminate\Contracts\Auth\Guard;
+
+if (! function_exists('auth')) {
+    /**
+     * Get the available auth instance.
+     *
+     * @param  string|null  $guard
+     * @return ($guard is null ? \Illuminate\Contracts\Auth\Factory : \Illuminate\Contracts\Auth\Guard)
+     */
+    function auth($guard = null): AuthFactory|Guard
+    {
+    }
+}
+PHP);
 
     file_put_contents($project . '/vendor/laravel/framework/src/Illuminate/Database/Eloquent/Builder.php', <<<'PHP'
 <?php
@@ -973,12 +1008,14 @@ PHP);
     $method = new ReflectionMethod($application, 'laravelFrameworkSubstitutions');
     $substitutions = $method->invoke($application, $project, []);
 
-    if (! is_array($substitutions) || count($substitutions) !== 20) {
+    if (! is_array($substitutions) || count($substitutions) !== 24) {
         fail('framework overlay generation returned unexpected substitutions');
     }
 
     $guardOverlay = file_get_contents($project . '/.laramago/cache/framework-overlays/Guard.php');
+    $authManagerOverlay = file_get_contents($project . '/.laramago/cache/framework-overlays/AuthManager.php');
     $authOverlay = file_get_contents($project . '/.laramago/cache/framework-overlays/Auth.php');
+    $foundationHelpersOverlay = file_get_contents($project . '/.laramago/cache/framework-overlays/FoundationHelpers.php');
     $eloquentBuilderOverlay = file_get_contents($project . '/.laramago/cache/framework-overlays/Builder.php');
     $eloquentModelOverlay = file_get_contents($project . '/.laramago/cache/framework-overlays/EloquentModel.php');
     $hasAttributesOverlay = file_get_contents($project . '/.laramago/cache/framework-overlays/HasAttributes.php');
@@ -992,8 +1029,16 @@ PHP);
         fail('guard overlay did not use the configured auth model');
     }
 
+    if (! is_string($authManagerOverlay) || ! str_contains($authManagerOverlay, '@method \\App\\Models\\Usuario\\Usuario|null user()') || ! str_contains($authManagerOverlay, '@method int|string|null id()')) {
+        fail('auth manager overlay did not expose delegated guard methods');
+    }
+
     if (! is_string($authOverlay) || ! str_contains($authOverlay, '@method static \\App\\Models\\Usuario\\Usuario|null user()')) {
         fail('auth facade overlay did not use the configured auth model');
+    }
+
+    if (! is_string($foundationHelpersOverlay) || ! str_contains($foundationHelpersOverlay, '@return ($guard is null ? \\Illuminate\\Auth\\AuthManager : \\Illuminate\\Contracts\\Auth\\Guard)') || ! str_contains($foundationHelpersOverlay, 'function auth($guard = null): \\Illuminate\\Auth\\AuthManager|Guard')) {
+        fail('foundation helpers overlay did not expose the default auth manager return type');
     }
 
     if (str_contains($authOverlay, 'Laravel\\Ui\\UiServiceProvider')) {

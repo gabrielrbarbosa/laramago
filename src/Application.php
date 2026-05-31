@@ -6,7 +6,7 @@ namespace Laramago;
 
 final class Application
 {
-    private const VERSION = '0.1.36';
+    private const VERSION = '0.1.37';
 
     private const CONFIG_FILE = 'mago.toml';
 
@@ -1106,6 +1106,10 @@ TOML;
                 'code' => 'possibly-static-access-on-interface',
                 'in' => self::FRAMEWORK_OVERLAY_DIR . '/',
             ],
+            [
+                'code' => 'invalid-param-tag',
+                'in' => self::FRAMEWORK_OVERLAY_DIR . '/',
+            ],
         ]);
     }
 
@@ -1433,7 +1437,9 @@ TOML;
         $overlays = [];
 
         $guardPath = $projectRoot . '/vendor/laravel/framework/src/Illuminate/Contracts/Auth/Guard.php';
+        $authManagerPath = $projectRoot . '/vendor/laravel/framework/src/Illuminate/Auth/AuthManager.php';
         $authFacadePath = $projectRoot . '/vendor/laravel/framework/src/Illuminate/Support/Facades/Auth.php';
+        $foundationHelpersPath = $projectRoot . '/vendor/laravel/framework/src/Illuminate/Foundation/helpers.php';
         $eloquentBuilderPath = $projectRoot . '/vendor/laravel/framework/src/Illuminate/Database/Eloquent/Builder.php';
         $eloquentModelPath = $projectRoot . '/vendor/laravel/framework/src/Illuminate/Database/Eloquent/Model.php';
         $hasAttributesPath = $projectRoot . '/vendor/laravel/framework/src/Illuminate/Database/Eloquent/Concerns/HasAttributes.php';
@@ -1452,8 +1458,24 @@ TOML;
                 $overlays[] = $this->writeFrameworkOverlay($projectRoot, 'Guard.php', $guardPath, $this->renderAuthGuardOverlay($authModel));
             }
 
+            if (is_file($authManagerPath)) {
+                $authManagerSource = file_get_contents($authManagerPath);
+
+                if (is_string($authManagerSource)) {
+                    $overlays[] = $this->writeFrameworkOverlay($projectRoot, 'AuthManager.php', $authManagerPath, $this->renderAuthManagerOverlay($authManagerSource, $authModel));
+                }
+            }
+
             if (is_file($authFacadePath)) {
                 $overlays[] = $this->writeFrameworkOverlay($projectRoot, 'Auth.php', $authFacadePath, $this->renderAuthFacadeOverlay($authModel));
+            }
+
+            if (is_file($foundationHelpersPath)) {
+                $foundationHelpersSource = file_get_contents($foundationHelpersPath);
+
+                if (is_string($foundationHelpersSource)) {
+                    $overlays[] = $this->writeFrameworkOverlay($projectRoot, 'FoundationHelpers.php', $foundationHelpersPath, $this->renderFoundationHelpersOverlay($foundationHelpersSource));
+                }
             }
         }
 
@@ -1537,6 +1559,31 @@ TOML;
             ' * @method $this addSelect(array|string ...$columns)',
             ' * @method $this with(array|string ...$relations)',
         ]);
+    }
+
+    private function renderAuthManagerOverlay(string $source, string $authModel): string
+    {
+        return $this->insertClassDocblockLines($source, 'AuthManager', [
+            ' * @method ' . $authModel . '|null user()',
+            ' * @method int|string|null id()',
+            ' * @method bool check()',
+            ' * @method bool guest()',
+        ]);
+    }
+
+    private function renderFoundationHelpersOverlay(string $source): string
+    {
+        return str_replace(
+            [
+                '@return ($guard is null ? \Illuminate\Contracts\Auth\Factory : \Illuminate\Contracts\Auth\Guard)',
+                'function auth($guard = null): AuthFactory|Guard',
+            ],
+            [
+                '@return ($guard is null ? \Illuminate\Auth\AuthManager : \Illuminate\Contracts\Auth\Guard)',
+                'function auth($guard = null): \Illuminate\Auth\AuthManager|Guard',
+            ],
+            $source,
+        );
     }
 
     private function renderEloquentModelFrameworkOverlay(string $source): string
