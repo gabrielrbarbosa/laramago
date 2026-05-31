@@ -77,6 +77,7 @@ testProjectClassDiscoveryUsesConfiguredSourcePaths($project, $root);
 testAnalysisIgnoresStaleRuntimeBaseline($project, $root);
 testPhpStanPragmaOverlayGeneration($project, $root);
 testLaravelDateHelperOverlayGeneration($project, $root);
+testLaravelHttpClientWrapperReturnTypeOverlayGeneration($project, $root);
 testLaravelCollectionMacroOverlayGeneration($project, $root);
 testLaravelCollectionItemObjectOverlayGeneration($project, $root);
 testLaravelForeachObjectRowOverlayGeneration($project, $root);

@@ -47,6 +47,7 @@ trait BuildsSourceCompatibilityOverlays
 
                 $translated = $this->translatePhpStanPragmas($source);
                 $translated = $this->translateLaravelDateHelperCalls($translated);
+                $translated = $this->rewriteLaravelHttpClientWrapperReturnTypes($translated);
                 $translated = $this->annotateLaravelCollectionMacroClosures($translated);
                 $translated = $this->annotateLaravelExcelEventClosures($translated);
                 $translated = $this->annotateLaravelValidationRuleClosures($translated);
@@ -289,6 +290,157 @@ trait BuildsSourceCompatibilityOverlays
         }
 
         return false;
+    }
+
+    private function rewriteLaravelHttpClientWrapperReturnTypes(string $source): string
+    {
+        if ((! str_contains($source, 'PromiseInterface') && ! str_contains($source, 'LazyPromise')) || ! str_contains($source, 'Http::')) {
+            return $source;
+        }
+
+        $tokens = token_get_all($source);
+        $offsets = [];
+        $cursor = 0;
+
+        foreach ($tokens as $index => $token) {
+            $offsets[$index] = $cursor;
+            $cursor += strlen(is_array($token) ? $token[1] : $token);
+        }
+
+        $replacements = [];
+        $count = count($tokens);
+
+        for ($index = 0; $index < $count; $index++) {
+            $token = $tokens[$index];
+
+            if (! is_array($token) || $token[0] !== T_FUNCTION) {
+                continue;
+            }
+
+            $nameIndex = $this->nextMeaningfulTokenIndex($tokens, $index + 1);
+
+            if ($nameIndex === null || ! is_array($tokens[$nameIndex]) || $tokens[$nameIndex][0] !== T_STRING) {
+                continue;
+            }
+
+            $openBrace = null;
+
+            for ($cursorIndex = $nameIndex + 1; $cursorIndex < $count; $cursorIndex++) {
+                if ($tokens[$cursorIndex] === ';') {
+                    break;
+                }
+
+                if ($tokens[$cursorIndex] === '{') {
+                    $openBrace = $cursorIndex;
+                    break;
+                }
+            }
+
+            if ($openBrace === null) {
+                continue;
+            }
+
+            $closeBrace = $this->matchingBraceTokenIndex($tokens, $openBrace);
+
+            if ($closeBrace === null) {
+                continue;
+            }
+
+            $headerStart = $offsets[$index];
+            $header = substr($source, $headerStart, $offsets[$openBrace] - $headerStart);
+            $body = substr($source, $offsets[$openBrace], $offsets[$closeBrace] - $offsets[$openBrace]);
+
+            if (! $this->isSynchronousLaravelHttpClientWrapper($body)) {
+                continue;
+            }
+
+            if (preg_match('/:\s*([?\\\\A-Za-z0-9_|& ]+)\s*$/', $header, $matches, PREG_OFFSET_CAPTURE) !== 1) {
+                continue;
+            }
+
+            $newType = $this->withoutLaravelHttpClientPromiseTypes($matches[1][0]);
+
+            if ($newType === null) {
+                continue;
+            }
+
+            $replacements[] = [
+                $headerStart + $matches[1][1],
+                strlen($matches[1][0]),
+                $newType,
+            ];
+        }
+
+        foreach (array_reverse($replacements) as [$start, $length, $replacement]) {
+            $source = substr_replace($source, $replacement, $start, $length);
+        }
+
+        return $source;
+    }
+
+    private function matchingBraceTokenIndex(array $tokens, int $openBrace): ?int
+    {
+        $depth = 0;
+        $count = count($tokens);
+
+        for ($index = $openBrace; $index < $count; $index++) {
+            if ($tokens[$index] === '{') {
+                $depth++;
+
+                continue;
+            }
+
+            if ($tokens[$index] !== '}') {
+                continue;
+            }
+
+            $depth--;
+
+            if ($depth === 0) {
+                return $index;
+            }
+        }
+
+        return null;
+    }
+
+    private function isSynchronousLaravelHttpClientWrapper(string $body): bool
+    {
+        if (preg_match('/\bHttp::\s*(?:async|pool|batch)\s*\(/', $body) === 1 || preg_match('/->\s*async\s*\(/', $body) === 1) {
+            return false;
+        }
+
+        return preg_match('/\bHttp::/', $body) === 1
+            && preg_match('/(?:\bHttp::|->)\s*(?:get|post|put|patch|delete|head|send)\s*\(/', $body) === 1;
+    }
+
+    private function withoutLaravelHttpClientPromiseTypes(string $type): ?string
+    {
+        $kept = [];
+        $removed = false;
+
+        foreach (explode('|', $type) as $part) {
+            $candidate = trim($part);
+            $normalized = strtolower(ltrim(str_replace(' ', '', $candidate), '?\\'));
+
+            if (in_array($normalized, [
+                'guzzlehttp\\promise\\promiseinterface',
+                'illuminate\\http\\client\\promises\\lazypromise',
+                'lazypromise',
+                'promiseinterface',
+            ], true)) {
+                $removed = true;
+                continue;
+            }
+
+            $kept[] = $candidate;
+        }
+
+        if (! $removed || $kept === []) {
+            return null;
+        }
+
+        return implode('|', $kept);
     }
 
     private function annotateLaravelCollectionMacroClosures(string $source): string

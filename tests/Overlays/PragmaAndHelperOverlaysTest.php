@@ -139,6 +139,68 @@ PHP);
     }
 }
 
+function testLaravelHttpClientWrapperReturnTypeOverlayGeneration(string $project, string $root): void
+{
+    require_once $root . '/src/Application.php';
+
+    file_put_contents($project . '/app/UsesHttpClientWrapper.php', <<<'PHP'
+<?php
+
+namespace App;
+
+use GuzzleHttp\Promise\PromiseInterface;
+use Illuminate\Http\Client\Promises\LazyPromise;
+use Illuminate\Http\Client\Response;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\Http;
+
+final class UsesHttpClientWrapper
+{
+    private function sendRequest(string $ncm): LazyPromise|PromiseInterface|Response
+    {
+        return Http::retry(2, 100)->get('/ibpt/' . $ncm)->throw();
+    }
+
+    public function maybeJson(): PromiseInterface|JsonResponse|Response
+    {
+        if (false) {
+            return response()->json(['error' => true]);
+        }
+
+        return Http::post('/search')->throw();
+    }
+
+    public function queued(): PromiseInterface|Response
+    {
+        return Http::async()->get('/later');
+    }
+}
+PHP);
+
+    $application = new Laramago\Application();
+    $method = new ReflectionMethod($application, 'phpStanPragmaSubstitutions');
+    $method->invoke($application, $project, [], []);
+
+    $map = json_decode((string) file_get_contents($project . '/.laramago/cache/phpstan-pragma-overlays.json'), true);
+
+    foreach (is_array($map) ? $map : [] as $entry) {
+        if (($entry['original'] ?? null) !== 'app/UsesHttpClientWrapper.php' || ! is_string($entry['overlay'] ?? null)) {
+            continue;
+        }
+
+        $overlay = file_get_contents($project . '/' . $entry['overlay']);
+
+        if (is_string($overlay)
+            && str_contains($overlay, 'private function sendRequest(string $ncm): Response')
+            && str_contains($overlay, 'public function maybeJson(): JsonResponse|Response')
+            && str_contains($overlay, 'public function queued(): PromiseInterface|Response')) {
+            return;
+        }
+    }
+
+    fail('Laravel HTTP client wrapper overlay did not narrow synchronous promise return types safely');
+}
+
 function testLaravelCollectionMacroOverlayGeneration(string $project, string $root): void
 {
     require_once $root . '/src/Application.php';
