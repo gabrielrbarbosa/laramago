@@ -67,6 +67,16 @@ if (str_contains($config, '[analyzer]') || str_contains($config, '[formatter]') 
     fail('init leaked Laramago runtime defaults into project mago.toml');
 }
 
+file_put_contents($project . '/app/Example.php', <<<'PHP'
+<?php
+
+namespace App;
+
+final class Example
+{
+}
+PHP);
+
 $secondExitCode = run([PHP_BINARY, $binary, 'init', '--project=' . $project]);
 
 if ($secondExitCode === 0) {
@@ -98,6 +108,7 @@ testRaceSafeCacheDirectoryOperations($project, $root);
 testProjectLockSerializesCacheCommands($project, $binary);
 testProjectClassDiscoveryUsesConfiguredSourcePaths($project, $root);
 testAnalysisIgnoresStaleRuntimeBaseline($project, $root);
+testAnalyzeFailsWhenConfiguredSourcesAreEmpty($project, $binary);
 testPhpStanLevelAnalyzeRunsEndToEnd($project, $binary);
 testPhpStanPragmaOverlayGeneration($project, $root);
 testLaravelDateHelperOverlayGeneration($project, $root);

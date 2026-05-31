@@ -225,6 +225,10 @@ final class Application
                 return 1;
             }
 
+            if (! $this->analysisHasSourceFiles($projectRoot, $arguments)) {
+                return 1;
+            }
+
             $runtimeConfig = $this->prepareRuntimeConfig($projectRoot, $arguments, $mago);
             $modelSubstitutions = $this->laravelModelSubstitutions($projectRoot, $arguments);
             $frameworkSubstitutions = $this->laravelFrameworkSubstitutions($projectRoot, $arguments);
@@ -255,6 +259,10 @@ final class Application
             if ($mago === null) {
                 $this->line('Unable to find Mago. Install carthage-software/mago or laramago/laramago in this project.');
 
+                return 1;
+            }
+
+            if (! $this->analysisHasSourceFiles($projectRoot, $arguments)) {
                 return 1;
             }
 
@@ -311,6 +319,10 @@ final class Application
             if ($mago === null) {
                 $this->line('Unable to find Mago. Install carthage-software/mago or laramago/laramago in this project.');
 
+                return 1;
+            }
+
+            if (! $this->analysisHasSourceFiles($projectRoot, $arguments)) {
                 return 1;
             }
 
@@ -376,6 +388,13 @@ final class Application
 
             if (is_file($projectRoot . '/' . self::CONFIG_FILE)) {
                 $this->line('OK   mago.toml exists.');
+
+                if ($this->analysisHasSourceFiles($projectRoot, $arguments, false)) {
+                    $this->line('OK   Configured source paths contain PHP files.');
+                } else {
+                    $this->line('FAIL Configured source paths do not contain PHP files.');
+                    $failed = true;
+                }
             } else {
                 $this->line('FAIL mago.toml is missing. Run `vendor/bin/laramago init`.');
                 $failed = true;
@@ -475,5 +494,102 @@ HELP);
         }
 
         return $values;
+    }
+
+    /**
+     * @param list<string> $arguments
+     */
+    private function analysisHasSourceFiles(string $projectRoot, array $arguments, bool $emitFailure = true): bool
+    {
+        foreach ($this->explicitAnalysisTargets($arguments) as $target) {
+            if ($this->pathContainsPhpFiles($projectRoot, $target)) {
+                return true;
+            }
+        }
+
+        foreach ($this->projectConfigValues($projectRoot)['paths'] as $path) {
+            if ($this->pathContainsPhpFiles($projectRoot, $path)) {
+                return true;
+            }
+        }
+
+        if ($emitFailure) {
+            $this->line('No PHP files found in the configured Laramago source paths. Check mago.toml [source].paths or pass an explicit path.');
+        }
+
+        return false;
+    }
+
+    /**
+     * @param list<string> $arguments
+     *
+     * @return list<string>
+     */
+    private function explicitAnalysisTargets(array $arguments): array
+    {
+        $targets = [];
+
+        foreach ($this->stripLaramagoOptions($arguments) as $argument) {
+            if ($argument === '' || str_starts_with($argument, '-')) {
+                continue;
+            }
+
+            $targets[] = $argument;
+        }
+
+        return $targets;
+    }
+
+    private function pathContainsPhpFiles(string $projectRoot, string $path): bool
+    {
+        $path = trim($path);
+
+        if ($path === '') {
+            return false;
+        }
+
+        $candidates = [];
+
+        if (str_contains($path, '*') || str_contains($path, '?') || str_contains($path, '[')) {
+            $matches = glob(str_starts_with($path, '/') ? $path : $projectRoot . '/' . $path);
+            $candidates = $matches === false ? [] : $matches;
+        } else {
+            $candidates[] = str_starts_with($path, '/') ? $path : $projectRoot . '/' . $path;
+        }
+
+        foreach ($candidates as $candidate) {
+            if ($this->candidateContainsPhpFiles($candidate)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function candidateContainsPhpFiles(string $path): bool
+    {
+        if (is_file($path)) {
+            return str_ends_with($path, '.php');
+        }
+
+        if (! is_dir($path)) {
+            return false;
+        }
+
+        try {
+            $iterator = new \RecursiveIteratorIterator(
+                new \RecursiveDirectoryIterator($path, \FilesystemIterator::SKIP_DOTS)
+            );
+        } catch (\UnexpectedValueException) {
+            return false;
+        }
+
+        foreach ($iterator as $file) {
+            if ($file instanceof \SplFileInfo && $file->isFile() && str_ends_with($file->getFilename(), '.php')) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

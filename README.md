@@ -136,6 +136,8 @@ Runs `mago analyze` with Laramago's generated runtime config, model overlays, an
 
 When multiple Laramago commands run in the same project, `analyze` waits for the project lock before preparing overlays and invoking Mago. This keeps CI logs reliable even when Composer scripts or local terminals overlap.
 
+`analyze`, `baseline`, and `verify-baseline` fail before invoking Mago when the configured source paths contain no PHP files and no explicit PHP target path was provided. This prevents a misconfigured CI job from passing after analyzing nothing.
+
 By default Laramago disables Mago's unused-definition pass because Larastan/PHPStan level gates do not normally fail Laravel applications for unused app methods and properties. Pass `--find-unused-definitions` when you intentionally want that stricter Mago dead-code signal.
 
 ### `baseline`

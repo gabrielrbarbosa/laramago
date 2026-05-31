@@ -730,6 +730,40 @@ function testAnalysisIgnoresStaleRuntimeBaseline(string $project, string $root):
     }
 }
 
+function testAnalyzeFailsWhenConfiguredSourcesAreEmpty(string $project, string $binary): void
+{
+    $emptyProject = $project . '/empty-source-project';
+    mkdir($emptyProject . '/app', 0777, true);
+    file_put_contents($emptyProject . '/composer.json', json_encode([
+        'require' => [
+            'php' => '^8.5',
+        ],
+    ], JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR));
+    file_put_contents($emptyProject . '/mago.toml', <<<'TOML'
+version = "1"
+php-version = "8.5.0"
+
+[source]
+workspace = "."
+paths = ["app"]
+includes = ["vendor"]
+excludes = []
+
+[source.glob]
+literal-separator = true
+TOML);
+
+    $result = captureRun([PHP_BINARY, $binary, 'analyze', '--project=' . $emptyProject, '--phpstan-level=6', '--reporting-format=count']);
+
+    if ($result['exitCode'] === 0) {
+        fail('analyze should fail when configured source paths contain no PHP files');
+    }
+
+    if (! str_contains($result['output'], 'No PHP files found in the configured Laramago source paths.')) {
+        fail('analyze should explain empty configured source paths');
+    }
+}
+
 function testPhpStanLevelAnalyzeRunsEndToEnd(string $project, string $binary): void
 {
     $fixture = $project . '/level-fixture';
