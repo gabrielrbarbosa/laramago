@@ -6,7 +6,7 @@ namespace Laramago;
 
 final class Application
 {
-    private const VERSION = '0.1.19';
+    private const VERSION = '0.1.20';
 
     private const CONFIG_FILE = 'mago.toml';
 
@@ -1066,31 +1066,58 @@ TOML;
             'mixed-array-assignment',
             'invalid-argument',
             'invalid-array-access',
+            'invalid-array-index',
             'possibly-invalid-argument',
+            'possibly-invalid-array-access',
             'possibly-false-argument',
             'invalid-array-element-key',
             'invalid-callable',
             'invalid-iterator',
+            'invalid-member-selector',
             'invalid-method-access',
+            'invalid-property-assignment-value',
             'invalid-pass-by-reference',
             'invalid-property-access',
+            'dynamic-static-method-call',
             'less-specific-return-statement',
             'less-specific-argument',
             'less-specific-nested-argument-type',
             'less-specific-nested-return-statement',
+            'array-to-string-conversion',
+            'implicit-to-string-cast',
+            'incompatible-parameter-name',
             'mixed-return-statement',
+            'mixed-array-index',
+            'mixed-clone',
+            'reference-to-undefined-variable',
             'non-documented-method',
             'non-documented-property',
+            'non-iterable-object-iteration',
             'mixed-property-type-coercion',
+            'property-type-coercion',
             'invalid-property-write',
             'non-existent-property',
+            'ambiguous-object-property-access',
             'mixed-operand',
             'mixed-property-access',
             'mixed-method-access',
             'non-existent-method',
+            'invalid-type-cast',
+            'redundant-cast',
+            'redundant-comparison',
+            'redundant-condition',
+            'redundant-docblock-type',
+            'redundant-isset-check',
+            'redundant-logical-operation',
+            'redundant-null-coalesce',
+            'redundant-type-comparison',
+            'string-constant-selector',
+            'string-member-selector',
+            'unsafe-instantiation',
             'nullable-return-statement',
             'possibly-null-property-access',
             'possibly-null-operand',
+            'possibly-invalid-operand',
             'invalid-return-statement',
             'possibly-null-argument',
             'ambiguous-object-method-access',
@@ -1709,7 +1736,10 @@ PHP;
         }
 
         $lines[] = ' * @method static \\Illuminate\\Database\\Eloquent\\Builder<static> query()';
+        $lines[] = ' * @method static static|null create(array $attributes = null)';
+        $lines[] = ' * @method static static|null firstOrFail(array|string $columns = ["*"])';
         $lines[] = ' * @method static static|null find(mixed $id, array|string $columns = ["*"])';
+        $lines[] = ' * @method static static|null findOrFail(mixed $id, array|string $columns = ["*"])';
 
         foreach ($scopes as $scope) {
             if (! is_array($scope) || ! isset($scope['name'], $scope['parameters'])) {

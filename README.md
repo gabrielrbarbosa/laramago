@@ -63,6 +63,8 @@ To mimic a PHPStan/Larastan level 6 gate during migration, opt in explicitly:
 vendor/bin/laramago analyze --phpstan-level=6 --reporting-format=count
 ```
 
+The `--phpstan-level=6` profile keeps Laramago's default analysis strict, while filtering Mago diagnostics that are outside a typical Larastan/PHPStan level 6 migration gate.
+
 For existing applications, create a baseline when Mago reports issues that are not part of the migration scope yet:
 
 ```bash
@@ -100,6 +102,7 @@ Generated overlays currently add:
 - `@property` entries for database columns with cast-aware types;
 - `@property-read` entries for legacy `getFooAttribute()` accessors and `Attribute` accessors;
 - `@property-read` entries for Eloquent relations;
+- `@method static` entries for common static Eloquent model calls such as `create`, `firstOrFail`, `find`, and `findOrFail`;
 - `@method static` entries for classic `scopeFoo()` local scopes and Laravel `#[Scope]` methods;
 - Laravel `HasFactory` return types without app-level generic boilerplate;
 - Laravel `Scope` and Laravel Excel `FromCollection` compatibility without app-level generic boilerplate;

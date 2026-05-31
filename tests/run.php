@@ -191,8 +191,14 @@ function testRuntimeConfigGeneration(string $project, string $root): void
     foreach ([
         '"mixed-argument"',
         '"invalid-argument"',
+        '"dynamic-static-method-call"',
+        '"invalid-array-index"',
+        '"invalid-property-assignment-value"',
+        '"invalid-type-cast"',
+        '"incompatible-parameter-name"',
         '"non-existent-method"',
         '"non-existent-property"',
+        '"redundant-cast"',
         '"too-many-arguments"',
     ] as $expected) {
         if (! is_string($levelConfig) || ! str_contains($levelConfig, $expected)) {
@@ -438,6 +444,9 @@ PHP;
         '@property int $id',
         '@property-read string|null $image_url',
         '@property-read \\Illuminate\\Database\\Eloquent\\Collection<int, \\App\\Models\\Order> $orders',
+        '@method static static|null create(array $attributes = null)',
+        '@method static static|null firstOrFail(array|string $columns = ["*"])',
+        '@method static static|null findOrFail(mixed $id, array|string $columns = ["*"])',
         '@method static \\Illuminate\\Database\\Eloquent\\Builder<static> active(bool $onlyVisible = null)',
     ] as $expected) {
         if (! str_contains($overlay, $expected)) {
