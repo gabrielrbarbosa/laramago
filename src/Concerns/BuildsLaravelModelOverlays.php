@@ -87,7 +87,7 @@ trait BuildsLaravelModelOverlays
                 continue;
             }
 
-            $overlayRelativePath = self::MODEL_OVERLAY_DIR . '/' . sha1($file) . '.php';
+            $overlayRelativePath = $this->modelOverlayRelativePath($file);
             $overlay = $this->applySourceCompatibilityOverlayTransforms(
                 $this->insertModelDocblock($source, $class, $properties, $accessors, $relations, $scopes, $usesSanctumApiTokens),
                 $projectRoot,
@@ -108,6 +108,11 @@ trait BuildsLaravelModelOverlays
         file_put_contents($projectRoot . '/' . self::MODEL_OVERLAY_MAP, json_encode($pathMap, JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR));
 
         return $substitutions;
+    }
+
+    private function modelOverlayRelativePath(string $file): string
+    {
+        return self::MODEL_OVERLAY_DIR . '/' . sha1($file) . '.overlay';
     }
 
     private function discoverProjectClasses(string $projectRoot): array

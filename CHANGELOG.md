@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.2.2
+
+- Updated the bundled Mago runtime constraint to 1.30.
+- Wrote generated Eloquent model overlay sources with a non-PHP cache-file extension so IDEs do not index them as duplicate application class definitions.
+
 ## v0.2.1
 
 - Hardened Mago option parsing so separate option values, such as reporting formats, are not mistaken for source paths when building overlays.

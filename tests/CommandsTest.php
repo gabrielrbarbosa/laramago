@@ -43,7 +43,7 @@ function testBaselinePathTranslation(string $project, string $root): void
 
     file_put_contents($cache . '/model-overlays.json', json_encode([[
         'original' => 'app/Models/User.php',
-        'overlay' => '.laramago/cache/model-overlays/abc.php',
+        'overlay' => '.laramago/cache/model-overlays/abc.overlay',
     ]], JSON_THROW_ON_ERROR));
     file_put_contents($project . '/laramago-analyzer-baseline.toml', "file = \"app/Models/User.php\"\n");
 
@@ -59,7 +59,7 @@ function testBaselinePathTranslation(string $project, string $root): void
 
     $translated = file_get_contents($project . '/.laramago/cache/analyzer-baseline.toml');
 
-    if ($translated !== "file = \".laramago/cache/model-overlays/abc.php\"\n") {
+    if ($translated !== "file = \".laramago/cache/model-overlays/abc.overlay\"\n") {
         fail('baseline path translation wrote unexpected content');
     }
 }
@@ -68,20 +68,37 @@ function testOutputPathTranslation(string $project, string $root): void
 {
     file_put_contents($project . '/.laramago/cache/model-overlays.json', json_encode([[
         'original' => 'app/Models/User.php',
-        'overlay' => '.laramago/cache/model-overlays/abc.php',
+        'overlay' => '.laramago/cache/model-overlays/abc.overlay',
     ]], JSON_THROW_ON_ERROR));
 
     require_once $root . '/src/Application.php';
 
     $application = new Laramago\Application();
     $method = new ReflectionMethod($application, 'translateOutputPaths');
-    $output = "error in {$project}/.laramago/cache/model-overlays/abc.php\nrelative .laramago/cache/model-overlays/abc.php\n";
+    $output = "error in {$project}/.laramago/cache/model-overlays/abc.overlay\nrelative .laramago/cache/model-overlays/abc.overlay\n";
     $translated = $method->invoke($application, $project, $output);
 
     $expected = "error in {$project}/app/Models/User.php\nrelative app/Models/User.php\n";
 
     if ($translated !== $expected) {
         fail('output path translation wrote unexpected content');
+    }
+}
+
+function testModelOverlayFilesAvoidPhpExtension(string $root): void
+{
+    require_once $root . '/src/Application.php';
+
+    $application = new Laramago\Application();
+    $method = new ReflectionMethod($application, 'modelOverlayRelativePath');
+    $overlay = $method->invoke($application, 'app/Models/User.php');
+
+    if (! is_string($overlay) || ! str_starts_with($overlay, '.laramago/cache/model-overlays/')) {
+        fail('model overlay path generation returned an unexpected path');
+    }
+
+    if (! str_ends_with($overlay, '.overlay') || str_ends_with($overlay, '.php')) {
+        fail('model overlays should avoid a .php extension so IDEs do not index duplicate class definitions');
     }
 }
 
@@ -294,7 +311,7 @@ function testNativeMagoBinaryIsPreferred(string $project, string $root): void
 {
     require_once $root . '/src/Application.php';
 
-    $nativeDirectory = $project . '/vendor/carthage-software/mago/composer/bin/1.29.0/mago-1.29.0-x86_64-unknown-linux-gnu';
+    $nativeDirectory = $project . '/vendor/carthage-software/mago/composer/bin/1.30.0/mago-1.30.0-x86_64-unknown-linux-gnu';
     $proxyDirectory = $project . '/vendor/bin';
     mkdir($nativeDirectory, 0777, true);
     mkdir($proxyDirectory, 0777, true);

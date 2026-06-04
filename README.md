@@ -21,14 +21,14 @@ The first production migration target is a private Laravel application. This is 
 
 | Run | Result |
 | --- | --- |
-| Plain Mago 1.29 with the application's source config, before Laramago compatibility overlays | 28,980 errors and 10,004 warnings |
+| Plain Mago 1.30 with the application's source config, before Laramago compatibility overlays | 28,980 errors and 10,004 warnings |
 | After installing Laramago and running the matching PHPStan/Larastan level gate | No reported issues |
 
 The gap is mostly Laravel framework magic, Eloquent metadata, PHPStan pragma compatibility, excluded legacy symbols, and PHPStan/Larastan level semantics. Laramago's job is to make those migration concerns explicit and reusable, so teams can evaluate the real remaining analyzer findings instead of sorting through framework noise.
 
 ## Status
 
-Mago 1.29 does not expose a Composer-loaded analyzer extension API equivalent to PHPStan's extension system. That means Laramago is not a direct port of every Larastan internal rule. Instead, it provides the production-safe replacement layer that can be built on top of Mago today:
+Mago 1.30 does not expose a Composer-loaded analyzer extension API equivalent to PHPStan's extension system. That means Laramago is not a direct port of every Larastan internal rule. Instead, it provides the production-safe replacement layer that can be built on top of Mago today:
 
 - a Laravel-oriented runtime Mago preset managed by Laramago;
 - generated Eloquent PHPDoc overlays from real application model metadata;
@@ -227,7 +227,7 @@ You can pass additional Mago flags directly through `laramago analyze`.
 
 ## Current Limits
 
-Laramago is built around Mago 1.29. Until Mago exposes a native analyzer extension API, some Larastan behaviors cannot be reproduced exactly. The most important compatibility layer today is Eloquent model metadata, which Laramago handles through generated overlays.
+Laramago is built around Mago 1.30. Until Mago exposes a native analyzer extension API, some Larastan behaviors cannot be reproduced exactly. The most important compatibility layer today is Eloquent model metadata, which Laramago handles through generated overlays.
 
 Mago issue [#885](https://github.com/carthage-software/mago/issues/885) tracks native analyzer support for Eloquent scopes, relationship queries, dynamic where methods, and relationship properties. Those are core Laramago compatibility targets today; when they land in Mago itself, Laramago can retire the matching overlay code and delegate to native analyzer behavior.
 

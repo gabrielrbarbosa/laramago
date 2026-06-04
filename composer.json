@@ -17,7 +17,7 @@
     },
     "require": {
         "php": "^8.3",
-        "carthage-software/mago": "^1.29",
+        "carthage-software/mago": "^1.30",
         "illuminate/support": "^13.0"
     },
     "autoload": {

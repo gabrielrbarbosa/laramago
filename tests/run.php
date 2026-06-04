@@ -100,6 +100,7 @@ testDoctorTreatsMissingBaselineAsOptional($project, $binary);
 testHelpDocumentsOverlayOptOutFlags($binary);
 testBaselinePathTranslation($project, $root);
 testOutputPathTranslation($project, $root);
+testModelOverlayFilesAvoidPhpExtension($root);
 testBaselinePathTranslationUsesPhpStanPragmaOverlays($project, $root);
 testRuntimeConfigGeneration($project, $root);
 testNativeMagoBinaryIsPreferred($project, $root);
