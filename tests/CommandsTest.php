@@ -116,7 +116,7 @@ function testBaselinePathTranslationUsesPhpStanPragmaOverlays(string $project, s
     $method = new ReflectionMethod($application, 'defaultAnalyzeFlags');
     $flags = $method->invoke($application, $project, [], true);
 
-    if ($flags !== ['--baseline', '.laramago/cache/analyzer-baseline.toml']) {
+    if ($flags !== ['--minimum-fail-level=warning', '--baseline', '.laramago/cache/analyzer-baseline.toml']) {
         fail('analysis should use a translated runtime baseline when PHPStan pragma overlays are active');
     }
 
@@ -191,6 +191,10 @@ TOML);
 
     if (! str_contains($config, 'find-unused-definitions = false')) {
         fail('runtime config should keep PHPStan-compatible unused definition checks disabled by default');
+    }
+
+    if (! str_contains($config, 'check-missing-type-hints = true')) {
+        fail('runtime config should enforce missing parameter and return type hints');
     }
 
     if (! str_contains($config, '"invalid-return-statement"') || ! str_contains($config, '{ code = "nullable-return-statement", in = "app/" }')) {
@@ -272,6 +276,7 @@ PHP);
     foreach ([
         '"mixed-argument"',
         '"invalid-argument"',
+        '"imprecise-type"',
         '"invalid-array-element"',
         '"dynamic-static-method-call"',
         '"docblock-type-mismatch"',
@@ -287,6 +292,7 @@ PHP);
         '"null-operand"',
         '"non-existent-method"',
         '"missing-magic-method"',
+        '"missing-constant-type"',
         '"never-return"',
         '"non-existent-property"',
         '"possibly-null-array-access"',
@@ -927,7 +933,7 @@ function testAnalysisIgnoresStaleRuntimeBaseline(string $project, string $root):
     $method = new ReflectionMethod($application, 'defaultAnalyzeFlags');
     $flags = $method->invoke($application, $project, [], true);
 
-    if ($flags !== ['--ignore-baseline']) {
+    if ($flags !== ['--minimum-fail-level=warning', '--ignore-baseline']) {
         fail('analysis should explicitly ignore baselines when no project baseline is configured');
     }
 
@@ -1261,7 +1267,7 @@ use Illuminate\Http\Request;
 
 final class ReportController
 {
-    public function index(Request $request): array
+    public function index(Request $request): mixed
     {
         $columns = $request->input('columns');
 
@@ -1313,5 +1319,52 @@ PHP);
 
     if ($levelVerifyResult['exitCode'] !== 0 || ! str_contains($levelVerifyResult['output'], 'Baseline is up to date')) {
         fail('PHPStan level 6 baseline verification should pass with the same migration profile');
+    }
+}
+
+function testAnalyzeReportsMissingTypeHints(string $project, string $binary): void
+{
+    $fixture = $project . '/missing-type-fixture';
+
+    mkdir($fixture . '/app', 0777, true);
+
+    file_put_contents($fixture . '/composer.json', json_encode([
+        'require' => [
+            'php' => '^8.5',
+        ],
+    ], JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR));
+
+    file_put_contents($fixture . '/mago.toml', <<<'TOML'
+version = "1"
+php-version = "8.5.0"
+
+[source]
+workspace = "."
+paths = ["app"]
+includes = ["vendor"]
+excludes = []
+
+[source.glob]
+literal-separator = true
+TOML);
+
+    file_put_contents($fixture . '/app/UntypedService.php', <<<'PHP'
+<?php
+
+namespace App;
+
+final class UntypedService
+{
+    public function handle($value)
+    {
+        return $value;
+    }
+}
+PHP);
+
+    $result = captureRun([PHP_BINARY, $binary, 'analyze', '--project=' . $fixture, '--reporting-format=short']);
+
+    if ($result['exitCode'] === 0 || ! str_contains($result['output'], 'missing-parameter-type') || ! str_contains($result['output'], 'missing-return-type')) {
+        fail('analysis should report missing parameter and return type hints');
     }
 }

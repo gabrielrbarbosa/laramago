@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.2.5
+
+- Enabled missing parameter and return type-hint checks in the runtime analyzer profile.
+- Made default analysis fail on warning-level diagnostics while preserving PHPStan-level compatibility ignores for Mago-only imprecise array and constant-type warnings.
+
 ## v0.2.4
 
 - Drained Mago proxy warmup output while materializing the native binary so first-run downloads cannot deadlock on progress output.

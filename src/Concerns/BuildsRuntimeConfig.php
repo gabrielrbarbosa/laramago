@@ -298,7 +298,7 @@ check-missing-override = false
 find-unused-parameters = false
 strict-list-index-checks = false
 no-boolean-literal-comparison = false
-check-missing-type-hints = false
+check-missing-type-hints = true
 register-super-globals = true
 TOML;
     }
@@ -463,6 +463,7 @@ TOML;
             'undefined-int-array-index',
             'undefined-string-array-index',
             'invalid-argument',
+            'imprecise-type',
             'invalid-array-access',
             'invalid-array-element',
             'invalid-array-index',
@@ -518,6 +519,7 @@ TOML;
             'mixed-method-access',
             'non-existent-method',
             'missing-magic-method',
+            'missing-constant-type',
             'non-existent-class-constant',
             'invalid-type-cast',
             'redundant-cast',

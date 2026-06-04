@@ -8,6 +8,7 @@ trait RunsMagoProcesses
 {
     private function defaultAnalyzeFlags(string $projectRoot, array $arguments, bool $usesOverlays): array
     {
+        $flags = $this->defaultFailLevelFlags($arguments);
         $hasBaselineOption = false;
 
         foreach ($arguments as $argument) {
@@ -18,7 +19,7 @@ trait RunsMagoProcesses
         }
 
         if ($hasBaselineOption) {
-            return [];
+            return $flags;
         }
 
         if (! is_file($projectRoot . '/' . self::BASELINE_FILE)) {
@@ -28,14 +29,25 @@ trait RunsMagoProcesses
                 @unlink($runtimeBaseline);
             }
 
-            return ['--ignore-baseline'];
+            return array_merge($flags, ['--ignore-baseline']);
         }
 
         if ($usesOverlays && $this->translateBaselinePaths($projectRoot, overlayToOriginal: false, source: self::BASELINE_FILE, target: self::RUNTIME_BASELINE_FILE)) {
-            return ['--baseline', self::RUNTIME_BASELINE_FILE];
+            return array_merge($flags, ['--baseline', self::RUNTIME_BASELINE_FILE]);
         }
 
-        return ['--baseline', self::BASELINE_FILE];
+        return array_merge($flags, ['--baseline', self::BASELINE_FILE]);
+    }
+
+    private function defaultFailLevelFlags(array $arguments): array
+    {
+        foreach ($arguments as $argument) {
+            if ($argument === '--minimum-fail-level' || str_starts_with($argument, '--minimum-fail-level=')) {
+                return [];
+            }
+        }
+
+        return ['--minimum-fail-level=warning'];
     }
 
     private function translateBaselinePaths(string $projectRoot, bool $overlayToOriginal, string $source, string $target): bool
