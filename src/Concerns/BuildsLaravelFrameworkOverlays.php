@@ -540,6 +540,30 @@ PHP,
         return $this;
     }
 PHP,
+            'whereLike' => <<<'PHP'
+
+    /**
+     * Laramago overlay for forwarded query builder string conditions.
+     *
+     * @return \Illuminate\Database\Eloquent\Builder<TModel>
+     */
+    public function whereLike(string $column, mixed $value, bool $caseSensitive = false, string $boolean = 'and', bool $not = false): \Illuminate\Database\Eloquent\Builder
+    {
+        return $this;
+    }
+PHP,
+            'orWhereLike' => <<<'PHP'
+
+    /**
+     * Laramago overlay for forwarded query builder string conditions.
+     *
+     * @return \Illuminate\Database\Eloquent\Builder<TModel>
+     */
+    public function orWhereLike(string $column, mixed $value, bool $caseSensitive = false): \Illuminate\Database\Eloquent\Builder
+    {
+        return $this;
+    }
+PHP,
             'reorder' => <<<'PHP'
 
     /**
@@ -1742,6 +1766,9 @@ PHP;
 
 namespace Illuminate\Database\Eloquent\Factories;
 
+/**
+ * @template TFactory of \Illuminate\Database\Eloquent\Factories\Factory|null
+ */
 trait HasFactory
 {
     /**

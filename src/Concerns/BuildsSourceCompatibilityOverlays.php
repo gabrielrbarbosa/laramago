@@ -101,6 +101,7 @@ trait BuildsSourceCompatibilityOverlays
         $translated = $this->loosenLaravelCollectionClosureCallbackParameterTypes($translated);
         $translated = $this->annotateLaravelExcelEventClosures($translated);
         $translated = $this->annotateLaravelValidationRuleClosures($translated);
+        $translated = $this->annotateLaravelThrowHelperInstanceGuards($translated);
         $translated = $this->annotateLaravelQueryBuilderClosures($translated);
         $translated = $this->annotateLaravelJoinClauseClosures($translated);
         $translated = $this->annotateLaravelForeachObjectRows($translated);
@@ -2199,6 +2200,35 @@ PHP;
         );
 
         return is_string($translated) ? $translated : $source;
+    }
+
+    private function annotateLaravelThrowHelperInstanceGuards(string $source): string
+    {
+        if (! str_contains($source, 'throw_unless') && ! str_contains($source, 'throw_if')) {
+            return $source;
+        }
+
+        $class = '(?:\\\\?[A-Za-z_][A-Za-z0-9_]*(?:\\\\[A-Za-z_][A-Za-z0-9_]*)*)';
+        $variable = '\$[A-Za-z_][A-Za-z0-9_]*';
+        $patterns = [
+            '/(?<call>\bthrow_unless\s*\(\s*(?<variable>' . $variable . ')\s+instanceof\s+(?<class>' . $class . ')\s*,[^;]*;\s*)(?!\s*\/\*\*\s*@var\s+)/m',
+            '/(?<call>\bthrow_if\s*\(\s*!\s*(?<variable>' . $variable . ')\s+instanceof\s+(?<class>' . $class . ')\s*,[^;]*;\s*)(?!\s*\/\*\*\s*@var\s+)/m',
+            '/(?<call>\bthrow_if\s*\(\s*!\s*\(\s*(?<variable>' . $variable . ')\s+instanceof\s+(?<class>' . $class . ')\s*\)\s*,[^;]*;\s*)(?!\s*\/\*\*\s*@var\s+)/m',
+        ];
+
+        $translated = $source;
+
+        foreach ($patterns as $pattern) {
+            $translated = preg_replace_callback(
+                $pattern,
+                static function (array $matches): string {
+                    return $matches['call'] . PHP_EOL . '        /** @var ' . $matches['class'] . ' ' . $matches['variable'] . ' */';
+                },
+                $translated,
+            ) ?? $translated;
+        }
+
+        return $translated;
     }
 
     private function annotateLaravelQueryBuilderClosures(string $source): string

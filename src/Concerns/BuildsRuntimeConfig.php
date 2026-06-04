@@ -106,6 +106,8 @@ TOML;
         $configPath = $projectRoot . '/' . self::CONFIG_FILE;
 
         if (! is_file($configPath)) {
+            $values['excludes'] = array_values(array_unique(array_merge($values['excludes'], $this->laravelIdeHelperExcludes($projectRoot))));
+
             return $values;
         }
 
@@ -130,8 +132,35 @@ TOML;
         }
 
         $values['analyzerIgnores'] = $this->tomlAnalyzerIgnoreValue($config);
+        $values['excludes'] = array_values(array_unique(array_merge($values['excludes'], $this->laravelIdeHelperExcludes($projectRoot))));
 
         return $values;
+    }
+
+    private function laravelIdeHelperExcludes(string $projectRoot): array
+    {
+        $excludes = [
+            '_ide_helper*.php',
+            '.phpstorm.meta.php',
+            '.phpstorm.meta.php/**',
+        ];
+
+        if (is_dir($projectRoot . '/LaravelIdea')) {
+            $excludes[] = 'LaravelIdea/**';
+        }
+
+        return $excludes;
+    }
+
+    private function isLaravelIdeHelperPath(string $path): bool
+    {
+        $path = $this->normalizeProjectPath($path);
+
+        return fnmatch('_ide_helper*.php', $path, FNM_PATHNAME)
+            || $path === '.phpstorm.meta.php'
+            || str_starts_with($path, '.phpstorm.meta.php/')
+            || $path === 'LaravelIdea'
+            || str_starts_with($path, 'LaravelIdea/');
     }
 
     private function composerAutoloadIncludes(string $projectRoot, array $sourcePaths, array $configuredIncludes): array

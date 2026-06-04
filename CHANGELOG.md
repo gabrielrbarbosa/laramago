@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.2.6
+
+- Accepted Larastan-style `HasFactory<UserFactory>` trait annotations by making the generated HasFactory overlay generic.
+- Added concrete Eloquent `whereLike` and `orWhereLike` chain methods to reduce query builder return-type false positives.
+- Narrowed simple `throw_unless($value instanceof Type, ...)` and `throw_if(! ($value instanceof Type), ...)` guards in source compatibility overlays.
+- Excluded Laravel IDE helper stubs such as `_ide_helper*.php`, `.phpstorm.meta.php`, and Laravel Idea helper directories from runtime analysis without reintroducing them as excluded-symbol stubs.
+
 ## v0.2.5
 
 - Enabled missing parameter and return type-hint checks in the runtime analyzer profile.

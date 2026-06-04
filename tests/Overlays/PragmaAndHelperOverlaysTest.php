@@ -1129,6 +1129,63 @@ PHP);
     fail('Laravel validation rule callback overlay did not annotate the $fail callable');
 }
 
+function testLaravelThrowHelperInstanceGuardOverlayGeneration(string $project, string $root): void
+{
+    require_once $root . '/src/Application.php';
+
+    file_put_contents($project . '/app/UsesThrowHelpers.php', <<<'PHP'
+<?php
+
+namespace App;
+
+use App\Tags\Tag;
+use RuntimeException;
+
+final class UsesThrowHelpers
+{
+    public function tag(): Tag
+    {
+        $record = $this->record;
+
+        throw_unless($record instanceof Tag, RuntimeException::class, 'Tag page record missing.');
+
+        return $record;
+    }
+
+    public function strictTag(): \App\Tags\Tag
+    {
+        $record = $this->record;
+
+        throw_if(! ($record instanceof \App\Tags\Tag), RuntimeException::class);
+
+        return $record;
+    }
+}
+PHP);
+
+    $application = new Laramago\Application();
+    $method = new ReflectionMethod($application, 'phpStanPragmaSubstitutions');
+    $method->invoke($application, $project, [], []);
+
+    $map = json_decode((string) file_get_contents($project . '/.laramago/cache/phpstan-pragma-overlays.json'), true);
+
+    foreach (is_array($map) ? $map : [] as $entry) {
+        if (($entry['original'] ?? null) !== 'app/UsesThrowHelpers.php' || ! is_string($entry['overlay'] ?? null)) {
+            continue;
+        }
+
+        $overlay = file_get_contents($project . '/' . $entry['overlay']);
+
+        if (is_string($overlay)
+            && str_contains($overlay, '/** @var Tag $record */')
+            && str_contains($overlay, '/** @var \\App\\Tags\\Tag $record */')) {
+            return;
+        }
+    }
+
+    fail('Laravel throw helper overlay did not annotate guarded instance types');
+}
+
 function testLaravelQueryBuilderClosureOverlayGeneration(string $project, string $root): void
 {
     require_once $root . '/src/Application.php';

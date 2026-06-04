@@ -1281,12 +1281,15 @@ PHP);
         fail('Paginator contract overlay did not expose forwarded collection first method');
     }
 
-    if (! is_string($hasFactoryOverlay) || ! str_contains($hasFactoryOverlay, '@return \\Illuminate\\Database\\Eloquent\\Factories\\Factory<static>')) {
-        fail('HasFactory overlay did not expose a static model factory return type');
+    if (! is_string($hasFactoryOverlay)
+        || ! str_contains($hasFactoryOverlay, '@template TFactory of \\Illuminate\\Database\\Eloquent\\Factories\\Factory|null')
+        || ! str_contains($hasFactoryOverlay, '@return \\Illuminate\\Database\\Eloquent\\Factories\\Factory<static>')) {
+        fail('HasFactory overlay did not expose a generic static model factory return type');
     }
 
-    if (str_contains($hasFactoryOverlay, '@template')) {
-        fail('HasFactory overlay still requires application models to pass a trait template parameter');
+    if (! str_contains($eloquentBuilderOverlay, 'public function whereLike(string $column, mixed $value, bool $caseSensitive = false, string $boolean = \'and\', bool $not = false): \\Illuminate\\Database\\Eloquent\\Builder')
+        || ! str_contains($eloquentBuilderOverlay, 'public function orWhereLike(string $column, mixed $value, bool $caseSensitive = false): \\Illuminate\\Database\\Eloquent\\Builder')) {
+        fail('Eloquent builder overlay did not expose concrete whereLike chain methods');
     }
 
     if (! is_string($scopeOverlay) || str_contains($scopeOverlay, '@template')) {

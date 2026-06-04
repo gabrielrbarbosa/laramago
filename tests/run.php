@@ -138,6 +138,7 @@ testEloquentModelArrayAccessAssignmentOverlayGeneration($project, $root);
 testLaravelNumericFallbackAssignmentOverlayGeneration($project, $root);
 testLaravelExcelEventOverlayGeneration($project, $root);
 testLaravelValidationRuleCallbackOverlayGeneration($project, $root);
+testLaravelThrowHelperInstanceGuardOverlayGeneration($project, $root);
 testLaravelQueryBuilderClosureOverlayGeneration($project, $root);
 testLaravelObserverModelOverlayGeneration($project, $root);
 testLaravelRequestPropertyReadOverlayGeneration($project, $root);

@@ -189,6 +189,10 @@ TOML);
         fail('runtime config did not include Composer autoload paths outside the analyzed source paths');
     }
 
+    if (! str_contains($config, 'excludes = ["_ide_helper*.php", ".phpstorm.meta.php", ".phpstorm.meta.php/**"]')) {
+        fail('runtime config did not automatically exclude Laravel IDE helper stubs');
+    }
+
     if (! str_contains($config, 'find-unused-definitions = false')) {
         fail('runtime config should keep PHPStan-compatible unused definition checks disabled by default');
     }
@@ -718,6 +722,16 @@ final class LegacyService extends BaseService implements LegacyContract
     {
         return null;
     }
+}
+PHP);
+    mkdir($project . '/.phpstorm.meta.php', 0777, true);
+    file_put_contents($project . '/.phpstorm.meta.php/laravel-idea.php', <<<'PHP'
+<?php
+
+namespace LaravelIdea\Helper\App\Tags;
+
+final class _IH_Tag_C
+{
 }
 PHP);
 

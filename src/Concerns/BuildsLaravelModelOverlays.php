@@ -224,6 +224,12 @@ trait BuildsLaravelModelOverlays
             }
 
             foreach ($this->phpFiles($directory) as $file) {
+                $relativePath = str_replace(DIRECTORY_SEPARATOR, '/', ltrim(substr($file, strlen($projectRoot)), DIRECTORY_SEPARATOR));
+
+                if ($this->isLaravelIdeHelperPath($relativePath)) {
+                    continue;
+                }
+
                 $stub = $this->classlikeSymbolStub($file);
 
                 if ($stub === null) {
