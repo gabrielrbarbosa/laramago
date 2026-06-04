@@ -13,7 +13,7 @@ require_once __DIR__ . '/Concerns/RunsMagoProcesses.php';
 
 final class Application
 {
-    private const VERSION = '0.2.3';
+    private const VERSION = '0.2.4';
 
     private const CONFIG_FILE = 'mago.toml';
 
@@ -42,6 +42,8 @@ final class Application
     private const RUNTIME_CONFIG_FILE = '.laramago/cache/mago.toml';
 
     private const RUNTIME_BASELINE_FILE = '.laramago/cache/analyzer-baseline.toml';
+
+    private const MAGO_PROXY_WARMUP_TIMEOUT_SECONDS = 60;
 
     use Concerns\MigratesPhpStan;
     use Concerns\BuildsRuntimeConfig;

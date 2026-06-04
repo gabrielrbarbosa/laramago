@@ -349,6 +349,7 @@ if (\$argv[1] !== '--version') {
     exit(7);
 }
 
+fwrite(STDERR, str_repeat('download progress ', 8192));
 \$nativeDirectory = '{$nativeDirectory}';
 mkdir(\$nativeDirectory, 0777, true);
 file_put_contents(\$nativeDirectory . '/mago', "#!/bin/sh\nprintf 'mago 1.30.0\n'");

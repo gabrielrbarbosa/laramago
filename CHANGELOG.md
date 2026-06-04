@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.2.4
+
+- Drained Mago proxy warmup output while materializing the native binary so first-run downloads cannot deadlock on progress output.
+
 ## v0.2.3
 
 - Materialized Mago's native binary before large overlay substitution runs so projects do not fall back to the Composer PHP proxy for full analysis.

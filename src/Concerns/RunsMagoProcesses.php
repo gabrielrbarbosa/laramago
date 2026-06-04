@@ -302,6 +302,76 @@ trait RunsMagoProcesses
         ];
     }
 
+    private function captureWithTimeout(array $command, string $cwd, int $timeoutSeconds): array
+    {
+        $process = proc_open($command, [
+            0 => ['pipe', 'r'],
+            1 => ['pipe', 'w'],
+            2 => ['pipe', 'w'],
+        ], $pipes, $cwd);
+
+        if (! is_resource($process)) {
+            return ['exitCode' => 1, 'stdout' => '', 'stderr' => 'Unable to start process.', 'timedOut' => false];
+        }
+
+        if (! isset($pipes[0], $pipes[1], $pipes[2])) {
+            proc_close($process);
+
+            return ['exitCode' => 1, 'stdout' => '', 'stderr' => 'Unable to open process pipes.', 'timedOut' => false];
+        }
+
+        fclose($pipes[0]);
+        stream_set_blocking($pipes[1], false);
+        stream_set_blocking($pipes[2], false);
+
+        $stdout = '';
+        $stderr = '';
+        $deadline = microtime(true) + max(1, $timeoutSeconds);
+
+        while (true) {
+            $stdout .= (string) stream_get_contents($pipes[1]);
+            $stderr .= (string) stream_get_contents($pipes[2]);
+            $status = proc_get_status($process);
+
+            if (! ($status['running'] ?? false)) {
+                break;
+            }
+
+            if (microtime(true) >= $deadline) {
+                proc_terminate($process);
+                usleep(100_000);
+
+                $status = proc_get_status($process);
+
+                if ($status['running'] ?? false) {
+                    proc_terminate($process, 9);
+                }
+
+                $stdout .= (string) stream_get_contents($pipes[1]);
+                $stderr .= (string) stream_get_contents($pipes[2]);
+                fclose($pipes[1]);
+                fclose($pipes[2]);
+                proc_close($process);
+
+                return ['exitCode' => 1, 'stdout' => $stdout, 'stderr' => $stderr, 'timedOut' => true];
+            }
+
+            usleep(10_000);
+        }
+
+        $stdout .= (string) stream_get_contents($pipes[1]);
+        $stderr .= (string) stream_get_contents($pipes[2]);
+        fclose($pipes[1]);
+        fclose($pipes[2]);
+
+        return [
+            'exitCode' => proc_close($process),
+            'stdout' => $stdout,
+            'stderr' => $stderr,
+            'timedOut' => false,
+        ];
+    }
+
     private function withProjectLock(string $projectRoot, \Closure $callback): int
     {
         $this->ensureDirectory($projectRoot . '/' . self::STATE_DIR);

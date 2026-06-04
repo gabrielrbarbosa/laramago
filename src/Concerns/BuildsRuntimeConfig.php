@@ -807,7 +807,7 @@ TOML;
             return null;
         }
 
-        $this->capture([$proxy, '--version'], $root);
+        $this->captureWithTimeout([$proxy, '--version'], $root, self::MAGO_PROXY_WARMUP_TIMEOUT_SECONDS);
 
         foreach ($this->magoNativeBinaryCandidates($root) as $candidate) {
             if (is_file($candidate) && is_executable($candidate)) {
