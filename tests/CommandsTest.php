@@ -329,8 +329,52 @@ function testNativeMagoBinaryIsPreferred(string $project, string $root): void
     }
 }
 
+function testMagoProxyMaterializesNativeBinaryBeforeUse(string $project, string $root): void
+{
+    require_once $root . '/src/Application.php';
+
+    $nativeDirectory = $project . '/vendor/carthage-software/mago/composer/bin/1.30.0/mago-1.30.0-x86_64-unknown-linux-gnu';
+    $proxyDirectory = $project . '/vendor/bin';
+    $nativeBinary = $nativeDirectory . '/mago';
+    if (! is_dir($proxyDirectory)) {
+        mkdir($proxyDirectory, 0777, true);
+    }
+    @unlink($nativeBinary);
+    @rmdir($nativeDirectory);
+
+    file_put_contents($proxyDirectory . '/mago', <<<PHP
+#!/usr/bin/env php
+<?php
+if (\$argv[1] !== '--version') {
+    exit(7);
+}
+
+\$nativeDirectory = '{$nativeDirectory}';
+mkdir(\$nativeDirectory, 0777, true);
+file_put_contents(\$nativeDirectory . '/mago', "#!/bin/sh\nprintf 'mago 1.30.0\n'");
+chmod(\$nativeDirectory . '/mago', 0755);
+echo "mago 1.30.0\n";
+PHP);
+    chmod($proxyDirectory . '/mago', 0755);
+
+    $application = new Laramago\Application();
+    $method = new ReflectionMethod($application, 'findMagoBinary');
+    $binary = $method->invoke($application, $project);
+
+    if ($binary !== $nativeBinary) {
+        fail('Laramago should materialize and prefer the native Mago binary before using the Composer proxy');
+    }
+}
+
 function testPhpStanMigration(string $project, string $root, string $binary): void
 {
+    mkdir($project . '/database/factories', 0777, true);
+    mkdir($project . '/bootstrap', 0777, true);
+    mkdir($project . '/stubs', 0777, true);
+    file_put_contents($project . '/app/helpers.php', "<?php\n");
+    file_put_contents($project . '/bootstrap/static-analysis.php', "<?php\n");
+    file_put_contents($project . '/stubs/legacy.php', "<?php\n");
+
     file_put_contents($project . '/phpstan.neon', <<<'NEON'
 includes:
     - ./vendor/larastan/larastan/extension.neon
@@ -513,6 +557,35 @@ NEON);
     }
 }
 
+function testPhpStanMigrationSkipsMissingDiscoveryIncludes(string $project, string $binary): void
+{
+    file_put_contents($project . '/phpstan.neon', <<<'NEON'
+parameters:
+    paths:
+        - app/
+    bootstrapFiles:
+        - bootstrap.php
+    scanFiles:
+        - support/static-analysis.php
+NEON);
+
+    $exitCode = run([PHP_BINARY, $binary, 'migrate-phpstan', '--project=' . $project, '--force']);
+
+    if ($exitCode !== 0) {
+        fail('migrate-phpstan command failed when discovery includes are missing');
+    }
+
+    $config = file_get_contents($project . '/mago.toml');
+
+    if (! is_string($config) || ! str_contains($config, 'includes = ["vendor"]')) {
+        fail('migrate-phpstan should keep only vendor when PHPStan discovery includes are missing');
+    }
+
+    if (str_contains($config, 'bootstrap.php') || str_contains($config, 'support/static-analysis.php')) {
+        fail('migrate-phpstan should skip missing PHPStan discovery include paths');
+    }
+}
+
 function testPhpStanMigrationPreservesScopedIgnoreErrors(string $project, string $binary): void
 {
     file_put_contents($project . '/phpstan.neon', <<<'NEON'
@@ -561,6 +634,9 @@ NEON);
 function testPhpStanMigrationReadsLocalIncludes(string $project, string $binary): void
 {
     mkdir($project . '/config', 0777, true);
+    mkdir($project . '/support', 0777, true);
+    file_put_contents($project . '/support/static-analysis.php', "<?php\n");
+
     file_put_contents($project . '/phpstan.neon', <<<'NEON'
 includes:
     - ./vendor/larastan/larastan/extension.neon

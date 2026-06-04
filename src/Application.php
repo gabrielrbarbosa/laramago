@@ -13,7 +13,7 @@ require_once __DIR__ . '/Concerns/RunsMagoProcesses.php';
 
 final class Application
 {
-    private const VERSION = '0.2.2';
+    private const VERSION = '0.2.3';
 
     private const CONFIG_FILE = 'mago.toml';
 
@@ -175,7 +175,7 @@ final class Application
         $config = $this->renderProjectConfig(
             $this->detectPhpVersion($projectRoot),
             $this->normalizePhpStanPaths($paths),
-            array_values(array_unique(array_merge(['vendor'], $this->phpStanDiscoveryIncludes($source)))),
+            array_values(array_unique(array_merge(['vendor'], $this->phpStanDiscoveryIncludes($source, $projectRoot)))),
             $this->normalizePhpStanPaths($excludes),
             $this->phpStanIgnoredAnalyzerIgnores($source),
         );

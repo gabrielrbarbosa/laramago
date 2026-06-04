@@ -759,14 +759,57 @@ TOML;
 
     private function findMagoBinary(string $projectRoot): ?string
     {
-        $candidates = array_merge($this->magoNativeBinaryCandidates($projectRoot), [
-            $projectRoot . '/vendor/bin/mago',
-            ...$this->magoNativeBinaryCandidates(dirname(__DIR__, 2)),
-            dirname(__DIR__, 2) . '/vendor/bin/mago',
-            dirname(__DIR__, 3) . '/bin/mago',
-        ]);
+        foreach ([$projectRoot, dirname(__DIR__, 2)] as $root) {
+            foreach ($this->magoNativeBinaryCandidates($root) as $candidate) {
+                if (is_file($candidate) && is_executable($candidate)) {
+                    return $candidate;
+                }
+            }
 
-        foreach ($candidates as $candidate) {
+            $proxy = $root . '/vendor/bin/mago';
+
+            if (! is_file($proxy) || ! is_executable($proxy)) {
+                continue;
+            }
+
+            $native = $this->materializeMagoNativeBinary($proxy);
+
+            if ($native !== null) {
+                return $native;
+            }
+
+            return $proxy;
+        }
+
+        $localBinary = dirname(__DIR__, 3) . '/bin/mago';
+
+        if (is_file($localBinary) && is_executable($localBinary)) {
+            return $localBinary;
+        }
+
+        return null;
+    }
+
+    private function materializeMagoNativeBinary(string $proxy): ?string
+    {
+        $root = dirname($proxy, 3);
+        $before = $this->magoNativeBinaryCandidates($root);
+
+        if ($before !== []) {
+            foreach ($before as $candidate) {
+                if (is_file($candidate) && is_executable($candidate)) {
+                    return $candidate;
+                }
+            }
+        }
+
+        if (basename(dirname($proxy)) !== 'bin' || basename(dirname($proxy, 2)) !== 'vendor') {
+            return null;
+        }
+
+        $this->capture([$proxy, '--version'], $root);
+
+        foreach ($this->magoNativeBinaryCandidates($root) as $candidate) {
             if (is_file($candidate) && is_executable($candidate)) {
                 return $candidate;
             }

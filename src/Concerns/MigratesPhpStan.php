@@ -177,7 +177,7 @@ trait MigratesPhpStan
         return $this->neonNestedListValues($source, 'excludePaths', ['analyse', 'analyseAndScan']);
     }
 
-    private function phpStanDiscoveryIncludes(string $source): array
+    private function phpStanDiscoveryIncludes(string $source, string $projectRoot): array
     {
         $includes = [];
 
@@ -185,7 +185,7 @@ trait MigratesPhpStan
             $includes = array_merge($includes, $this->neonListValue($source, $key));
         }
 
-        return $this->normalizePhpStanIncludePaths($includes);
+        return $this->normalizePhpStanIncludePaths($includes, $projectRoot);
     }
 
     private function neonNestedListValues(string $source, string $key, array $nestedKeys): array
@@ -274,7 +274,7 @@ trait MigratesPhpStan
         return array_values(array_unique($normalized));
     }
 
-    private function normalizePhpStanIncludePaths(array $paths): array
+    private function normalizePhpStanIncludePaths(array $paths, ?string $projectRoot = null): array
     {
         $normalized = [];
 
@@ -294,6 +294,10 @@ trait MigratesPhpStan
 
             if (str_ends_with($path, '/*')) {
                 $path = substr($path, 0, -2) . '/**';
+            }
+
+            if ($projectRoot !== null && ! str_contains($path, '*') && ! is_file($projectRoot . '/' . $path) && ! is_dir($projectRoot . '/' . $path)) {
+                continue;
             }
 
             $normalized[] = $path;

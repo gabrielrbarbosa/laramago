@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.2.3
+
+- Materialized Mago's native binary before large overlay substitution runs so projects do not fall back to the Composer PHP proxy for full analysis.
+- Skipped missing PHPStan discovery include paths during migration, avoiding stale `bootstrap.php` entries in generated `mago.toml` files.
+
 ## v0.2.2
 
 - Updated the bundled Mago runtime constraint to 1.30.
